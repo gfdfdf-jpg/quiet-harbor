@@ -1,0 +1,90 @@
+{
+  "tab_intro": {
+    "description": "Aufbewahrungsrichtlinie für Runtime-Daten in `runtime-retention.json`: Schwellenwerte für geplante Wartung, Regeln zur Verdichtung und geschützte manuelle Bereinigungsaktionen."
+  },
+  "daily_maintenance_enabled": {
+    "label": "Tägliche Wartung",
+    "description": "Schaltet die geplante tägliche Wartung ein oder aus. Wenn sie aktiviert ist, kann der Orchestrator nach Zeitplan eine begrenzte Anzahl geeigneter Aufgaben ohne manuelles Eingreifen verarbeiten."
+  },
+  "daily_maintenance_max_tasks_per_run": {
+    "label": "Max. Aufgaben pro Wartungslauf",
+    "description": "Obergrenze dafür, wie viele geeignete Aufgaben die tägliche Wartung in einem einzelnen Lauf verarbeitet. Begrenzt den möglichen Schaden, wenn Schwellenwerte falsch konfiguriert sind."
+  },
+  "eligible_older_than_days": {
+    "label": "Aufgaben älter als löschen (Tage)",
+    "description": "Die manuelle Bereinigung wählt Runtime-Artefakte von Aufgaben aus, die älter als diese Anzahl von Tagen sind. Aktive und neuere Aufgaben bleiben geschützt."
+  },
+  "keep_latest_tasks": {
+    "label": "Mindestens neueste Aufgaben behalten (Anzahl)",
+    "description": "Bewahrt immer mindestens so viele neueste Aufgaben auf, auch wenn sie älter als der Altersgrenzwert sind. Setzen Sie 0, um nur Alter und Schutz aktiver Aufgaben zu verwenden."
+  },
+  "include_problematic_tasks": {
+    "label": "Auch problematische Aufgaben löschen"
+  },
+  "daily_maintenance_dry_run": {
+    "label": "Tägliche Wartung als Dry-Run",
+    "description": "Wenn true gesetzt ist, listet die geplante tägliche Wartung nur Kandidaten auf und schreibt Audit-Ausgaben; Artefakte werden weder gelöscht noch komprimiert. Verwenden Sie true beim Feinabstimmen der Grenzwerte und wechseln Sie danach zu false für die Anwendung."
+  },
+  "purge_require_confirm": {
+    "label": "Schutz fuer automatische Bereinigungsbestaetigung",
+    "description": "Wenn true gesetzt ist, bleiben geplante oder CLI-basierte destruktive Bereinigungen bestaetigungspflichtig und laufen nicht still. Manuelle UI-Bereinigung und Aufgaben-Artefaktbereinigung verlangen immer eigene eingegebene Bestaetigungsphrasen."
+  },
+  "healthy_done_compact_after_days": {
+    "label": "Erfolgreiche DONE nach (Tagen) komprimieren",
+    "description": "Nach so vielen Tagen duerfen erfolgreich abgeschlossene Aufgaben (DONE) auf eine reine Ledger-Historie komprimiert werden, sobald der Ledger-Nachweis verifiziert ist."
+  },
+  "problem_tasks_compress_after_days": {
+    "label": "Problematische Aufgaben nach (Tagen) komprimieren",
+    "description": "Nach so vielen Tagen dürfen umfangreiche forensische Artefakte fehlgeschlagener oder hängengebliebener Aufgaben komprimiert werden, solange lesbare Wiederherstellungsnachweise erhalten bleiben."
+  },
+  "manual_runtime_cleanup": {
+    "label": "Manuelle Runtime-Bereinigung",
+    "description": "Löscht task-eigene Runtime-Artefakte für nicht aktive Aufgaben, die über die Alters- und keep-latest-Steuerfelder in dieser Zeile ausgewählt werden. Die Vorschau ist ein Dry-run-Bericht; Bereinigung starten löscht die ausgewählten Aufgaben-Artefakte, repariert gemeinsame Indizes einmal und verlangt die eingegebene Bestätigung."
+  },
+  "task_purge": {
+    "label": "Runtime-Artefakte einer Aufgabe bereinigen",
+    "description": "Entfernt Runtime-Artefakte einer einzelnen Aufgaben-ID und repariert gemeinsame Indizes. Ganze gemeinsame Dateien werden nicht entfernt; der Schutz aktiver Aufgaben gilt serverseitig weiterhin."
+  },
+  "task_id": {
+    "label": "Aufgaben-ID"
+  },
+  "purge_task_button": {
+    "label": "Runtime-Artefakte bereinigen"
+  },
+  "run_preview": {
+    "label": "Vorberechnung"
+  },
+  "value_true": {
+    "label": "true — aktiviert"
+  },
+  "value_false": {
+    "label": "false — deaktiviert"
+  },
+  "run_apply": {
+    "label": "Bereinigung starten"
+  },
+  "cleanup_report": {
+    "label": "Bereinigungsbericht"
+  },
+  "cleanup_result": {
+    "label": "Bereinigungsergebnis"
+  },
+  "report_preview_tasks": {
+    "label": "Vorschau-Kandidaten"
+  },
+  "report_eligible_now": {
+    "label": "Jetzt geeignet"
+  },
+  "report_would_remove": {
+    "label": "Würde entfernen"
+  },
+  "report_would_free": {
+    "label": "Würde freigeben"
+  },
+  "report_removed": {
+    "label": "Entfernt"
+  },
+  "report_freed": {
+    "label": "Freigegeben"
+  }
+}

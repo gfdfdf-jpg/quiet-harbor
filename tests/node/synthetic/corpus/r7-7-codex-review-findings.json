@@ -1,0 +1,122 @@
+[
+  {
+    "id": "r7-7-codex-nested-rails-config",
+    "layer": "path",
+    "note": "R7-7 Codex review: nested executable configuration fell through to production.",
+    "stack": "ruby",
+    "role": "CONFIG",
+    "file": "apps/shop/config/environments/production.rb",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-codex-django-settings-package",
+    "layer": "path",
+    "note": "R7-7 Codex review: a Django settings package fell through to production.",
+    "stack": "python",
+    "role": "CONFIG",
+    "file": "project/settings/production.py",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-codex-generated-protobuf-go",
+    "layer": "path",
+    "note": "R7-7 Codex review: generated code outside the known folders became production after source extensions counted everywhere.",
+    "stack": "go",
+    "role": "GENERATED",
+    "file": "internal/gen/invoice.pb.go",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-codex-generated-dotnet-obj",
+    "layer": "path",
+    "note": "R7-7 Codex review: .NET build output became production.",
+    "stack": "dotnet",
+    "role": "GENERATED",
+    "file": "src/Orders/obj/Debug/App.g.cs",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-codex-vendored-php",
+    "layer": "path",
+    "note": "R7-7 Codex review: vendored code became production.",
+    "stack": "php",
+    "role": "GENERATED",
+    "file": "vendor/acme/orders/Invoice.php",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-codex-cucumber-step-definitions",
+    "layer": "path",
+    "note": "R7-7 Codex review: shared step definitions were leaf tests.",
+    "stack": "ruby",
+    "role": "TEST_HELPER",
+    "file": "features/step_definitions/invoice_steps.rb",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-codex-cypress-plugins",
+    "layer": "path",
+    "note": "R7-7 Codex review: Cypress plugins were leaf tests.",
+    "stack": "node-ts",
+    "role": "TEST_HELPER",
+    "file": "cypress/plugins/index.js",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-codex-test-named-docs",
+    "layer": "path",
+    "note": "R7-7 Codex review: test words in a document name bypassed the global rule.",
+    "stack": "go",
+    "role": "DOCS",
+    "file": "docs/test-setup.md",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-codex-nested-docs-source-extension",
+    "layer": "path",
+    "note": "R7-7 Codex review: a source extension under a nested docs folder made documentation production.",
+    "stack": "node-ts",
+    "role": "DOCS",
+    "file": "src/docs/index.html",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-codex-nested-source-root-helper",
+    "layer": "path",
+    "note": "R7-7 Codex review: helper-named production code under a nested source root was a shared test helper.",
+    "stack": "ruby",
+    "role": "PROD",
+    "file": "engines/shop/app/helpers/format_helper.rb",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  }
+]

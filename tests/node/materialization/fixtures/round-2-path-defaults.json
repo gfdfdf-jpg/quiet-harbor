@@ -1,0 +1,43 @@
+{
+  "test": [
+    "/src/test/",
+    "(^|/)(__tests__|tests?)/",
+    "(^|/)src/(?:common|jvm|js|native|android|androidUnit|androidInstrumented|ios|desktop|wasmJs|wasmWasi|integration|functional|unit)Test/",
+    "(^|/)[^/]+\\.(?:unit|integration|functional|acceptance|component|e2e)?tests?/",
+    "(^|/)e2e/",
+    "\\.(spec|test)\\.(?:java|kt|kts|groovy|scala|sc|clj|cljs|cljc|ts|tsx|js|jsx|cjs|mjs|vue|svelte|cs|fs|vb|go|py|rb|php|rs|swift|m|mm|c|cc|cpp|cxx|h|hh|hpp|hxx|ex|exs|erl|hrl|dart|lua|hs|ml|mli|jl|r|nim|zig|cr|pl|pm|sh|bash|ps1|psm1)$",
+    "_test\\.(?:go|py|exs|dart|cc|cpp|cxx|c|lua|cr|nim|zig|jl)$",
+    "_unittest\\.(?:cc|cpp|cxx|c)$",
+    "_spec\\.(?:rb|lua|cr|exs|js|ts)$",
+    "(^|/)test_[^/]+\\.py$",
+    "(^|/)t/[^/]+\\.t$",
+    "\\.tests\\.ps1$",
+    "_SUITE\\.erl$",
+    "(^|/)conftest\\.py$",
+    "^(?![\\s\\S]*(?:^|/)features/(?:[^/]+/)*(?:testdata|test[-_]?(?:utils?|helpers?|support|kit))(?:/|\\.[^/]+$))(?:[^/]+/)*testdata/",
+    "^(?:(?!(?:src|app|apps|backend|frontend|web|api|services|packages|lib|cmd|internal|pkg|Sources|crates)/)[^/]+/|(?:apps|packages|services|crates)/[^/]+/)*features/step[-_]definitions/",
+    "^(?:(?!(?:src|app|apps|backend|frontend|web|api|services|packages|lib|cmd|internal|pkg|Sources|crates)/)[^/]+/|(?:apps|packages|services|crates)/[^/]+/)*features/support/(?:[^/]+/)*[^/]+\\.rb$",
+    "^(?:(?!(?:src|app|apps|backend|frontend|web|api|services|packages|lib|cmd|internal|pkg|Sources|crates)/)[^/]+/|(?:apps|packages|services|crates)/[^/]+/)*features/steps/[^/]+\\.py$",
+    "^(?:(?!(?:src|app|apps|backend|frontend|web|api|services|packages|lib|cmd|internal|pkg|Sources|crates)/)[^/]+/|(?:apps|packages|services|crates)/[^/]+/)*features/environment\\.py$",
+    "(^|/)(?:jest|vitest)\\.setup\\.[cm]?[jt]sx?$",
+    "^(?![\\s\\S]*(?:^|/)features/(?:[^/]+/)*(?:testdata|test[-_]?(?:utils?|helpers?|support|kit))(?:/|\\.[^/]+$))(?:[^/]+/)*test[-_]?(?:utils?|helpers?|support|kit)(?:/|\\.[^/]+$)"
+  ],
+  "test_refactor_structural": [
+    "(^|/)(?:__fixtures__|fixtures?|__mocks__|mocks?|helpers?|harness|support|setup|factories|factory|snapshots?)(?:/|\\.|-|_|$)",
+    "(?:test|spec)[-_]?(?:helpers?|fixtures?|harness|support|setup|factories?|mocks?)",
+    "(?:helpers?|fixtures?|harness|support|setup|factories?|mocks?)[-_]?(?:test|spec)",
+    "(^|/)conftest\\.py$",
+    "(^|/)testdata/",
+    "(^|/)tests?/(?:utils?|common)(?:/|\\.[^/]+$)",
+    "(^|/)test[-_]?(?:utils?|kit)(?:/|\\.[^/]+$)",
+    "(^|/)tests?/(?:bootstrap|Pest)\\.php$",
+    "(^|/)(?:Test(?:Base|Case)|(?:Abstract|Base)[^/]*Tests?)\\.[^/]+$",
+    "(^|/)rails_helper\\.rb$",
+    "(^|/)shared_(?:examples|contexts)(?:/|_|\\.)",
+    "(^|/)(?:jest|vitest)\\.setup\\.[cm]?[jt]sx?$",
+    "^(?:(?!(?:src|app|apps|backend|frontend|web|api|services|packages|lib|cmd|internal|pkg|Sources|crates)/)[^/]+/|(?:apps|packages|services|crates)/[^/]+/)*features/step[-_]definitions/",
+    "^(?:(?!(?:src|app|apps|backend|frontend|web|api|services|packages|lib|cmd|internal|pkg|Sources|crates)/)[^/]+/|(?:apps|packages|services|crates)/[^/]+/)*features/support/(?:[^/]+/)*[^/]+\\.rb$",
+    "^(?:(?!(?:src|app|apps|backend|frontend|web|api|services|packages|lib|cmd|internal|pkg|Sources|crates)/)[^/]+/|(?:apps|packages|services|crates)/[^/]+/)*features/steps/[^/]+\\.py$",
+    "^(?:(?!(?:src|app|apps|backend|frontend|web|api|services|packages|lib|cmd|internal|pkg|Sources|crates)/)[^/]+/|(?:apps|packages|services|crates)/[^/]+/)*features/environment\\.py$"
+  ]
+}

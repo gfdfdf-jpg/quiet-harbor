@@ -1,0 +1,775 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import * as childProcess from 'node:child_process';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { performance } from 'node:perf_hooks';
+import { assertIsolatedTestHome } from '../isolate-compile-cache';
+
+import { getRepoRoot } from '../../../scripts/node-foundation/build';
+import { withPackageRootLock } from '../../../scripts/node-foundation/release-validation/package-root-lock';
+import { spawnStreamed, type SpawnStreamedResult } from '../../../src/core/subprocess';
+
+const RETRYABLE_WINDOWS_CLEANUP_CODES = new Set(['EACCES', 'EBUSY', 'ENOTEMPTY', 'EPERM']);
+const SPAWN_OUTPUT_TAIL_LENGTH = 4000;
+const CONSUMER_INSTALL_LIFECYCLE_SCRIPTS = ['preinstall', 'install', 'postinstall', 'prepare'];
+const FORBIDDEN_PUBLISHED_ROOTS = ['.node-build', '.scripts-build', 'src', 'tests'];
+const NPM_PACK_TIMEOUT_MS = 120_000;
+const NPM_INSTALL_TARBALL_TIMEOUT_MS = process.platform === 'win32' ? 300_000 : 120_000;
+// Leave time for process-tree cleanup and the test's own failure report before the shard watchdog
+// (1800s for this packaging suite through test:packaging; Node 22 on Windows re-reads every file identity through descriptors).
+const PACKAGE_UPDATE_TIMEOUT_MS = process.platform === 'win32' ? 900_000 : 300_000;
+const LOCAL_TARBALL_INSTALL_BUDGET_MS = process.platform === 'win32' ? 180_000 : 60_000;
+const CLI_COLD_START_BUDGET_MS = 10_000;
+const CLI_FAST_PATH_MODULE_BUDGET = 500;
+const CLI_STARTUP_PROBE_PREFIX = 'GARDA_CLI_STARTUP_PROBE ';
+
+interface CliStartupProbeEvidence {
+    loaded_package_module_count: number;
+    command_dispatch_loaded: boolean;
+}
+
+interface CliStartupProbeResult {
+    result: childProcess.SpawnSyncReturns<string>;
+    evidence: CliStartupProbeEvidence;
+}
+
+type UpdateCliResult = SpawnStreamedResult & { lastProgress: string | null };
+
+function getErrorCode(error: unknown): string {
+    return error && typeof error === 'object' && 'code' in error
+        ? String((error as { code?: unknown }).code || '')
+        : '';
+}
+
+function removePackSmokeTempRoot(tempRoot: string): void {
+    try {
+        fs.rmSync(tempRoot, {
+            recursive: true,
+            force: true,
+            maxRetries: process.platform === 'win32' ? 10 : 3,
+            retryDelay: 100
+        });
+    } catch (error: unknown) {
+        const errorCode = getErrorCode(error);
+        if (process.platform === 'win32' && RETRYABLE_WINDOWS_CLEANUP_CODES.has(errorCode)) {
+            console.warn(`pack-smoke temp cleanup skipped after retryable Windows ${errorCode}: ${tempRoot}`);
+            return;
+        }
+        throw error;
+    }
+}
+
+function loadPackFixtureItems(repoRoot: string): string[] {
+    const pkgJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
+    const items = new Set<string>(pkgJson.files || []);
+    items.delete('dist');
+    items.delete('bin');
+    items.add('src');
+    items.add('package.json');
+    items.add('scripts/package-legacy-entrypoint-compat.cjs');
+    items.add('scripts/node-foundation');
+    items.add('tsconfig.build.json');
+    items.add('tsconfig.scripts.json');
+    return Array.from(items).sort();
+}
+
+function copyPackFixture(repoRoot: string, fixtureRoot: string): void {
+    fs.mkdirSync(fixtureRoot, { recursive: true });
+    const legacyClaudeRelativePath = 'template/CLAUDE.md';
+    // The package-surface measurement creates and removes template/CLAUDE.md in the shared repository root.
+    withPackageRootLock(repoRoot, () => {
+        for (const relativePath of loadPackFixtureItems(repoRoot)) {
+            const src = path.join(repoRoot, relativePath);
+            if (!fs.existsSync(src)) continue;
+            fs.cpSync(src, path.join(fixtureRoot, relativePath), { recursive: true });
+        }
+        const trackedLegacyTemplate = spawnGit(['ls-files', '--', legacyClaudeRelativePath], repoRoot);
+        if (trackedLegacyTemplate.status !== 0) {
+            throw new Error(formatSpawnFailure('git ls-files template/CLAUDE.md', trackedLegacyTemplate));
+        }
+        assert.equal(
+            trackedLegacyTemplate.stdout.trim(),
+            '',
+            'source tree must not store template/CLAUDE.md in Git'
+        );
+    });
+    fs.rmSync(path.join(fixtureRoot, ...legacyClaudeRelativePath.split('/')), { force: true });
+    // Symlink node_modules so tsc is available for the publish-runtime build
+    const realNodeModules = path.join(repoRoot, 'node_modules');
+    const fixtureNodeModules = path.join(fixtureRoot, 'node_modules');
+    if (fs.existsSync(realNodeModules) && !fs.existsSync(fixtureNodeModules)) {
+        fs.symlinkSync(realNodeModules, fixtureNodeModules, 'junction');
+    }
+}
+
+function quoteWindowsArgument(argument: string): string {
+    const text = String(argument || '');
+    if (!text || !/[ \t"]/u.test(text)) {
+        return text;
+    }
+
+    let escaped = '"';
+    let backslashCount = 0;
+    for (const character of text) {
+        if (character === '\\') {
+            backslashCount += 1;
+            continue;
+        }
+        if (character === '"') {
+            escaped += '\\'.repeat(backslashCount * 2 + 1);
+            escaped += '"';
+            backslashCount = 0;
+            continue;
+        }
+        if (backslashCount > 0) {
+            escaped += '\\'.repeat(backslashCount);
+            backslashCount = 0;
+        }
+        escaped += character;
+    }
+    if (backslashCount > 0) {
+        escaped += '\\'.repeat(backslashCount * 2);
+    }
+    escaped += '"';
+    return escaped;
+}
+
+function buildPackagingEnv(): NodeJS.ProcessEnv {
+    const env = { ...process.env };
+    assertIsolatedTestHome(env);
+    return env;
+}
+
+function spawnNpm(args: string[], cwd: string, timeoutMs = NPM_PACK_TIMEOUT_MS): childProcess.SpawnSyncReturns<string> {
+    if (process.platform === 'win32') {
+        const commandLine = ['npm.cmd', ...args].map(quoteWindowsArgument).join(' ');
+        return childProcess.spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', `"${commandLine}"`], {
+            windowsVerbatimArguments: true,
+            cwd,
+            encoding: 'utf8',
+            timeout: timeoutMs,
+            windowsHide: true
+        });
+    }
+
+    return childProcess.spawnSync('npm', args, {
+        cwd,
+        encoding: 'utf8',
+        timeout: timeoutMs,
+        windowsHide: true
+    });
+}
+
+function spawnGit(args: string[], cwd: string): childProcess.SpawnSyncReturns<string> {
+    return childProcess.spawnSync('git', args, {
+        cwd,
+        encoding: 'utf8',
+        timeout: 120_000,
+        windowsHide: true
+    });
+}
+
+function formatSpawnFailure(label: string, result: childProcess.SpawnSyncReturns<string>): string {
+    const lines = [`${label} failed:`];
+    if (result.error) lines.push(`error=${result.error.message}`);
+    if (result.status !== null) lines.push(`exit=${result.status}`);
+    if (result.signal) lines.push(`signal=${result.signal}`);
+    if (result.stdout) lines.push(`stdout:\n${tailOutput(result.stdout)}`);
+    if (result.stderr) lines.push(`stderr:\n${tailOutput(result.stderr)}`);
+    return lines.join('\n');
+}
+
+function tailOutput(output: string): string {
+    if (output.length <= SPAWN_OUTPUT_TAIL_LENGTH) {
+        return output;
+    }
+    return `[truncated to last ${SPAWN_OUTPUT_TAIL_LENGTH} chars]\n${output.slice(-SPAWN_OUTPUT_TAIL_LENGTH)}`;
+}
+
+function runGit(args: string[], cwd: string): void {
+    const result = spawnGit(args, cwd);
+    if (result.status !== 0) {
+        throw new Error(formatSpawnFailure(`git ${args.join(' ')}`, result));
+    }
+}
+
+function initializeCleanPackFixture(repoRoot: string): void {
+    fs.writeFileSync(
+        path.join(repoRoot, '.gitignore'),
+        [
+            'node_modules/',
+            '.scripts-build/',
+            '.scripts-build.lock/',
+            '.node-build/',
+            '.node-build.lock/',
+            '*.tgz',
+            ''
+        ].join('\n'),
+        'utf8'
+    );
+
+    const buildResult = spawnNpm(['run', 'build:publish-runtime'], repoRoot);
+    if (buildResult.status !== 0) {
+        throw new Error(formatSpawnFailure('npm run build:publish-runtime', buildResult));
+    }
+
+    runGit(['-c', 'init.defaultBranch=main', 'init'], repoRoot);
+    runGit(['config', 'user.email', 'test@example.com'], repoRoot);
+    runGit(['config', 'user.name', 'Garda Test'], repoRoot);
+    runGit(['add', '-A'], repoRoot);
+    runGit(['commit', '--no-gpg-sign', '-m', 'pack fixture baseline'], repoRoot);
+}
+
+function assertNoConsumerInstallLifecycleScripts(packageJson: { scripts?: Record<string, string> }): void {
+    const scripts = packageJson.scripts || {};
+    for (const scriptName of CONSUMER_INSTALL_LIFECYCLE_SCRIPTS) {
+        assert.equal(
+            scripts[scriptName],
+            undefined,
+            `packed package must not run ${scriptName} during consumer install`
+        );
+    }
+}
+
+function assertCompiledOnlyPackageSurface(packageJson: { files?: unknown[] }, packageRoot?: string): void {
+    const packageFiles = Array.isArray(packageJson.files) ? packageJson.files : [];
+    assert.ok(!packageFiles.includes('src'), 'package.json files must exclude the TypeScript src tree');
+
+    if (!packageRoot) return;
+    for (const forbiddenRoot of FORBIDDEN_PUBLISHED_ROOTS) {
+        assert.ok(
+            !fs.existsSync(path.join(packageRoot, forbiddenRoot)),
+            `installed package must not include ${forbiddenRoot}`
+        );
+    }
+}
+
+function packageFileIsPresent(packageRoot: string, relativePath: string): boolean {
+    const normalizedPath = relativePath.replace(/\\/gu, '/');
+    return fs.existsSync(path.join(packageRoot, normalizedPath));
+}
+
+function assertInstalledMarkdownRelativeLinks(packageRoot: string): void {
+    const packageJson = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8'));
+    const packageFiles: unknown[] = Array.isArray(packageJson.files) ? packageJson.files : [];
+    const markdownFiles = packageFiles
+        .filter((entry: unknown): entry is string => typeof entry === 'string' && entry.endsWith('.md'))
+        .filter((entry: string) => packageFileIsPresent(packageRoot, entry));
+    const markdownLinkPattern = /!?\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/gu;
+    const missingLinks: string[] = [];
+
+    for (const markdownFile of markdownFiles) {
+        const source = fs.readFileSync(path.join(packageRoot, markdownFile), 'utf8');
+        for (const match of source.matchAll(markdownLinkPattern)) {
+            const rawTarget = match[1];
+            if (!rawTarget || /^(?:https?:|mailto:|#)/iu.test(rawTarget)) {
+                continue;
+            }
+            const targetWithoutAnchor = rawTarget.split('#')[0];
+            if (!targetWithoutAnchor || targetWithoutAnchor.startsWith('/')) {
+                continue;
+            }
+            const decodedTarget = decodeURIComponent(targetWithoutAnchor);
+            const resolvedTarget = path
+                .normalize(path.join(path.dirname(markdownFile), decodedTarget))
+                .replace(/\\/gu, '/');
+            if (!packageFileIsPresent(packageRoot, resolvedTarget)) {
+                missingLinks.push(`${markdownFile} -> ${rawTarget} (${resolvedTarget})`);
+            }
+        }
+    }
+
+    assert.deepEqual(missingLinks, [], 'installed package markdown must not contain broken relative links');
+}
+
+function npmPack(repoRoot: string): string {
+    const legacyClaudeTemplatePath = path.join(repoRoot, 'template', 'CLAUDE.md');
+    assert.ok(
+        !fs.existsSync(legacyClaudeTemplatePath),
+        'fixture source tree must not start with a stored template/CLAUDE.md'
+    );
+
+    const result = spawnNpm(['pack', '--pack-destination', repoRoot], repoRoot);
+
+    if (result.status !== 0) {
+        throw new Error(formatSpawnFailure('npm pack', result));
+    }
+
+    assert.ok(
+        !fs.existsSync(legacyClaudeTemplatePath),
+        'postpack must remove the generated legacy template/CLAUDE.md from the package source tree'
+    );
+
+    const lines = result.stdout.trim().split(/\r?\n/).filter(Boolean);
+    return lines[lines.length - 1].trim();
+}
+
+function npmInstallTarball(tarballPath: string, installDir: string): number {
+    fs.mkdirSync(installDir, { recursive: true });
+    fs.writeFileSync(
+        path.join(installDir, 'package.json'),
+        JSON.stringify({ name: 'gao-smoke-test', version: '0.0.0', private: true }, null, 2),
+        'utf8'
+    );
+
+    const startedAt = performance.now();
+    const result = spawnNpm([
+        'install',
+        '--ignore-scripts',
+        '--prefer-offline',
+        '--no-fund',
+        '--no-audit',
+        '--no-progress',
+        '--no-save',
+        '--package-lock=false',
+        tarballPath
+    ], installDir, NPM_INSTALL_TARBALL_TIMEOUT_MS);
+    const durationMs = Math.round(performance.now() - startedAt);
+
+    if (result.status !== 0) {
+        throw new Error(formatSpawnFailure(`npm install (timeout ${NPM_INSTALL_TARBALL_TIMEOUT_MS}ms)`, result));
+    }
+    return durationMs;
+}
+
+function runCli(cliScriptPath: string, args: string[], cwd: string, env: NodeJS.ProcessEnv = {}, timeoutMs = 120_000): childProcess.SpawnSyncReturns<string> {
+    return childProcess.spawnSync(
+        process.execPath,
+        [cliScriptPath, ...args],
+        {
+            cwd,
+            encoding: 'utf8',
+            env: { ...buildPackagingEnv(), ...env },
+            timeout: timeoutMs
+        }
+    );
+}
+
+async function runUpdateCli(cliScriptPath: string, args: string[], cwd: string, timeoutMs: number): Promise<UpdateCliResult> {
+    let pendingLine = '';
+    let lastProgress: string | null = null;
+    const result = await spawnStreamed(process.execPath, [cliScriptPath, ...args], {
+        cwd,
+        env: { ...buildPackagingEnv(), GARDA_UPDATE_PROGRESS: '1' },
+        timeoutMs,
+        onStderr(chunk) {
+            const lines = (pendingLine + chunk).split(/\r?\n/u);
+            pendingLine = (lines.pop() ?? '').slice(-8192);
+            for (const line of lines) {
+                const marker = line.lastIndexOf('GARDA_UPDATE_PROGRESS ');
+                if (marker >= 0) lastProgress = line.slice(marker);
+            }
+        }
+    });
+    return { ...result, lastProgress };
+}
+
+function formatUpdateFailure(result: UpdateCliResult, timeoutMs: number): string {
+    return [
+        result.timedOut ? `archived source checkout update timed out after ${timeoutMs}ms` : 'archived source checkout update failed',
+        `exit=${result.exitCode} signal=${result.terminationSignal ?? 'none'}`,
+        `last progress: ${result.lastProgress ?? '(none emitted)'}`,
+        `stdout${result.stdoutTruncated ? ' (truncated)' : ''}:\n${result.stdout || '(empty)'}`,
+        `stderr${result.stderrTruncated ? ' (truncated)' : ''}:\n${result.stderr || '(empty)'}`
+    ].join('\n');
+}
+
+function runCliStartupProbe(
+    cliScriptPath: string,
+    args: string[],
+    cwd: string,
+    packageRoot: string
+): CliStartupProbeResult {
+    const probeScript = [
+        "const path = require('node:path');",
+        `const packageRoot = require('node:fs').realpathSync.native(${JSON.stringify(packageRoot)});`,
+        "process.once('beforeExit', () => {",
+        '  const packageModules = Object.keys(require.cache).filter((modulePath) => {',
+        '    const relativePath = path.relative(packageRoot, modulePath);',
+        "    return relativePath && !relativePath.startsWith('..' + path.sep) && !path.isAbsolute(relativePath);",
+        '  });',
+        "  const commandDispatchPath = path.join('dist', 'src', 'cli', 'commands', 'command-dispatch.js');",
+        '  const commandDispatchLoaded = packageModules.some((modulePath) =>',
+        '    path.relative(packageRoot, modulePath) === commandDispatchPath',
+        '  );',
+        `  process.stderr.write(${JSON.stringify(`\n${CLI_STARTUP_PROBE_PREFIX}`)} + JSON.stringify({`,
+        '    loaded_package_module_count: packageModules.length,',
+        '    command_dispatch_loaded: commandDispatchLoaded',
+        "  }) + '\\n');",
+        '});'
+    ].join('\n');
+    const probeScriptPath = path.join(path.dirname(packageRoot), '.garda-cli-startup-probe.cjs');
+    fs.writeFileSync(probeScriptPath, probeScript, 'utf8');
+    const result = (() => {
+        try {
+            return childProcess.spawnSync(
+                process.execPath,
+                ['--require', probeScriptPath, cliScriptPath, ...args],
+                {
+                    cwd,
+                    encoding: 'utf8',
+                    env: buildPackagingEnv(),
+                    timeout: 30_000
+                }
+            );
+        } finally {
+            fs.rmSync(probeScriptPath, { force: true });
+        }
+    })();
+    const evidenceLine = result.stderr
+        .split(/\r?\n/u)
+        .find((line) => line.startsWith(CLI_STARTUP_PROBE_PREFIX));
+    if (!evidenceLine) {
+        throw new Error(formatSpawnFailure(`CLI startup probe ${args.join(' ')}`, result));
+    }
+
+    return {
+        result,
+        evidence: JSON.parse(evidenceLine.slice(CLI_STARTUP_PROBE_PREFIX.length)) as CliStartupProbeEvidence
+    };
+}
+
+function preparePackSmokeTarball(repoRoot: string, fixtureRoot: string, candidatePath?: string): string {
+    if (candidatePath) {
+        assert.ok(path.isAbsolute(candidatePath), 'release candidate path must be absolute');
+        assert.ok(fs.existsSync(candidatePath), `Tarball not found at ${candidatePath}`);
+        assert.ok(fs.statSync(candidatePath).isFile(), 'release candidate must be a regular file');
+        return candidatePath;
+    }
+
+    copyPackFixture(repoRoot, fixtureRoot);
+    initializeCleanPackFixture(fixtureRoot);
+    const tarballPath = path.join(fixtureRoot, npmPack(fixtureRoot));
+    assert.ok(fs.existsSync(tarballPath), `Tarball not found at ${tarballPath}`);
+    return tarballPath;
+}
+
+test('startup probe counts modules through a symlinked package root', () => {
+    const tempRoot = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'gao-startup-probe-')));
+    try {
+        const packageRoot = path.join(tempRoot, 'package');
+        const aliasRoot = path.join(tempRoot, 'package-alias');
+        const dispatchPath = path.join(packageRoot, 'dist', 'src', 'cli', 'commands', 'command-dispatch.js');
+        fs.mkdirSync(path.dirname(dispatchPath), { recursive: true });
+        fs.writeFileSync(dispatchPath, 'module.exports = {};\n');
+        fs.writeFileSync(path.join(packageRoot, 'cli.cjs'),
+            "if (!process.argv.includes('--version')) require('./dist/src/cli/commands/command-dispatch.js');\n");
+        fs.symlinkSync(packageRoot, aliasRoot, process.platform === 'win32' ? 'junction' : 'dir');
+        for (const root of [packageRoot, aliasRoot]) {
+            for (const args of [[], ['--version']]) {
+                const probe = runCliStartupProbe(path.join(root, 'cli.cjs'), args, tempRoot, root);
+                assert.equal(probe.result.status, 0, formatSpawnFailure('startup identity probe', probe.result));
+                assert.equal(probe.evidence.command_dispatch_loaded, args.length === 0);
+                assert.equal(probe.evidence.loaded_package_module_count, args.length === 0 ? 2 : 1);
+            }
+        }
+    } finally {
+        removePackSmokeTempRoot(tempRoot);
+    }
+});
+
+test('supplied release candidate is selected without packing a fixture', () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gao-candidate-selection-'));
+    try {
+        const candidatePath = path.join(tempRoot, 'candidate.tgz');
+        const fixtureRoot = path.join(tempRoot, 'pack-repo');
+        fs.writeFileSync(candidatePath, 'candidate fixture');
+        assert.equal(preparePackSmokeTarball(tempRoot, fixtureRoot, candidatePath), candidatePath);
+        assert.equal(fs.existsSync(fixtureRoot), false, 'candidate selection must not create or repack a fixture');
+        assert.throws(() => preparePackSmokeTarball(tempRoot, fixtureRoot, 'relative.tgz'), /absolute/u);
+        assert.throws(() => preparePackSmokeTarball(tempRoot, fixtureRoot, path.join(tempRoot, 'missing.tgz')), /not found/u);
+    } finally {
+        removePackSmokeTempRoot(tempRoot);
+    }
+});
+
+test('update timeout reports both streams and the last progress marker', async () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gao-update-timeout-'));
+    try {
+        const scriptPath = path.join(tempRoot, 'hang.js');
+        fs.writeFileSync(scriptPath, [
+            "process.stdout.write('partial stdout\\n');",
+            "process.stderr.write('partial stderr\\nGARDA_UPDATE_PROGRESS pid=1 stage=first\\n');",
+            "process.stderr.write('unfinished diagnostic: GARDA_UPDATE_PROGRESS pid=1 stage=last\\n');",
+            'setInterval(() => {}, 1000);'
+        ].join('\n'));
+        const result = await runUpdateCli(scriptPath, [], tempRoot, 3000);
+        assert.equal(result.timedOut, true);
+        const message = formatUpdateFailure(result, 3000);
+        assert.match(message, /timed out after 3000ms/u);
+        assert.match(message, /last progress: GARDA_UPDATE_PROGRESS pid=1 stage=last/u);
+        assert.match(message, /stdout:\npartial stdout/u);
+        assert.match(message, /stderr:\npartial stderr/u);
+    } finally {
+        removePackSmokeTempRoot(tempRoot);
+    }
+});
+
+let packSmokeTempRoot: string | null = null;
+let archiveFixture: {
+    tempRoot: string;
+    installRoot: string;
+    workspaceRoot: string;
+    deployedBundleRoot: string;
+    updateSourceRoot: string;
+    sourceLauncher: string;
+    deployedLauncher: string;
+    launcherBytes: Buffer;
+    archiveTime: Date;
+    cliScript: string;
+} | null = null;
+
+test.after(() => {
+    if (packSmokeTempRoot) removePackSmokeTempRoot(packSmokeTempRoot);
+});
+
+test('npm pack -> install -> CLI invoke smoke test', () => {
+    const repoRoot = getRepoRoot();
+    const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
+    const expectedVersion = packageJson.version;
+    const tempRoot = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'gao-pack-smoke-')));
+    packSmokeTempRoot = tempRoot;
+    const fixtureRoot = path.join(tempRoot, 'pack-repo');
+    const installRoot = path.join(tempRoot, 'install-root');
+
+    try {
+        assertNoConsumerInstallLifecycleScripts(packageJson);
+        assertCompiledOnlyPackageSurface(packageJson);
+        const tarballPath = preparePackSmokeTarball(
+            repoRoot, fixtureRoot, process.env.GARDA_RELEASE_CANDIDATE_PATH
+        );
+
+        const installDurationMs = npmInstallTarball(tarballPath, installRoot);
+        assert.ok(
+            installDurationMs <= LOCAL_TARBALL_INSTALL_BUDGET_MS,
+            `local tarball install exceeded budget: observed=${installDurationMs}ms budget=${LOCAL_TARBALL_INSTALL_BUDGET_MS}ms`
+        );
+
+        const installedPackageRoot = path.join(installRoot, 'node_modules', 'garda-agent-orchestrator');
+        assert.ok(fs.existsSync(installedPackageRoot), 'Installed package root must exist');
+
+        const cliScript = path.join(installedPackageRoot, 'bin', 'garda.js');
+        assert.ok(fs.existsSync(cliScript), 'bin/garda.js must be present in installed package');
+        assert.ok(fs.existsSync(path.join(installedPackageRoot, 'bin', 'garda.js')), 'legacy bin/garda.js must remain present in installed package');
+
+        // 1. Compiled dist/ must be present and development-only roots must be absent.
+        assert.ok(
+            fs.existsSync(path.join(installedPackageRoot, 'dist', 'src', 'index.js')),
+            'dist/src/index.js must exist in the installed package'
+        );
+        assertCompiledOnlyPackageSurface(packageJson, installedPackageRoot);
+        assert.ok(
+            fs.existsSync(path.join(installedPackageRoot, 'template', 'entrypoints', 'canonical-rule-index.md')),
+            'neutral canonical rule-index template must exist in the installed package'
+        );
+        assert.ok(
+            fs.existsSync(path.join(installedPackageRoot, 'docs', 'operator-consistency-runbook.md')),
+            'runtime-referenced operator consistency runbook must exist in the installed package'
+        );
+        assertInstalledMarkdownRelativeLinks(installedPackageRoot);
+        const installedLegacyTemplatePath = path.join(installedPackageRoot, 'template', 'CLAUDE.md');
+        assert.ok(
+            fs.existsSync(installedLegacyTemplatePath),
+            'packed package must include generated legacy template/CLAUDE.md for 1.0.0 updater compatibility'
+        );
+        assert.ok(
+            fs.readFileSync(installedLegacyTemplatePath, 'utf8').includes('# CLAUDE.md'),
+            'generated legacy template/CLAUDE.md must be provider-specific only inside the packed package'
+        );
+        const installedLegacyTemplate = fs.readFileSync(installedLegacyTemplatePath, 'utf8');
+        assert.equal(installedLegacyTemplate.includes('{{GARDA_CLI}}'), false,
+            'legacy template/CLAUDE.md is copied verbatim by older CLIs and must not keep the CLI placeholder');
+        assert.ok(installedLegacyTemplate.includes('node garda-agent-orchestrator/bin/garda.js gate load-rule-pack'));
+
+        // 2. --version prints the correct version
+        const versionStartedAt = performance.now();
+        const versionProbe = runCliStartupProbe(cliScript, ['--version'], installRoot, installedPackageRoot);
+        const versionResult = versionProbe.result;
+        const versionDurationMs = Math.round(performance.now() - versionStartedAt);
+        assert.equal(versionResult.status, 0, `--version failed: ${versionResult.stderr}`);
+        assert.match(versionResult.stdout.trim(), new RegExp(`^${expectedVersion.replace(/\./g, '\\.')}$`));
+        assert.ok(
+            versionDurationMs <= CLI_COLD_START_BUDGET_MS,
+            `cold packaged CLI startup exceeded budget: observed=${versionDurationMs}ms budget=${CLI_COLD_START_BUDGET_MS}ms`
+        );
+        assert.equal(
+            versionProbe.evidence.command_dispatch_loaded,
+            false,
+            '--version fast path must not load command-dispatch'
+        );
+        assert.ok(
+            versionProbe.evidence.loaded_package_module_count <= CLI_FAST_PATH_MODULE_BUDGET,
+            '--version loaded package module count exceeded budget: '
+            + `observed=${versionProbe.evidence.loaded_package_module_count} `
+            + `budget=${CLI_FAST_PATH_MODULE_BUDGET}`
+        );
+
+        // 3. --help prints usage information
+        const helpStartedAt = performance.now();
+        const helpProbe = runCliStartupProbe(cliScript, ['--help'], installRoot, installedPackageRoot);
+        const helpResult = helpProbe.result;
+        const helpDurationMs = Math.round(performance.now() - helpStartedAt);
+        assert.equal(helpResult.status, 0, `--help failed: ${helpResult.stderr}`);
+        assert.match(helpResult.stdout, /Usage:/);
+        assert.match(helpResult.stdout, /setup/);
+        assert.ok(
+            helpDurationMs <= CLI_COLD_START_BUDGET_MS,
+            `cold packaged --help startup exceeded budget: observed=${helpDurationMs}ms budget=${CLI_COLD_START_BUDGET_MS}ms`
+        );
+        assert.equal(
+            helpProbe.evidence.command_dispatch_loaded,
+            false,
+            '--help fast path must not load command-dispatch'
+        );
+        assert.ok(
+            helpProbe.evidence.loaded_package_module_count <= CLI_FAST_PATH_MODULE_BUDGET,
+            '--help loaded package module count exceeded budget: '
+            + `observed=${helpProbe.evidence.loaded_package_module_count} `
+            + `budget=${CLI_FAST_PATH_MODULE_BUDGET}`
+        );
+
+        console.log(
+            `PACK_SMOKE_PERFORMANCE install_ms=${installDurationMs} install_budget_ms=${LOCAL_TARBALL_INSTALL_BUDGET_MS} `
+            + `cli_version_start_ms=${versionDurationMs} cli_help_start_ms=${helpDurationMs} `
+            + `cli_start_budget_ms=${CLI_COLD_START_BUDGET_MS} `
+            + `cli_version_modules=${versionProbe.evidence.loaded_package_module_count} `
+            + `cli_help_modules=${helpProbe.evidence.loaded_package_module_count} `
+            + `cli_module_budget=${CLI_FAST_PATH_MODULE_BUDGET}`
+        );
+
+        // 4. status command works against a bare workspace (exercises compiled runtime)
+        const workspaceRoot = path.join(installRoot, 'workspace');
+        fs.mkdirSync(workspaceRoot, { recursive: true });
+        const statusProbe = runCliStartupProbe(
+            cliScript,
+            ['status', '--target-root', workspaceRoot],
+            workspaceRoot,
+            installedPackageRoot
+        );
+        const statusResult = statusProbe.result;
+        assert.equal(statusResult.status, 0, `status failed: ${statusResult.stderr || statusResult.stdout}`);
+        assert.match(statusResult.stdout, /GARDA_STATUS/);
+        assert.equal(statusProbe.evidence.command_dispatch_loaded, true, 'commands must still load command-dispatch');
+
+        // A real packaged deployment must verify without development sources.
+        const setupResult = runCli(cliScript, [
+            'setup', '--target-root', workspaceRoot, '--no-prompt',
+            '--assistant-language', 'English', '--assistant-brevity', 'concise',
+            '--source-of-truth', 'Codex', '--active-agent-files', 'AGENTS.md',
+            '--enforce-no-auto-commit', 'no', '--claude-orchestrator-full-access', 'no',
+            '--token-economy-enabled', 'yes'
+        ], workspaceRoot);
+        assert.equal(setupResult.status, 0, formatSpawnFailure('packaged setup', setupResult));
+        const deployedBundleRoot = path.join(workspaceRoot, 'garda-agent-orchestrator');
+        assert.equal(fs.existsSync(path.join(deployedBundleRoot, 'src')), false);
+        fs.writeFileSync(path.join(workspaceRoot, 'index.js'), 'module.exports = {};\n', 'utf8');
+        const workflowResult = runCli(cliScript, [
+            'workflow', 'set', '--target-root', workspaceRoot,
+            '--compile-gate-command', 'node --check index.js',
+            '--operator-confirmed', 'yes', '--operator-confirmed-at-utc', new Date().toISOString()
+        ], workspaceRoot);
+        assert.equal(workflowResult.status, 0, formatSpawnFailure('packaged workflow configuration', workflowResult));
+        const verifyResult = runCli(cliScript, ['verify', '--target-root', workspaceRoot], workspaceRoot);
+        assert.equal(verifyResult.status, 0, formatSpawnFailure('packaged verify', verifyResult));
+        assert.match(verifyResult.stdout, /MissingPathCount: 0/);
+
+        const combinedOutput = [
+            versionResult.stdout, versionResult.stderr,
+            helpResult.stdout, helpResult.stderr,
+            statusResult.stdout, statusResult.stderr,
+            setupResult.stdout, setupResult.stderr,
+            workflowResult.stdout, workflowResult.stderr,
+            verifyResult.stdout, verifyResult.stderr
+        ].join('\n');
+        assert.doesNotMatch(
+            combinedOutput,
+            /Stripping types is currently unsupported for files under node_modules/i,
+            'CLI must not produce TypeScript stripping warnings from node_modules'
+        );
+
+        // A self-hosted checkout must accept identical launchers copied from a reproducible archive.
+        const updateSourceRoot = path.join(tempRoot, 'archive-source');
+        fs.cpSync(installedPackageRoot, updateSourceRoot, { recursive: true, preserveTimestamps: true });
+        fs.mkdirSync(path.join(workspaceRoot, 'src'), { recursive: true });
+        fs.mkdirSync(path.join(workspaceRoot, 'bin'), { recursive: true });
+        fs.writeFileSync(path.join(workspaceRoot, 'src', 'index.ts'), 'export {};\n');
+        fs.writeFileSync(path.join(workspaceRoot, 'package.json'), '{}\n');
+        fs.writeFileSync(path.join(workspaceRoot, 'VERSION'), expectedVersion);
+        const sourceLauncher = path.join(workspaceRoot, 'bin', 'garda.js');
+        const deployedLauncher = path.join(deployedBundleRoot, 'bin', 'garda.js');
+        const launcherBytes = fs.readFileSync(deployedLauncher);
+        fs.writeFileSync(sourceLauncher, launcherBytes);
+        const archiveTime = new Date('1985-10-26T08:15:00.000Z');
+        fs.utimesSync(deployedLauncher, archiveTime, archiveTime);
+        fs.utimesSync(path.join(updateSourceRoot, 'bin', 'garda.js'), archiveTime, archiveTime);
+        fs.appendFileSync(path.join(deployedBundleRoot, 'CHANGELOG.md'), '\nPrevious deployment fixture.\n');
+        archiveFixture = {
+            tempRoot, installRoot, workspaceRoot, deployedBundleRoot, updateSourceRoot,
+            sourceLauncher, deployedLauncher, launcherBytes, archiveTime, cliScript
+        };
+    } finally {
+        if (!archiveFixture) {
+            removePackSmokeTempRoot(tempRoot);
+            packSmokeTempRoot = null;
+        }
+    }
+});
+
+// A completed top-level test emits output before the update starts, resetting the shard's inactivity clock.
+test('archived source checkout update', async (context) => {
+    if (!archiveFixture) {
+        context.skip('packaged smoke setup did not complete');
+        return;
+    }
+    const {
+        tempRoot, installRoot, workspaceRoot, deployedBundleRoot, updateSourceRoot,
+        sourceLauncher, deployedLauncher, launcherBytes, archiveTime, cliScript
+    } = archiveFixture;
+    try {
+        const updateResult = await runUpdateCli(path.join(updateSourceRoot, 'bin', 'garda.js'), [
+            'update', '--target-root', workspaceRoot,
+            '--init-answers-path', path.join(deployedBundleRoot, 'runtime', 'init-answers.json'),
+            '--source-path', updateSourceRoot, '--trust-override', '--no-prompt', '--json'
+        ], tempRoot, PACKAGE_UPDATE_TIMEOUT_MS);
+        assert.equal(updateResult.timedOut, false, formatUpdateFailure(updateResult, PACKAGE_UPDATE_TIMEOUT_MS));
+        assert.equal(updateResult.exitCode, 0, formatUpdateFailure(updateResult, PACKAGE_UPDATE_TIMEOUT_MS));
+        assert.match(updateResult.stderr, /GARDA_UPDATE_PROGRESS pid=\d+ stage=handoff:read-request/u);
+        assert.match(updateResult.stderr, /GARDA_UPDATE_PROGRESS pid=\d+ stage=check:complete/u);
+        assert.equal(JSON.parse(updateResult.stdout).updateApplied, true);
+        assert.deepEqual(fs.readFileSync(deployedLauncher), launcherBytes);
+        assert.equal(fs.statSync(deployedLauncher).mtimeMs, archiveTime.getTime());
+        const doctorResult = runCli(deployedLauncher, ['doctor', '--target-root', workspaceRoot, '--compact'], workspaceRoot);
+        assert.equal(doctorResult.status, 0, formatSpawnFailure('archived source checkout doctor', doctorResult));
+        assert.match(doctorResult.stdout, /Doctor: PASSED/);
+        const navigatorArgs = ['next-step', 'T-archive-parity', '--repo-root', workspaceRoot];
+        const navigatorResult = runCli(deployedLauncher, navigatorArgs, workspaceRoot);
+        assert.doesNotMatch(`${navigatorResult.stdout}\n${navigatorResult.stderr}`, /PARITY_BLOCKED|PARITY_WARNING/);
+        assert.match(navigatorResult.stdout, /GARDA_NEXT_STEP/);
+
+        fs.appendFileSync(sourceLauncher, '\n// Changed source launcher.\n');
+        const changedLauncherResult = runCli(deployedLauncher, navigatorArgs, workspaceRoot);
+        assert.equal(changedLauncherResult.status, 6);
+        assert.match(changedLauncherResult.stderr, /PARITY_BLOCKED/);
+        fs.writeFileSync(sourceLauncher, launcherBytes);
+
+        const deployedRuntimeEntrypoint = path.join(deployedBundleRoot, 'dist', 'src', 'index.js');
+        fs.unlinkSync(deployedRuntimeEntrypoint);
+        // Target-root delegation would load the damaged runtime before verification.
+        const missingRuntimeResult = runCli(cliScript, ['verify', '--target-root', workspaceRoot], installRoot, {
+            GARDA_NO_DELEGATE: '1'
+        });
+        assert.equal(missingRuntimeResult.status, 4, formatSpawnFailure('missing runtime validation', missingRuntimeResult));
+        assert.match(missingRuntimeResult.stdout, /MissingPathCount: 1/);
+        assert.match(
+            `${missingRuntimeResult.stdout}\n${missingRuntimeResult.stderr}`,
+            /garda-agent-orchestrator\/dist\/src\/index\.js/,
+            'verify must identify the missing runtime entrypoint'
+        );
+
+    } finally {
+        removePackSmokeTempRoot(tempRoot);
+        packSmokeTempRoot = null;
+    }
+});

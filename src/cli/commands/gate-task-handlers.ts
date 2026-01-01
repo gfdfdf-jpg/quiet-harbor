@@ -1,0 +1,758 @@
+import * as path from 'node:path';
+import { TaskModePolicyEvidenceError } from './gate-flows/task-mode/task-mode-flow';
+import { isRetryableCompletionFinalizationError } from '../../gates/completion/completion-finalization-retry';
+import { cleanupCompactAtTaskBoundary } from '../../core/compact/lifecycle';
+import {
+    emitMandatoryCompletionGateEventAsync
+} from '../../gate-runtime/lifecycle-events';
+import * as gateHelpers from '../../gates/shared/helpers';
+import { formatCompletionGateResult, runCompletionGate } from '../../gates/completion/completion';
+import {
+    buildOutOfOrderCompletionRefusal,
+    formatPrematureCompletionRefusal,
+    readPrematureCompletionRefusal,
+    type PrematureCompletionRefusal
+} from '../../gates/completion/completion-premature-refusal';
+import {
+    formatOutOfOrderRefusal,
+    INTACT_CYCLE_FORWARD_GATES,
+    readNavigatorRoute,
+    routesIntactCycleElsewhere
+} from './gate-flows/support/out-of-order-gate-guard';
+import { buildCloseoutRecoveryFinalizationVerifier, captureCloseoutRecoverySnapshot, getCloseoutLinkageRecoveryProof, readCloseoutLinkageRecovery } from '../../gates/completion/completion-linkage-recovery';
+import { appendTaskEventAsync } from '../../gate-runtime/task-events';
+import { withCompletionGateFinalizationLockAsync } from '../../gates/locks/finalization-lock';
+import {
+    runBindRulePackToPreflightCommand,
+    runEnterTaskModeCommand,
+    runHandshakeDiagnosticsCommand,
+    runHumanCommitCommand,
+    runLoadRulePackCommand,
+    runLogTaskEventCommand,
+    runRecordNoOpCommand,
+    runRecordReviewCycleContinuationCommand,
+    runRecordReviewCycleSplitDecisionCommand,
+    runRecordStrictDecompositionDecisionCommand,
+    runListSplitRequiredWipCommand,
+    runRestoreSplitRequiredWipCommand,
+    runRetireSplitRequiredWipCommand,
+    runRestartCoherentCycleCommand,
+    runRestartReviewCycleCommand,
+    runShellSmokePreflightCommand,
+    runCommandTimeoutDiagnosticsCommand,
+    runIntermediateCommandCommand,
+    runProjectMemoryImpactCommand,
+    runQualityChecklistCommand
+} from './gates';
+import {
+    recordTaskModeProtectedManifestFailure,
+    runRecoverTaskModeProtectedManifestCommand
+} from './gate-flows/task-mode/task-mode-entry-failure';
+import {
+    normalizePathValue,
+    ensureDirectoryExists,
+    parseRequiredText,
+    tryParseBooleanText
+} from './cli-helpers';
+import type { ParsedOptionsRecord } from './shared-command-utils';
+import { runGateCliHandler } from './gate-cli-handler';
+import { reconcileSuccessfulCompletionFinalizationAsync } from './gate-flows/completion/completion-finalization';
+import { runFullSuiteValidationCommand } from './gate-flows/full-suite/full-suite-validation-flow';
+import { runFullSuiteRunMarkerRecoveryCommand } from './gate-flows/full-suite/full-suite-run-marker-recovery';
+import {
+    runMaterializeFullSuiteRepairTaskCommand,
+    runRestoreFullSuiteRepairWipCommand
+} from './gate-flows/full-suite/full-suite-repair-task-flow';
+import { runTaskEventsSummaryCommand, runTaskAuditSummaryCommand } from './gate-flows/task/task-summary-flow';
+import { runTaskResetCommand } from './gate-flows/task/task-reset-flow';
+import { buildTaskResetMissingTaskIdMessage } from './task-reset-alias';
+import { buildTaskIdSyntaxRemediationMessage } from './gate-command-help';
+import { colorizeTaskAuditSummaryText } from './task-audit-human-format';
+import { colorizeTaskEventsSummaryText } from './task-events-human-format';
+import { classifyErrorExitCode, EXIT_GATE_FAILURE } from '../exit-codes';
+import { scheduleUpdateAvailabilityCheck } from '../../lifecycle/update-availability/update-availability-worker';
+
+export async function handleEnterTaskMode(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--entry-mode': { key: 'entryMode', type: 'string' },
+        '--requested-depth': { key: 'requestedDepth', type: 'string' },
+        '--effective-depth': { key: 'effectiveDepth', type: 'string' },
+        '--task-summary': { key: 'taskSummary', type: 'string' },
+        '--start-banner': { key: 'startBanner', type: 'string' },
+        '--planned-changed-file': { key: 'plannedChangedFiles', type: 'string[]' },
+        '--planned-changed-files': { key: 'plannedChangedFiles', type: 'string[]' },
+        '--allow-active-task': { key: 'allowedActiveTasks', type: 'string[]' },
+        '--orchestrator-work': { key: 'orchestratorWork', type: 'boolean' },
+        '--workflow-config-work': { key: 'workflowConfigWork', type: 'boolean' },
+        '--upgrade-existing-task-mode': { key: 'upgradeExistingTaskMode', type: 'boolean' },
+        '--adopt-changed-review-policy': { key: 'adoptChangedReviewPolicy', type: 'string' },
+        '--operator-confirmed': { key: 'operatorConfirmed', type: 'string' },
+        '--operator-confirmed-at-utc': { key: 'operatorConfirmedAtUtc', type: 'string' },
+        '--provider': { key: 'provider', type: 'string' },
+        '--routed-to': { key: 'routedTo', type: 'string' },
+        '--actor': { key: 'actor', type: 'string' },
+        '--plan-path': { key: 'planPath', type: 'string' },
+        '--artifact-path': { key: 'artifactPath', type: 'string' },
+        '--metrics-path': { key: 'metricsPath', type: 'string' },
+        '--emit-metrics': { key: 'emitMetrics', type: 'boolean' },
+        '--repo-root': { key: 'repoRoot', type: 'string' }
+    };
+    return runGateCliHandler(gateArgv, defs, async (options: Parameters<typeof runEnterTaskModeCommand>[0]) => {
+        let result: ReturnType<typeof runEnterTaskModeCommand>;
+        try {
+            result = runEnterTaskModeCommand(options);
+        } catch (error: unknown) {
+            if (!(error instanceof TaskModePolicyEvidenceError)) throw error;
+            return { exitCode: EXIT_GATE_FAILURE, outputLines: ['TASK_MODE_ENTRY_REFUSED', error.message] };
+        }
+        if (result.exitCode === 0) {
+            const notes = await cleanupCompactAtTaskBoundary(path.resolve(String(options.repoRoot || '.')));
+            result.outputLines.push(...notes.filter(note => note.startsWith('Compact housekeeping pending:')));
+            await scheduleUpdateAvailabilityCheck(path.resolve(String(options.repoRoot || '.')));
+        }
+        return result;
+    }, {
+        onCommandError: (error, { options }) => recordTaskModeProtectedManifestFailure(options, error)
+    });
+}
+
+export async function handleRecoverTaskModeProtectedManifest(gateArgv: string[]): Promise<void> {
+    return runGateCliHandler(gateArgv, {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--operator-confirmed': { key: 'operatorConfirmed', type: 'string' },
+        '--operator-confirmed-at-utc': { key: 'operatorConfirmedAtUtc', type: 'string' },
+        '--inspected-protected-snapshot-sha256': { key: 'inspectedProtectedSnapshotSha256', type: 'string' },
+        '--repo-root': { key: 'repoRoot', type: 'string' }
+    }, runRecoverTaskModeProtectedManifestCommand);
+}
+
+export async function handleLoadRulePack(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--stage': { key: 'stage', type: 'string' },
+        '--preflight-path': { key: 'preflightPath', type: 'string' },
+        '--task-mode-path': { key: 'taskModePath', type: 'string' },
+        '--loaded-rule-file': { key: 'loadedRuleFiles', type: 'string[]' },
+        '--loaded-rule-files': { key: 'loadedRuleFiles', type: 'string[]' },
+        '--actor': { key: 'actor', type: 'string' },
+        '--artifact-path': { key: 'artifactPath', type: 'string' },
+        '--metrics-path': { key: 'metricsPath', type: 'string' },
+        '--emit-metrics': { key: 'emitMetrics', type: 'boolean' },
+        '--repo-root': { key: 'repoRoot', type: 'string' }
+    };
+    return runGateCliHandler(gateArgv, defs, runLoadRulePackCommand);
+}
+
+export async function handleBindRulePackToPreflight(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--preflight-path': { key: 'preflightPath', type: 'string' },
+        '--task-mode-path': { key: 'taskModePath', type: 'string' },
+        '--actor': { key: 'actor', type: 'string' },
+        '--artifact-path': { key: 'artifactPath', type: 'string' },
+        '--metrics-path': { key: 'metricsPath', type: 'string' },
+        '--emit-metrics': { key: 'emitMetrics', type: 'boolean' },
+        '--repo-root': { key: 'repoRoot', type: 'string' }
+    };
+    return runGateCliHandler(gateArgv, defs, runBindRulePackToPreflightCommand);
+}
+
+export async function handleRestartCoherentCycle(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--task-mode-path': { key: 'taskModePath', type: 'string' },
+        '--preflight-path': { key: 'preflightPath', type: 'string' },
+        '--preflight-output-path': { key: 'preflightOutputPath', type: 'string' },
+        '--changed-file': { key: 'changedFiles', type: 'string[]' },
+        '--changed-files': { key: 'changedFiles', type: 'string[]' },
+        '--use-staged': { key: 'useStaged', type: 'boolean' },
+        '--include-untracked': { key: 'includeUntracked', type: 'boolean' },
+        '--task-intent': { key: 'taskIntent', type: 'string' },
+        '--commands-path': { key: 'commandsPath', type: 'string' },
+        '--output-filters-path': { key: 'outputFiltersPath', type: 'string' },
+        '--fail-tail-lines': { key: 'failTailLines', type: 'string' },
+        '--operator-confirmed': { key: 'operatorConfirmed', type: 'string' },
+        '--allow-plan-drift': { key: 'allowPlanDrift', type: 'boolean' },
+        '--allow-plan-drift-reason': { key: 'allowPlanDriftReason', type: 'string' },
+        '--operator-confirmed-at-utc': { key: 'operatorConfirmedAtUtc', type: 'string' },
+        '--review-restart-approved': { key: 'reviewRestartApproved', type: 'string' },
+        '--review-restart-approved-at-utc': { key: 'reviewRestartApprovedAtUtc', type: 'string' },
+        '--emit-metrics': { key: 'emitMetrics', type: 'boolean' },
+        '--repo-root': { key: 'repoRoot', type: 'string' }
+    };
+    return runGateCliHandler(gateArgv, defs, runRestartCoherentCycleCommand, {
+        parseConfig: { defaultPreflightForTask: true }
+    });
+}
+
+export async function handleRestartReviewCycle(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--task-mode-path': { key: 'taskModePath', type: 'string' },
+        '--preflight-path': { key: 'preflightPath', type: 'string' },
+        '--preflight-output-path': { key: 'preflightOutputPath', type: 'string' },
+        '--changed-file': { key: 'changedFiles', type: 'string[]' },
+        '--changed-files': { key: 'changedFiles', type: 'string[]' },
+        '--use-staged': { key: 'useStaged', type: 'boolean' },
+        '--include-untracked': { key: 'includeUntracked', type: 'boolean' },
+        '--task-intent': { key: 'taskIntent', type: 'string' },
+        '--impact-analysis': { key: 'impactAnalysis', type: 'string' },
+        '--impact-analysis-path': { key: 'impactAnalysisPath', type: 'string' },
+        '--review-type': { key: 'reviewType', type: 'string' },
+        '--review-evidence-only': { key: 'reviewEvidenceOnly', type: 'boolean' },
+        '--review-restart-approved': { key: 'reviewRestartApproved', type: 'string' },
+        '--review-restart-approved-at-utc': { key: 'reviewRestartApprovedAtUtc', type: 'string' },
+        '--allow-plan-drift': { key: 'allowPlanDrift', type: 'boolean' },
+        '--allow-plan-drift-reason': { key: 'allowPlanDriftReason', type: 'string' },
+        '--commands-path': { key: 'commandsPath', type: 'string' },
+        '--output-filters-path': { key: 'outputFiltersPath', type: 'string' },
+        '--fail-tail-lines': { key: 'failTailLines', type: 'string' },
+        '--emit-metrics': { key: 'emitMetrics', type: 'boolean' },
+        '--repo-root': { key: 'repoRoot', type: 'string' }
+    };
+    return runGateCliHandler(gateArgv, defs, runRestartReviewCycleCommand, {
+        parseConfig: { defaultPreflightForTask: true }
+    });
+}
+
+export async function handleRecordNoOp(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--classification': { key: 'classification', type: 'string' },
+        '--reason': { key: 'reason', type: 'string' },
+        '--actor': { key: 'actor', type: 'string' },
+        '--preflight-path': { key: 'preflightPath', type: 'string' },
+        '--artifact-path': { key: 'artifactPath', type: 'string' },
+        '--metrics-path': { key: 'metricsPath', type: 'string' },
+        '--emit-metrics': { key: 'emitMetrics', type: 'boolean' },
+        '--repo-root': { key: 'repoRoot', type: 'string' }
+    };
+    return runGateCliHandler(gateArgv, defs, runRecordNoOpCommand);
+}
+
+export async function handleRecordStrictDecompositionDecision(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--decision': { key: 'decision', type: 'string' },
+        '--task-profile': { key: 'taskProfile', type: 'string' },
+        '--task-summary': { key: 'taskSummary', type: 'string' },
+        '--reason': { key: 'reason', type: 'string' },
+        '--scope-risk': { key: 'scopeRisk', type: 'string' },
+        '--expected-review-type': { key: 'expectedReviewTypes', type: 'string[]' },
+        '--expected-review-types': { key: 'expectedReviewTypes', type: 'string[]' },
+        '--atomicity-constraint': { key: 'atomicityConstraints', type: 'string[]' },
+        '--atomicity-constraints': { key: 'atomicityConstraints', type: 'string[]' },
+        '--proposed-child-task-id': { key: 'proposedChildTaskIds', type: 'string[]' },
+        '--proposed-child-task-ids': { key: 'proposedChildTaskIds', type: 'string[]' },
+        '--work-package-contract-path': { key: 'workPackageContractPath', type: 'string' },
+        '--actor': { key: 'actor', type: 'string' },
+        '--artifact-path': { key: 'artifactPath', type: 'string' },
+        '--metrics-path': { key: 'metricsPath', type: 'string' },
+        '--emit-metrics': { key: 'emitMetrics', type: 'boolean' },
+        '--repo-root': { key: 'repoRoot', type: 'string' }
+    };
+    return runGateCliHandler(gateArgv, defs, runRecordStrictDecompositionDecisionCommand);
+}
+
+export async function handleRecordReviewCycleContinuation(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--decision': { key: 'decision', type: 'string' },
+        '--reason': { key: 'reason', type: 'string' },
+        '--baseline-total-non-test-reviews': { key: 'baselineTotalNonTestReviewCount', type: 'string' },
+        '--baseline-failed-non-test-reviews': { key: 'baselineFailedNonTestReviewCount', type: 'string' },
+        '--max-total-non-test-reviews': { key: 'maxTotalNonTestReviews', type: 'string' },
+        '--max-failed-non-test-reviews': { key: 'maxFailedNonTestReviews', type: 'string' },
+        '--excluded-review-type': { key: 'excludedReviewTypes', type: 'string[]' },
+        '--excluded-review-types': { key: 'excludedReviewTypes', type: 'string[]' },
+        '--operator-confirmed': { key: 'operatorConfirmed', type: 'string' },
+        '--operator-confirmed-at-utc': { key: 'operatorConfirmedAtUtc', type: 'string' },
+        '--artifact-path': { key: 'artifactPath', type: 'string' },
+        '--metrics-path': { key: 'metricsPath', type: 'string' },
+        '--emit-metrics': { key: 'emitMetrics', type: 'boolean' },
+        '--repo-root': { key: 'repoRoot', type: 'string' }
+    };
+    return runGateCliHandler(gateArgv, defs, runRecordReviewCycleContinuationCommand);
+}
+
+export async function handleRecordReviewCycleSplitDecision(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--decision': { key: 'decision', type: 'string' },
+        '--reason': { key: 'reason', type: 'string' },
+        '--preflight-path': { key: 'preflightPath', type: 'string' },
+        '--baseline-total-non-test-reviews': { key: 'baselineTotalNonTestReviewCount', type: 'string' },
+        '--baseline-failed-non-test-reviews': { key: 'baselineFailedNonTestReviewCount', type: 'string' },
+        '--max-total-non-test-reviews': { key: 'maxTotalNonTestReviews', type: 'string' },
+        '--max-failed-non-test-reviews': { key: 'maxFailedNonTestReviews', type: 'string' },
+        '--excluded-review-type': { key: 'excludedReviewTypes', type: 'string[]' },
+        '--excluded-review-types': { key: 'excludedReviewTypes', type: 'string[]' },
+        '--operator-confirmed': { key: 'operatorConfirmed', type: 'string' },
+        '--operator-confirmed-at-utc': { key: 'operatorConfirmedAtUtc', type: 'string' },
+        '--artifact-path': { key: 'artifactPath', type: 'string' },
+        '--metrics-path': { key: 'metricsPath', type: 'string' },
+        '--emit-metrics': { key: 'emitMetrics', type: 'boolean' },
+        '--repo-root': { key: 'repoRoot', type: 'string' }
+    };
+    return runGateCliHandler(gateArgv, defs, runRecordReviewCycleSplitDecisionCommand);
+}
+
+export async function handleListSplitRequiredWip(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--repo-root': { key: 'repoRoot', type: 'string' }
+    };
+    return runGateCliHandler(gateArgv, defs, runListSplitRequiredWipCommand);
+}
+
+export async function handleRestoreSplitRequiredWip(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--manifest-path': { key: 'manifestPath', type: 'string' },
+        '--include-path': { key: 'includePaths', type: 'string[]' },
+        '--include-paths': { key: 'includePaths', type: 'string[]' },
+        '--dry-run': { key: 'dryRun', type: 'boolean' },
+        '--repo-root': { key: 'repoRoot', type: 'string' }
+    };
+    return runGateCliHandler(gateArgv, defs, runRestoreSplitRequiredWipCommand);
+}
+
+export async function handleRetireSplitRequiredWip(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--manifest-path': { key: 'manifestPath', type: 'string' },
+        '--reason': { key: 'reason', type: 'string' },
+        '--repo-root': { key: 'repoRoot', type: 'string' }
+    };
+    return runGateCliHandler(gateArgv, defs, runRetireSplitRequiredWipCommand);
+}
+
+export async function handleHandshakeDiagnostics(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--provider': { key: 'provider', type: 'string' },
+        '--task-mode-path': { key: 'taskModePath', type: 'string' },
+        '--cli-path': { key: 'cliPath', type: 'string' },
+        '--effective-cwd': { key: 'effectiveCwd', type: 'string' },
+        '--canonical-entrypoint': { key: 'canonicalEntrypoint', type: 'string' },
+        '--provider-bridge': { key: 'providerBridge', type: 'string' },
+        '--artifact-path': { key: 'artifactPath', type: 'string' },
+        '--metrics-path': { key: 'metricsPath', type: 'string' },
+        '--emit-metrics': { key: 'emitMetrics', type: 'boolean' },
+        '--repo-root': { key: 'repoRoot', type: 'string' }
+    };
+    return runGateCliHandler(gateArgv, defs, runHandshakeDiagnosticsCommand);
+}
+
+export async function handleShellSmokePreflight(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--provider': { key: 'provider', type: 'string' },
+        '--task-mode-path': { key: 'taskModePath', type: 'string' },
+        '--effective-cwd': { key: 'effectiveCwd', type: 'string' },
+        '--probe-timeout-ms': { key: 'probeTimeoutMs', type: 'string' },
+        '--artifact-path': { key: 'artifactPath', type: 'string' },
+        '--metrics-path': { key: 'metricsPath', type: 'string' },
+        '--emit-metrics': { key: 'emitMetrics', type: 'boolean' },
+        '--repo-root': { key: 'repoRoot', type: 'string' }
+    };
+    return runGateCliHandler(gateArgv, defs, runShellSmokePreflightCommand);
+}
+
+export async function handleCommandTimeoutDiagnostics(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--provider': { key: 'provider', type: 'string' },
+        '--task-mode-path': { key: 'taskModePath', type: 'string' },
+        '--effective-cwd': { key: 'effectiveCwd', type: 'string' },
+        '--command-records-path': { key: 'commandRecordsPath', type: 'string' },
+        '--artifact-path': { key: 'artifactPath', type: 'string' },
+        '--metrics-path': { key: 'metricsPath', type: 'string' },
+        '--emit-metrics': { key: 'emitMetrics', type: 'boolean' },
+        '--repo-root': { key: 'repoRoot', type: 'string' }
+    };
+    return runGateCliHandler(gateArgv, defs, runCommandTimeoutDiagnosticsCommand);
+}
+
+export async function handleQualityChecklist(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--preflight-path': { key: 'preflightPath', type: 'string' },
+        '--answers-json': { key: 'answersJson', type: 'string' },
+        '--answers-path': { key: 'answersPath', type: 'string' },
+        '--answers-stdin': { key: 'answersStdin', type: 'boolean' },
+        '--action-taken': { key: 'actionTaken', type: 'string[]' },
+        '--actions-taken': { key: 'actionsTaken', type: 'string[]' },
+        '--action-required': { key: 'actionRequired', type: 'string[]' },
+        '--actions-required': { key: 'actionsRequired', type: 'string[]' },
+        '--artifact-path': { key: 'artifactPath', type: 'string' },
+        '--metrics-path': { key: 'metricsPath', type: 'string' },
+        '--emit-metrics': { key: 'emitMetrics', type: 'boolean' },
+        '--repo-root': { key: 'repoRoot', type: 'string' }
+    };
+    return runGateCliHandler(gateArgv, defs, runQualityChecklistCommand, {
+        parseConfig: { defaultPreflightForTask: true }
+    });
+}
+
+export async function handleRunIntermediateCommand(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--recipe-id': { key: 'recipeId', type: 'string' },
+        '--command': { key: 'command', type: 'string' },
+        '--command-source': { key: 'commandSource', type: 'string' },
+        '--selected-case': { key: 'selectedCases', type: 'string[]' },
+        '--report-file': { key: 'reportFiles', type: 'string[]' },
+        '--artifact-path': { key: 'artifactPath', type: 'string' },
+        '--output-path': { key: 'outputPath', type: 'string' },
+        '--timeout-ms': { key: 'timeoutMs', type: 'string' },
+        '--preflight-path': { key: 'preflightPath', type: 'string' },
+        '--preflight-sha256': { key: 'preflightSha256', type: 'string' },
+        '--coverage-contract-sha256': { key: 'coverageContractSha256', type: 'string' },
+        '--expect-failure': { key: 'expectFailure', type: 'boolean' },
+        '--repo-root': { key: 'repoRoot', type: 'string' },
+        '--events-root': { key: 'eventsRoot', type: 'string' }
+    };
+    return runGateCliHandler(gateArgv, defs, runIntermediateCommandCommand);
+}
+
+export async function handleProjectMemoryImpact(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--preflight-path': { key: 'preflightPath', type: 'string' },
+        '--changed-file': { key: 'changedFiles', type: 'string[]' },
+        '--changed-files': { key: 'changedFiles', type: 'string[]' },
+        '--confirm-updated': { key: 'confirmUpdated', type: 'boolean' },
+        '--updated-memory-file': { key: 'updatedMemoryFiles', type: 'string[]' },
+        '--updated-memory-files': { key: 'updatedMemoryFiles', type: 'string[]' },
+        '--skipped-memory-file': { key: 'skippedMemoryFiles', type: 'string[]' },
+        '--skipped-memory-files': { key: 'skippedMemoryFiles', type: 'string[]' },
+        '--skip-unchanged-candidates-rationale': { key: 'skipUnchangedCandidatesRationale', type: 'string' },
+        '--mode': { key: 'mode', type: 'string' },
+        '--artifact-path': { key: 'artifactPath', type: 'string' },
+        '--update-artifact-path': { key: 'updateArtifactPath', type: 'string' },
+        '--repo-root': { key: 'repoRoot', type: 'string' }
+    };
+    return runGateCliHandler(gateArgv, defs, runProjectMemoryImpactCommand);
+}
+
+export async function handleLogTaskEvent(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--event-type': { key: 'eventType', type: 'string' },
+        '--outcome': { key: 'outcome', type: 'string' },
+        '--message': { key: 'message', type: 'string' },
+        '--actor': { key: 'actor', type: 'string' },
+        '--details-json': { key: 'detailsJson', type: 'string' },
+        '--repo-root': { key: 'repoRoot', type: 'string' },
+        '--events-root': { key: 'eventsRoot', type: 'string' }
+    };
+    return runGateCliHandler(gateArgv, defs, runLogTaskEventCommand, {
+        formatOutput: (result) => result.outputText,
+        resolveExitCode: (result) => result.exitCode
+    });
+}
+
+export async function handleTaskEventsSummary(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--repo-root': { key: 'repoRoot', type: 'string' },
+        '--events-root': { key: 'eventsRoot', type: 'string' },
+        '--reviews-root': { key: 'reviewsRoot', type: 'string' },
+        '--output-path': { key: 'outputPath', type: 'string' },
+        '--as-json': { key: 'asJson', type: 'boolean' },
+        '--include-details': { key: 'includeDetails', type: 'boolean' },
+        '--compact-latest-cycle': { key: 'compactLatestCycle', type: 'boolean' }
+    };
+    return runGateCliHandler(gateArgv, defs, runTaskEventsSummaryCommand, {
+        formatOutput: (result, { options }) => (
+            options.asJson !== true
+            && options.compactLatestCycle !== true
+            && !options.outputPath
+                ? colorizeTaskEventsSummaryText(result.rendered)
+                : result.rendered
+        ),
+        resolveExitCode: () => 0
+    });
+}
+
+export async function handleTaskAuditSummary(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--preflight-path': { key: 'preflightPath', type: 'string' },
+        '--repo-root': { key: 'repoRoot', type: 'string' },
+        '--events-root': { key: 'eventsRoot', type: 'string' },
+        '--reviews-root': { key: 'reviewsRoot', type: 'string' },
+        '--output-path': { key: 'outputPath', type: 'string' },
+        '--as-json': { key: 'asJson', type: 'boolean' }
+    };
+    return runGateCliHandler(gateArgv, defs, runTaskAuditSummaryCommand, {
+        parseConfig: { allowResetPreflight: true },
+        formatOutput: (result, { options }) => (
+            options.asJson !== true && !options.outputPath
+                ? colorizeTaskAuditSummaryText(result.rendered)
+                : result.rendered
+        ),
+        resolveExitCode: (result) => result.exitCode
+    });
+}
+
+export { handleNextStep } from './gate-next-step-handler';
+
+export async function handleFullSuiteValidation(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--preflight-path': { key: 'preflightPath', type: 'string' },
+        '--repo-root': { key: 'repoRoot', type: 'string' }
+    };
+    return runGateCliHandler(gateArgv, defs, runFullSuiteValidationCommand, {
+        formatOutput: (result) => result.outputText,
+        resolveExitCode: (result) => result.exitCode
+    });
+}
+
+export async function handleFullSuiteRunMarkerRecovery(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--preflight-path': { key: 'preflightPath', type: 'string' },
+        '--artifact-path': { key: 'artifactPath', type: 'string' },
+        '--clear-dead-marker': { key: 'clearDeadMarker', type: 'boolean' },
+        '--operator-confirmed': { key: 'operatorConfirmed', type: 'string' },
+        '--repo-root': { key: 'repoRoot', type: 'string' }
+    };
+    return runGateCliHandler(gateArgv, defs, runFullSuiteRunMarkerRecoveryCommand);
+}
+
+export async function handleMaterializeFullSuiteRepairTask(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--preflight-path': { key: 'preflightPath', type: 'string' },
+        '--full-suite-artifact-path': { key: 'fullSuiteArtifactPath', type: 'string' },
+        '--reviews-root': { key: 'reviewsRoot', type: 'string' },
+        '--repo-root': { key: 'repoRoot', type: 'string' }
+    };
+    return runGateCliHandler(gateArgv, defs, runMaterializeFullSuiteRepairTaskCommand);
+}
+
+export async function handleRestoreFullSuiteRepairWip(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--full-suite-artifact-path': { key: 'fullSuiteArtifactPath', type: 'string' },
+        '--manifest-path': { key: 'manifestPath', type: 'string' },
+        '--child-task-id': { key: 'childTaskId', type: 'string' },
+        '--reviews-root': { key: 'reviewsRoot', type: 'string' },
+        '--dry-run': { key: 'dryRun', type: 'boolean' },
+        '--repo-root': { key: 'repoRoot', type: 'string' }
+    };
+    return runGateCliHandler(gateArgv, defs, runRestoreFullSuiteRepairWipCommand);
+}
+
+export async function handleCompletionGate(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--preflight-path': { key: 'preflightPath', type: 'string' },
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--task-mode-path': { key: 'taskModePath', type: 'string' },
+        '--rule-pack-path': { key: 'rulePackPath', type: 'string' },
+        '--timeline-path': { key: 'timelinePath', type: 'string' },
+        '--reviews-root': { key: 'reviewsRoot', type: 'string' },
+        '--compile-evidence-path': { key: 'compileEvidencePath', type: 'string' },
+        '--review-evidence-path': { key: 'reviewEvidencePath', type: 'string' },
+        '--doc-impact-path': { key: 'docImpactPath', type: 'string' },
+        '--no-op-artifact-path': { key: 'noOpArtifactPath', type: 'string' },
+        '--handshake-path': { key: 'handshakePath', type: 'string' },
+        '--shell-smoke-path': { key: 'shellSmokePath', type: 'string' },
+        '--repo-root': { key: 'repoRoot', type: 'string' }
+    };
+    return runGateCliHandler(gateArgv, defs, async (options: ParsedOptionsRecord) => {
+        const repoRoot = normalizePathValue(options.repoRoot || '.');
+        ensureDirectoryExists(repoRoot, 'Repo root');
+        const completionTaskId = parseRequiredText(options.taskId, 'TaskId');
+        const reviewsRoot = gateHelpers.resolvePathInsideRepo(String(options.reviewsRoot || ''), repoRoot, { allowMissing: true })
+            || gateHelpers.joinOrchestratorPath(repoRoot, path.join('runtime', 'reviews'));
+        const completionPreflightPath = parseRequiredText(options.preflightPath, 'PreflightPath');
+        const premature = readPrematureCompletionRefusal(completionTaskId,
+            gateHelpers.resolvePathInsideRepo(String(options.timelinePath || ''), repoRoot, { allowMissing: true })
+            || gateHelpers.joinOrchestratorPath(repoRoot, path.join('runtime', 'task-events', `${completionTaskId}.jsonl`)));
+        if (premature) {
+            return premature;
+        }
+        // Past the review gate, completion is still premature while next-step routes the intact cycle to an
+        // earlier gate (for example a pending full-suite run): it could only fail and force a new cycle.
+        const route = readNavigatorRoute(path.resolve(repoRoot), completionTaskId);
+        if (routesIntactCycleElsewhere(route, 'completion-gate',
+            INTACT_CYCLE_FORWARD_GATES.filter((gate) => gate !== 'completion-gate'))) {
+            return buildOutOfOrderCompletionRefusal(completionTaskId, formatOutOfOrderRefusal('completion-gate', completionTaskId, route,
+                'Completion needs that step first and could only fail, which would force a new task cycle.'));
+        }
+        const { result } = await withCompletionGateFinalizationLockAsync(reviewsRoot, completionTaskId, async () => {
+            const completionResult = runCompletionGate({
+                repoRoot,
+                preflightPath: completionPreflightPath,
+                taskId: completionTaskId,
+                taskModePath: String(options.taskModePath || ''),
+                rulePackPath: String(options.rulePackPath || ''),
+                timelinePath: String(options.timelinePath || ''),
+                reviewsRoot: String(options.reviewsRoot || ''),
+                compileEvidencePath: String(options.compileEvidencePath || ''),
+                reviewEvidencePath: String(options.reviewEvidencePath || ''),
+                docImpactPath: String(options.docImpactPath || ''),
+                noOpArtifactPath: String(options.noOpArtifactPath || ''),
+                handshakePath: String(options.handshakePath || ''),
+                shellSmokePath: String(options.shellSmokePath || '')
+            });
+
+            const resolvedCompletionTaskId = String(completionResult.task_id || '').trim();
+            if (resolvedCompletionTaskId) {
+                const orchestratorRoot = gateHelpers.joinOrchestratorPath(repoRoot, '');
+                if (completionResult.outcome === 'PASS') {
+                    const recovery = readCloseoutLinkageRecovery(repoRoot, resolvedCompletionTaskId,
+                        String(completionResult.preflight_path), String(completionResult.timeline_path));
+                    if (recovery) {
+                        await appendTaskEventAsync(orchestratorRoot, resolvedCompletionTaskId, 'CLOSEOUT_METADATA_RETRY_STARTED',
+                            'INFO', 'Retrying unchanged validated scope after canonical follow-up linkage correction.', {
+                                preflight_path: recovery.preflight_path, state_sha256: recovery.state_sha256
+                            });
+                    }
+                    const recoverySnapshot = captureCloseoutRecoverySnapshot(repoRoot, resolvedCompletionTaskId,
+                        String(completionResult.preflight_path), true);
+                    try {
+                        if (recovery && !readCloseoutLinkageRecovery(repoRoot, resolvedCompletionTaskId,
+                            String(completionResult.preflight_path), String(completionResult.timeline_path))) {
+                            throw new Error('Closeout metadata recovery bindings changed before finalization; rerun next-step.');
+                        }
+                        await reconcileSuccessfulCompletionFinalizationAsync({
+                            repoRoot,
+                            assertRecoveryBindings: recovery ? buildCloseoutRecoveryFinalizationVerifier(repoRoot, recovery) : undefined,
+                            taskId: resolvedCompletionTaskId,
+                            preflightPath: String(completionResult.preflight_path || ''),
+                            previousStatusHint: 'IN_REVIEW',
+                            completionEventDetails: {
+                                status: completionResult.status,
+                                outcome: completionResult.outcome,
+                                preflight_path: completionResult.preflight_path,
+                                timeline_path: completionResult.timeline_path,
+                                violations: completionResult.violations
+                            }
+                        });
+                    } catch (error: unknown) {
+                        try {
+                            await emitMandatoryCompletionGateEventAsync(orchestratorRoot, resolvedCompletionTaskId, false, {
+                                status: completionResult.status,
+                                outcome: 'FINALIZATION_FAILED',
+                                preflight_path: completionResult.preflight_path,
+                                timeline_path: completionResult.timeline_path,
+                                violations: completionResult.violations,
+                                finalization_error: error instanceof Error ? error.message : String(error),
+                                finalization_retryable: isRetryableCompletionFinalizationError(error),
+                                closeout_linkage_recovery: getCloseoutLinkageRecoveryProof(error, recoverySnapshot, repoRoot)
+                            });
+                        } catch (eventError: unknown) {
+                            throw new Error(
+                                `completion-gate finalization failed after validation PASS, and mandatory lifecycle event `
+                                + `'COMPLETION_GATE_FAILED' could not be appended. FinalizationError: `
+                                + `${error instanceof Error ? error.message : String(error)} EventError: `
+                                + `${eventError instanceof Error ? eventError.message : String(eventError)}`
+                            );
+                        }
+                        throw new Error(
+                            `completion-gate finalization failed after validation PASS. ${error instanceof Error ? error.message : String(error)}`
+                        );
+                    }
+                } else {
+                    try {
+                        await emitMandatoryCompletionGateEventAsync(orchestratorRoot, resolvedCompletionTaskId, false, {
+                            status: completionResult.status,
+                            outcome: completionResult.outcome,
+                            preflight_path: completionResult.preflight_path,
+                            timeline_path: completionResult.timeline_path,
+                            violations: completionResult.violations
+                        });
+                    } catch (error: unknown) {
+                        throw new Error(
+                            `completion-gate failed because mandatory lifecycle event 'COMPLETION_GATE_FAILED' could not be appended. ${error instanceof Error ? error.message : String(error)}`
+                        );
+                    }
+                }
+            }
+
+            return completionResult;
+        });
+        return result;
+    }, {
+        formatOutput: (result) => `${result.outcome === 'REFUSED'
+            ? formatPrematureCompletionRefusal(result as unknown as PrematureCompletionRefusal)
+            : formatCompletionGateResult(result as Record<string, unknown>)}\n`,
+        resolveExitCode: (result) => result.outcome === 'PASS' ? 0 : EXIT_GATE_FAILURE
+    });
+}
+
+export async function handleHumanCommit(gateArgv: string[]): Promise<void> {
+    return runGateCliHandler(gateArgv, {}, (
+        argv: string[]
+    ) => runHumanCommitCommand(argv, { cwd: process.cwd() }), {
+        skipParsing: true,
+        mapOptions: ({ argv }) => [...argv],
+        formatOutput: () => undefined,
+        resolveExitCode: (exitCode) => exitCode
+    });
+}
+
+export async function handleTaskReset(gateArgv: string[]): Promise<void> {
+    const defs = {
+        '--task-id': { key: 'taskId', type: 'string' },
+        '--dry-run': { key: 'dryRun', type: 'boolean' },
+        '--confirm': { key: 'confirm', type: 'boolean' },
+        '--to-status': { key: 'toStatus', type: 'string' },
+        '--reopen': { key: 'reopen', type: 'boolean' },
+        '--discard': { key: 'discard', type: 'boolean' },
+        '--prepare-one-action': { key: 'prepareOneAction', type: 'boolean' },
+        '--one-action': { key: 'oneAction', type: 'boolean' },
+        '--one-action-authority': { key: 'oneActionAuthority', type: 'string' },
+        '--operator-confirmed': { key: 'operatorConfirmed', type: 'string' },
+        '--operator-confirmed-at-utc': { key: 'operatorConfirmedAtUtc', type: 'string' },
+        '--events-root': { key: 'eventsRoot', type: 'string' },
+        '--reviews-root': { key: 'reviewsRoot', type: 'string' },
+        '--as-json': { key: 'asJson', type: 'boolean' },
+        '--repo-root': { key: 'repoRoot', type: 'string' }
+    };
+    try {
+        const taskIdRemediationMessage = buildTaskIdSyntaxRemediationMessage('task-reset', gateArgv);
+        if (taskIdRemediationMessage) {
+            throw new Error(taskIdRemediationMessage);
+        }
+        await runGateCliHandler(gateArgv, defs, (options: ParsedOptionsRecord) => {
+            if (!options.taskId) {
+                throw new Error(buildTaskResetMissingTaskIdMessage());
+            }
+            const result = runTaskResetCommand(options);
+            if (options.asJson !== true) return result;
+            // --as-json: one machine-readable object; the human lines stay available in the object.
+            const { exitCode, ...payload } = result;
+            return { ...result, outputLines: [JSON.stringify({ ...payload, exit_code: exitCode }, null, 2)] };
+        });
+    } catch (error: unknown) {
+        if (!taskResetUsesJsonOutput(gateArgv)) {
+            throw error;
+        }
+        const exitCode = classifyErrorExitCode(error);
+        process.stdout.write(`${JSON.stringify({
+            outcome: 'ERROR',
+            error: error instanceof Error ? error.message : String(error),
+            exit_code: exitCode
+        }, null, 2)}\n`);
+        process.exitCode = exitCode;
+    }
+}
+
+function taskResetUsesJsonOutput(gateArgv: readonly string[]): boolean {
+    let asJson = false;
+    for (const [index, argument] of gateArgv.entries()) {
+        if (argument === '--as-json') {
+            asJson = tryParseBooleanText(gateArgv[index + 1], true);
+        } else if (argument.startsWith('--as-json=')) {
+            asJson = tryParseBooleanText(argument.slice('--as-json='.length), true);
+        }
+    }
+    return asJson;
+}

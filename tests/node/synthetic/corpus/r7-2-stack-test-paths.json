@@ -1,0 +1,38 @@
+[
+  {
+    "id": "r7-2-rspec-support-helper",
+    "layer": "path",
+    "note": "R7-2: RSpec support files were production paths; a test-review fix could not add one.",
+    "stack": "ruby",
+    "role": "TEST_HELPER",
+    "file": "spec/support/money_helpers.rb",
+    "variant": {
+      "operation": "added",
+      "changedLines": 12
+    }
+  },
+  {
+    "id": "r7-2-rspec-spec-helper",
+    "layer": "path",
+    "note": "R7-2: spec_helper.rb was a production path.",
+    "stack": "ruby",
+    "role": "TEST_HELPER",
+    "file": "spec/spec_helper.rb",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 4
+    }
+  },
+  {
+    "id": "r7-2-rspec-factories",
+    "layer": "path",
+    "note": "R7-2: spec/factories were production paths.",
+    "stack": "ruby",
+    "role": "TEST_HELPER",
+    "file": "spec/factories/users.rb",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 8
+    }
+  }
+]

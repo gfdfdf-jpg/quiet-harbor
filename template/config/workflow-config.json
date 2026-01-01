@@ -1,0 +1,184 @@
+{
+  "parent_audit": {
+    "enabled": false
+  },
+  "compile_gate": {
+    "command": "__COMPILE_GATE_COMMAND_UNCONFIGURED__"
+  },
+  "full_suite_validation": {
+    "enabled": false,
+    "command": "__FULL_SUITE_COMMAND_UNCONFIGURED__",
+    "timeout_ms": 900000,
+    "timeout_blocker": true,
+    "timeout_retry_count": 1,
+    "green_summary_max_lines": 5,
+    "red_failure_chunk_lines": 50,
+    "out_of_scope_failure_policy": "AUDIT_AND_BLOCK",
+    "placement": "after_compile_before_reviews"
+  },
+  "review_execution_policy": {
+    "mode": "strict_sequential"
+  },
+  "review_delegation": {
+    "no_delegate": false
+  },
+  "orchestrator_work_policy": {
+    "mode": "deny_agent_entry"
+  },
+  "scope_budget_guard": {
+    "enabled": true,
+    "profiles": [
+      "strict"
+    ],
+    "action": "WARN_ONLY",
+    "max_files": 20,
+    "max_changed_lines": 2000,
+    "max_required_reviews": 5,
+    "max_review_tokens": 50000,
+    "warn_files": 20,
+    "block_files": 50,
+    "warn_changed_lines": 2000,
+    "block_changed_lines": 5000,
+    "warn_required_reviews": 5,
+    "block_required_reviews": 8,
+    "warn_review_tokens": 50000,
+    "block_review_tokens": 100000
+  },
+  "review_cycle_guard": {
+    "enabled": true,
+    "action": "BLOCK_FOR_OPERATOR_DECISION",
+    "max_failed_non_test_reviews": 10,
+    "max_total_non_test_reviews": 30,
+    "excluded_review_types": [
+      "test"
+    ],
+    "auto_split_enabled": true
+  },
+  "project_memory_maintenance": {
+    "enabled": true,
+    "mode": "update",
+    "run_before_final_closeout": true,
+    "require_user_approval_for_writes": true,
+    "max_compact_summary_chars": 12000,
+    "read_strategy": "index_first",
+    "impact_artifact_retention_days": 30
+  },
+  "local_commit": {
+    "enabled": false
+  },
+  "task_test_selection": {
+    "require_operator_confirmation": false
+  },
+  "task_reset": {
+    "enabled": false
+  },
+  "auto_backup": {
+    "enabled": false,
+    "interval_days": 1,
+    "keep_latest": 10
+  },
+  "optional_quality_checks": {
+    "enabled": true,
+    "baseline_version": "2026-07-21.t969",
+    "rules": [
+      {
+        "id": "code_simplification",
+        "title": "Code simplification",
+        "prompt": "Check whether the changed code can be simplified without weakening behavior, validation, or diagnostics.",
+        "enabled": true,
+        "excluded_scope_categories": [
+          "test-only"
+        ]
+      },
+      {
+        "id": "project_style_fit",
+        "title": "Project style fit",
+        "prompt": "Check whether the change follows the local project style, naming, module boundaries, and existing helper patterns.",
+        "enabled": true
+      },
+      {
+        "id": "unnecessary_abstraction",
+        "title": "Unnecessary abstraction",
+        "prompt": "Check whether the change introduced abstractions that do not remove real duplication, risk, or complexity.",
+        "enabled": true,
+        "excluded_scope_categories": [
+          "test-only"
+        ]
+      },
+      {
+        "id": "size_growth",
+        "title": "Class/function/file growth",
+        "prompt": "Check whether touched classes, functions, or files grew enough to need local extraction or clearer ownership.",
+        "enabled": true,
+        "excluded_scope_categories": [
+          "test-only"
+        ]
+      },
+      {
+        "id": "hardcoded_values_contracts",
+        "title": "Hardcoded values and contracts",
+        "prompt": "Check whether new literals, paths, statuses, or messages should be named constants, schema fields, or shared contracts.",
+        "enabled": true
+      },
+      {
+        "id": "duplicated_logic_contracts",
+        "title": "Duplicated logic and contracts",
+        "prompt": "Check whether the change duplicates logic, validation, or contract strings that should stay defined in one place.",
+        "enabled": true
+      },
+      {
+        "id": "test_verification_scope",
+        "title": "Test and verification scope",
+        "prompt": "Check whether the focused tests and mandatory gates cover the behavioral risk without adding unrelated slow coverage.",
+        "enabled": true
+      },
+      {
+        "id": "ops_shell_strict_error_handling",
+        "title": "Ops shell strict error handling",
+        "prompt": "For shell or ops-script changes, check strict shell behavior, error propagation, exit-code handling, traps or cleanup paths, and cross-shell or platform portability.",
+        "enabled": true,
+        "included_changed_file_regexes": [
+          "(^|/)[^/]+\\.(?:sh|bash|zsh|ps1|cmd|bat)$",
+          "(^|/)(?:scripts|ops|operations|bin|tools|ci|deploy|deployment|backup|restore)(?:/|$).+\\.(?:sh|bash|zsh|ps1|cmd|bat|js|mjs|cjs|ts|tsx|py|ya?ml|json|conf)$",
+          "(^|/)(?:[^/]*[._-])?(?:deploy|deployment|backup|restore|ops)(?:[._-][^/]*)?\\.(?:sh|bash|zsh|ps1|cmd|bat|js|mjs|cjs|ts|tsx|py|ya?ml|json|conf)$",
+          "(^|/)\\.github/workflows/.*(?:deploy|deployment|backup|restore|release|ops).*\\.ya?ml$"
+        ]
+      },
+      {
+        "id": "ops_deploy_backup_idempotency",
+        "title": "Ops deploy and backup idempotency",
+        "prompt": "For deploy, backup, restore, or operations scripts, check idempotency, safe retries, dry-run or confirmation semantics, rollback or cleanup behavior, and restore verification where backup data is involved.",
+        "enabled": true,
+        "included_changed_file_regexes": [
+          "(^|/)[^/]+\\.(?:sh|bash|zsh|ps1|cmd|bat)$",
+          "(^|/)(?:scripts|ops|operations|bin|tools|ci|deploy|deployment|backup|restore)(?:/|$).+\\.(?:sh|bash|zsh|ps1|cmd|bat|js|mjs|cjs|ts|tsx|py|ya?ml|json|conf)$",
+          "(^|/)(?:[^/]*[._-])?(?:deploy|deployment|backup|restore|ops)(?:[._-][^/]*)?\\.(?:sh|bash|zsh|ps1|cmd|bat|js|mjs|cjs|ts|tsx|py|ya?ml|json|conf)$",
+          "(^|/)\\.github/workflows/.*(?:deploy|deployment|backup|restore|release|ops).*\\.ya?ml$"
+        ]
+      },
+      {
+        "id": "ops_secret_env_loading",
+        "title": "Ops secrets and environment loading",
+        "prompt": "For shell or ops changes, check secret handling, log redaction, env-file loading safety, and whether duplicated environment-loading snippets should reuse or extract a shared helper.",
+        "enabled": true,
+        "included_changed_file_regexes": [
+          "(^|/)[^/]+\\.(?:sh|bash|zsh|ps1|cmd|bat)$",
+          "(^|/)(?:scripts|ops|operations|bin|tools|ci|deploy|deployment|backup|restore)(?:/|$).+\\.(?:sh|bash|zsh|ps1|cmd|bat|js|mjs|cjs|ts|tsx|py|ya?ml|json|conf)$",
+          "(^|/)(?:[^/]*[._-])?(?:deploy|deployment|backup|restore|ops)(?:[._-][^/]*)?\\.(?:sh|bash|zsh|ps1|cmd|bat|js|mjs|cjs|ts|tsx|py|ya?ml|json|conf)$",
+          "(^|/)\\.github/workflows/.*(?:deploy|deployment|backup|restore|release|ops).*\\.ya?ml$"
+        ]
+      },
+      {
+        "id": "trust_boundary_adversarial_analysis",
+        "title": "Trust-boundary and adversarial-path analysis",
+        "prompt": "For security, authorization, protected-control-plane, recovery, evidence, or artifact-trust changes, provide a compact trust_boundary_matrix. Name every trust boundary and record its authority source, mutable inputs, immutable or integrity-bound evidence, canonical reconstruction, TOCTOU or replay behavior, and targeted negative paths with test evidence. Cite each negative-path source as path#case selector (or path#target-id for a declared command). Selectors are opaque project identities; scenarios and expected behavior may use the project language. Bind the actual contained source, current native execution and output to independent per-case semantic review. A source reference or successful process exit alone does not prove an assertion exists or ran. Happy-path evidence alone is not sufficient.",
+        "enabled": true,
+        "included_changed_file_regexes": [
+          "(^|/)(?:src|bin|scripts|config|template)/.*(?:auth|authori[sz]ation|permission|access|security|protected|recovery|evidence|artifact|trust|integrity|receipt|provenance|review(?:er)?-(?:context|finding|result|receipt|routing|launch|invocation|output|cycle|trust|evidence|identity|attestation)|required-review|completion|task-audit|task-mode|operator-confirmation|hash|signature|token|secret).*(?:\\.(?:ts|tsx|js|mjs|cjs|json|ya?ml|md)|$)",
+          "(^|/)(?:AGENTS\\.md|template/docs/agent-rules/(?:00-core|70-security|80-task-workflow)\\.md)$",
+          "(^|/)(?:garda-agent-orchestrator/(?:live|template)|template)/config/workflow-config\\.json$"
+        ]
+      }
+    ]
+  }
+}
