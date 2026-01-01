@@ -1,0 +1,719 @@
+# Configuration
+
+All configuration files live in `garda-agent-orchestrator/live/config/`.
+
+## Workflow setting confirmation
+
+After explicit operator approval, mutating `garda workflow set` examples use
+`--operator-confirmed yes --operator-confirmed-at-utc "<ISO-8601 timestamp>"`.
+Replace the timestamp placeholder with the actual approval time in UTC; copying
+the example does not supply approval. A standalone `--garda-self-guard on` and
+true no-op have the existing exceptions described by `garda workflow explain`;
+repairing task-reset audit evidence still requires confirmation.
+
+CLI help, workflow diagnostics and dashboard setting hints share the example
+defined in `src/core/workflow-command-guidance.ts`. This is display guidance;
+argument parsing, confirmation freshness checks and audited mutations retain
+their existing owners. Keep documentation examples aligned with that guidance.
+
+## Parent completion
+
+`parent_audit.enabled` defaults to `false`. The dashboard exposes **Full parent
+audit and review** under review settings. The CLI equivalent is
+`garda workflow set --parent-audit-enabled true|false`, with the operator confirmation
+arguments above. The setting is frozen at decomposition and affects future parents.
+Explicit manual groups complete automatically regardless of the switch. Audited
+runtime parents receive one combined review and, if needed, one grouped correction
+task. See [parent completion](parent-task-completion.md) for acceptance and recovery.
+
+## Compact command controls
+
+The **Compact** UI group edits `workflow-config.json` through the existing confirmed, audited settings route. It shows observed cache bytes/runs and provides enable/disable controls for compact itself and the shipped Git, file and ripgrep adapters. Disabling a family prevents its producer from running. Retained output remains readable until task completion.
+
+The optional `compact` section defaults to:
+
+```json
+{
+  "enabled": true, "git": true, "file": true, "rg": true,
+  "preview_lines": 20, "preview_chars": 3000,
+  "run_bytes": 16777216, "task_bytes": 67108864,
+  "workspace_bytes": 268435456, "max_runs": 2048
+}
+```
+
+CLI settings use `workflow set --compact-enabled false`, `--compact-git false`, `--compact-file false`, `--compact-rg false`, `--compact-preview-lines`, `--compact-preview-chars`, `--compact-run-bytes`, `--compact-task-bytes`, `--compact-workspace-bytes` and `--compact-max-runs`, with the normal operator confirmation arguments. Limits can be reduced, not raised above these ceilings; run ≤ task ≤ workspace, at least 9216 bytes, preview at least 3 lines/128 characters. When lowering hierarchical limits in the UI, lower the inner limit first. No secret-redaction option exists. New command adapters are a code extension, not arbitrary UI commands.
+
+The root manifest `garda.config.json` references the managed config files validated by the orchestrator and can be checked with:
+
+```bash
+node bin/garda.js gate validate-config
+```
+
+## Untracked build output
+
+`paths.json` may override `untracked_build_output_regexes`, an array of
+case-insensitive regular expressions matched against repository-relative paths.
+Defaults exclude untracked files inside `target/`, `bin/`, `obj/`, `build/`,
+`dist/`, `out/`, `__pycache__/`, `.venv/`, `venv/`, `node_modules/`, `.gradle/`,
+`.pytest_cache/`, `.mypy_cache/`, `coverage/`, `_build/`, `.build/`, `.dart_tool/`,
+`.zig-cache/` and `zig-out/`, and untracked `*.pyc`/`*.pyo`.
+Tracked files inside these directories still count, and so do new files once
+they are staged; stage new source files you create in these directories so
+reviewers see them. Other untracked files,
+including `Cargo.lock`, remain in scope. This policy covers task detection,
+scoped diffs and review state; raw WIP and repair capture keep their contents.
+In Garda's own source checkout, executable files under `dist/src/` remain in
+scope, including explicitly selected Git-ignored files, because the CLI runs
+that namespace. Other projects and generated directories retain the exclusions.
+
+An explicit array replaces the defaults; `[]` disables the exclusions.
+Missing fields use the defaults, and materialization adds the missing field
+to legacy configurations while preserving explicitly customized arrays.
+Existing `paths.json` bytes are preserved while any task is active. New defaults
+and legacy migrations apply on a subsequent init/update after active tasks end.
+
+Staged validation compares exact bytes unless Git's text/EOL rules convert
+CRLF to LF for that path. Binary and `-text` paths keep exact comparison;
+user clean, smudge and textconv commands are never run by this check.
+
+Declared reports are observed before execution. A pre-existing report must
+be replaced during the run or rewritten with a newer modification time and
+changed content; touching an unchanged report cannot establish fresh evidence.
+Stale-report errors name the report directory to clear before running again.
+
+## Ordinary documentation paths
+
+`paths.json` may declare `ordinary_doc_paths`, such as `docs/**` or
+`examples/**`. These patterns identify candidates; they do not certify an
+executable, test file or unknown extension as documentation. The shared
+classification contract requires a text documentation extension (`md`, `mdx`,
+`txt`, `rst`, `adoc`, `asciidoc` or `textile`) or a conventional extensionless
+name (`README`, `CHANGELOG`, `LICENSE`, `CONTRIBUTING`, `SECURITY`, `NOTICE`,
+`TRADEMARKS` or `CODEOWNERS`). An unfamiliar extensionless document, such as
+`BACKLOG`, requires its exact configured path rather than a glob.
+
+Files such as `docs/worker.js`, `README.js`, `README/index.js` and executable
+files under custom documentation globs retain their implementation or test
+classification, independently of runtime roots and configured code suffixes.
+Sensitive documentation, configuration and protected control-plane paths keep
+their existing review boundaries. Repository-wide wildcard patterns and path
+traversal remain invalid configuration. The file-form contract is shared by
+balanced, fast and strict; each profile still applies its own review policy.
+MDX outside a `doc/`, `docs/` or `documentation/` folder is treated as executable. MDX inside
+those folders still has to pass the other documentation safety checks.
+
+## Update Availability
+
+Automatic version checks run in the background at successful task entry and local UI startup.
+When the navigator observes passed completion evidence, the CLI starts a bounded read-only source/cache process while the remaining closeout checks run.
+It awaits and displays the cached notice only after the final navigator result confirms DONE with a ready final report, including custom review roots.
+Ordinary navigation starts no presentation process. Presentation never waits for npm. The source fingerprint and installed version are revalidated by the snapshot reader,
+so fast repeated commands keep a ready cached notice and changed configuration suppresses old hints.
+Speculative closeout reads own their child process. A blocked result or navigation exception cancels that read immediately without affecting shared UI snapshots.
+The confirmed DONE boundary also requests a detached refresh through the same scheduling ticket; presentation itself never contacts npm.
+Task entry starts a detached scheduling process, which persists a pending attempt under the shared cache lock before launching the metadata check.
+Concurrent task boundaries for the same repository share one metadata launch claim; independent repositories have independent claims.
+Before spawning, task entry takes a nonwaiting contained scheduling lock and records a one-minute ticket.
+Concurrent entries share a scheduler lease per repository. Its unique launch identity renews the one-minute lease while probing;
+an expired lease can be replaced, and an unrelated process reusing an old PID cannot suppress later checks.
+The minute limits process startup and does not change the daily metadata TTL. A source changed within that minute may wait for the next boundary;
+an explicit UI refresh remains available. Corrupt or inaccessible scheduling state fails quietly.
+Equivalent UI requests for the same complete child environment and execution timeout coalesce across both active and queued work, including repeated A/B/A environment changes. Each caller has its own response deadline; an expired caller does not expire the shared work or a later caller.
+Each request captures its environment before queueing; changed environments wait for the previous process to exit and run against their captured source.
+Process identity includes Node execution settings such as `NODE_OPTIONS`; the persisted daily cache continues to use the npm source/configuration fingerprint.
+A manual refresh queued behind an automatic request still bypasses the daily cache; an automatic request may join a manual refresh for the same environment.
+Caller deadlines remain bounded without discarding queued manual intent. At most one enabled check process runs per repository in the UI server.
+A separate process deadline terminates a stalled check; a successor waits for actual exit before recovering any dead-owner cache lock.
+Queued manual checks receive their own execution deadline when started. Detached schedulers start after their launch lock is released and tolerate brief lock contention.
+UI snapshot responses read source configuration and cache in a read-only child process, rechecking the installed version and preserving the cache eviction cooldown.
+Production UI checks run source discovery, cache access and metadata transport in a disposable child process with its own lock-owner PID.
+The UI reconstructs the current parent environment and installed version before presenting a child result.
+Metadata queries run outside the shared cache lock; publishing requires the same pending attempt and directory identity captured before the query.
+Task entry returns after detached process scheduling. Configuration discovery, cache locking and network work continue outside the CLI process.
+Concurrent cached reads share a read-only child process, with a four-second response deadline for each caller and a four-second lifetime for the child. They return quietly if local filesystem reads stall, including synchronous bundle discovery and containment checks. The stalled process is terminated; results are discarded if the caller's transport environment changes during the read.
+The service uses the existing trusted npm package source and version/integrity validation,
+requesting only `version` and `dist.integrity` metadata. It never calls package acquisition,
+installation, or update application. Manual `garda check-update` and `garda update` retain their existing behavior.
+
+- Set the environment variable `GARDA_UPDATE_CHECK=0` to disable automatic checks. The explicit UI check remains available.
+- The cache lives in the active bundle's `runtime/update-availability/cache.json` file, with at most 32 source entries and a 128KiB read bound.
+  CLI and UI share the cache and a process lock. Each effective source is checked automatically
+  at most once per 24 hours, including failed or interrupted attempts.
+  Expired entries are dropped on writes. Evicting fresh history starts a coarse daily automatic cooldown,
+  preserving the throttle if a previously used source returns; explicit UI refresh still bypasses it.
+  Legacy per-source entries are read by exact fingerprint; a recognizable current-source file is removed under the lock
+  after writing that source to the shared cache. Other legacy files are left in place, without directory scans.
+  Waiting for a pending launch uses cache-only polling with bounded backoff; configuration is revalidated before presentation.
+- The source fingerprint binds the trusted package, npm configuration files and environment,
+  and npm transport configuration. Configuration contents and credentials are hashed, never stored in notices or cache files.
+- **Check for updates** in the UI bypasses the daily TTL. Concurrent checks join the same request,
+  including requests from separate CLI/UI processes. The button does not apply an update and works in read-only UI mode.
+- A metadata request has a four-second timeout; automatic offline/timeout failures remain quiet.
+  The UI shows a localized error only after an explicit check. Ordinary gates and finalization do not depend on network success.
+- A source change suppresses cached hints from the previous source. Installed versions are read again
+  when presenting cached metadata, so upgrading Garda suppresses obsolete update notices.
+- Available updates appear as `Garda update available: <installed> → <latest>` in terminal output,
+  followed by the existing apply command with the current target correctly quoted.
+  Agent-visible DONE output instructs the agent to append this English notice after the canonical final report.
+  Canonical report files, hashes, and integrity-bound gate evidence are unchanged.
+- UI notices, status messages, the manual button and accessibility labels are translated in all supported locales.
+
+## Config Files Overview
+
+| File | Purpose | Editable? |
+|---|---|---|
+| `garda.config.json` | Root config manifest referencing the 11 managed config files validated by `validate-config` | No, maintained by orchestrator |
+| `token-economy.json` | Reviewer-context compaction and token savings | Yes |
+| `output-filters.json` | Gate output compaction profiles (compile, test, lint, review) | Yes |
+| `review-capabilities.json` | Which specialist reviews are enabled | Yes |
+| `review-catalog.json` | Optional custom review-lane declarations; absence keeps built-in compatibility | Yes, through guarded `garda review-catalog ...` commands |
+| `paths.json` | Preflight classification roots and trigger regexes | Yes |
+| `skill-packs.json` | Installed built-in domain packs | Yes, through `garda skills add/remove` |
+| `optional-skill-selection-policy.json` | Repo-local policy for preprompt-time optional skill selection (`off`, `optional`, `mandatory`; legacy aliases remain read-compatible) | Yes |
+| `isolation-mode.json` | Control-plane isolation and sandbox settings | Yes |
+| `profiles.json` | Active profile selection plus built-in and user profile definitions | Yes, through `garda profile ...` |
+| `review-artifact-storage.json` | Review artifact retention and storage policy | Yes, through `garda cleanup policy ...` |
+| `runtime-retention.json` | Tiered runtime-retention policy for active evidence, healthy `DONE` ledger compaction, problem-task compression, confirm-only purge, and daily maintenance | Yes, through template/config review for now; `garda cleanup policy` shows it read-only |
+| `workflow-config.json` | Compile-gate, full-suite, optional-check, and workflow command settings | Yes, through `garda workflow ...` and guarded UI settings |
+| `skills-index.json` | Compact optional-skill discovery index; generated runtime index and not part of `garda.config.json` | No, generated from pack manifests |
+| `skills-headlines.json` | Compact task-start optional-skill selection surface with installed skill headlines and pack summaries | No, generated from live skill/pack manifests |
+
+`garda.config.json` is rewritten from the bundled template during init/reinit/update, so stale local edits do not become the long-term source of truth.
+The editable live configs above are merged forward during init/reinit/update: existing live values are preserved and ordinary missing template keys are filled in. The guarded `profiles.json` remediation-mode policy is the exception: omission is preserved for an existing profile so a legacy workspace cannot acquire DELTA behavior without explicit migration.
+
+## Validation
+
+### CLI Gate
+
+```bash
+# Full output
+node bin/garda.js gate validate-config --bundle-root garda-agent-orchestrator
+
+# Compact (CI-friendly)
+node bin/garda.js gate validate-config --compact
+```
+
+Validates the managed config files referenced by `garda.config.json` against portable JSON Schemas and runtime validators.
+Exits non-zero on validation failure.
+
+### CI Script
+
+```bash
+node scripts/validate-config.cjs
+```
+
+### JSON Schemas
+
+Portable JSON Schema definitions (draft-07) are available for each managed config file
+in `src/schemas/config-schemas.ts`. Each schema can be serialized to a `.json`
+file for use with external validators, IDE autocomplete, or CI linters.
+
+## Token Economy
+
+Controls reviewer-context compaction and determines how aggressively context is trimmed at different task depths.
+
+**File:** `live/config/token-economy.json`
+
+```json
+{
+  "enabled": true,
+  "enabled_depths": [1, 2],
+  "strip_examples": true,
+  "strip_code_blocks": true,
+  "scoped_diffs": true,
+  "compact_reviewer_output": true,
+  "fail_tail_lines": 50
+}
+```
+
+| Field | Default | Description |
+|---|---|---|
+| `enabled` | `true` | Master toggle for reviewer-context token economy |
+| `enabled_depths` | `[1, 2]` | Depths at which context compaction applies |
+| `strip_examples` | `true` | Remove verbose examples from rule context |
+| `strip_code_blocks` | `true` | Compress code-block sections in rules |
+| `scoped_diffs` | `true` | Use scoped diff instead of full diff |
+| `compact_reviewer_output` | `true` | Apply output-filter profiles to gate output |
+| `fail_tail_lines` | `50` | Max lines of compile failure output |
+
+### Depth Behavior
+
+| Depth | Context Scope | Token Economy | Typical Use |
+|---|---|---|---|
+| `1` | Minimal (core + workflow + touched module) | Full compaction | Small, low-risk, localized tasks |
+| `2` | Standard (most rule files + module context) | Full compaction | Default for most tasks |
+| `3` | Complete (all rules + cross-module checks) | Gate filtering only | High-risk, cross-cutting changes |
+
+### What Stays Active Regardless of Token Economy
+
+Shared gate output filtering (`output-filters.json`) and `fail_tail_lines` remain active even when `enabled=false` or at `depth=3`. These are independent of reviewer-context scope.
+
+## Output Filters
+
+Controls how gate scripts compress their stdout/stderr output before returning to the agent.
+
+**File:** `live/config/output-filters.json`
+
+Contains profiles for:
+- **Compile success/failure** — per build tool (npm, gradle, maven, dotnet, cargo, go, tsc, generic)
+- **Test success/failure** — generic test runner patterns
+- **Lint success/failure** — generic lint patterns
+- **Review gate success/failure** — gate verdict formatting
+
+### Key Mechanisms
+
+| Mechanism | Description |
+|---|---|
+| `drop_lines_matching` | Regex patterns; matching lines are removed |
+| `keep_lines_matching` | Regex patterns; only matching lines are kept |
+| `strip_ansi` | Remove ANSI color/control codes |
+| `truncate_line_length` | Max characters per line (default: 240) |
+| `parser.max_matches` | Max error/warning matches to keep |
+| `parser.tail` | Lines from end of output to always include |
+| `passthrough_ceiling` | Below this line count, output passes through unfiltered |
+
+Success profiles typically use `drop_lines_matching: ".*"` to drop 100% of output on green builds.
+
+## Runtime Retention
+
+Controls how Garda-owned runtime artifacts are classified for cleanup and GC.
+
+**File:** `live/config/runtime-retention.json`
+
+```json
+{
+  "version": 1,
+  "active_tasks": {
+    "protect_runtime_grace_days": 7,
+    "protect_current_cycle_artifacts": true
+  },
+  "healthy_done": {
+    "compact_after_days": 30,
+    "require_ledger": true,
+    "retain_task_events_until_ledger_verified": true
+  },
+  "problem_tasks": {
+    "compress_after_days": 30,
+    "preserve_detailed_evidence": true
+  },
+  "purge": {
+    "require_confirm": true
+  },
+  "daily_maintenance": {
+    "enabled": true,
+    "max_tasks_per_run": 25,
+    "dry_run": true
+  }
+}
+```
+
+| Tier | Meaning |
+|---|---|
+| `active_evidence` | Current or protected task artifacts stay readable. |
+| `compact_ledger_candidate` | Healthy `DONE` task artifacts may compact to `runtime/task-ledger/<task-id>.json` history only after verified ledger evidence exists. |
+| `compressed_forensic_candidate` | Blocked, failed, incomplete, tampered, or ambiguous tasks keep recovery-readable evidence; only heavy forensic artifacts are compression candidates. |
+| confirm-only purge | Full deletion requires an explicit confirmed cleanup/GC action; purge is not automatic. |
+
+Clean-success compile and full-suite raw output logs may be intentionally omitted by the gates. Retained evidence still records status, duration, hashes, and line/char counts; warning, failure, timeout, and non-clean runs retain raw output.
+
+An authenticated successful closeout can resolve earlier failed or blocked attempts for retention classification. The preview's runtime bundle must be the same canonical workspace bundle authenticated by the proof; a same-ID task in another workspace cannot authorize recovery. The current native task audit must pass, the materialized closeout must match the current cycle, and the verified ledger's canonical workspace references must still match their recorded hashes. A later failure, restart, reopened queue row, missing evidence or changed accepted content remains protected; event sequence takes precedence over skewed timestamps.
+
+The backend `inspectCompletedTaskEvidence` contract provides a read-only eligibility proof for task-owned disposable cleanup. It requires an unambiguous `DONE` row, current integrity-checked completion, materialized closeout and ledger references, and defaults to requiring the accepted scope to be committed unchanged. Each accepted committable path must match the selected commit's regular blob bytes or committed absence; a clean dirty-file list, including files hidden by Git index flags, is insufficient. Literal tree paths and blob contents use bounded Git batches with exact object, size and byte verification; excessive argument or byte budgets remain ineligible. Retention preview shares one private canonical queue snapshot per invocation with the native audits and verifies its hash before publishing results. Both committed and retention inspection compare the closing source fingerprint with the authenticated materialized closeout, rejecting edits, changed deletions and different commits made after the native audit. Parsed compact records are bound to their verified read bytes. Git-converted bytes that differ from accepted working content remain ineligible. The result binds the workspace, task, completion event, accepted source scope, commit and evidence hashes. A caller must revalidate that binding under its mutation locks and persist compact result/check/commit records before removal. The predicate itself deletes nothing and does not change the daily retention age thresholds. Existing raw hash-bound evidence remains authoritative until a compatible verified compact representation is available.
+
+## Review Capabilities
+
+Controls which specialist reviews are enabled for the project.
+
+**File:** `live/config/review-capabilities.json`
+
+```json
+{
+  "code": true,
+  "db": true,
+  "security": true,
+  "refactor": true,
+  "api": true,
+  "test": true,
+  "performance": true,
+  "infra": true,
+  "dependency": true
+}
+```
+
+Each top-level key toggles whether that review type may be required by preflight in this workspace.
+
+Manage supported optional capability toggles through the CLI:
+- `garda review-capabilities`
+- `garda review-capabilities list`
+- `garda review-capabilities enable <api|test|performance|infra|dependency>`
+- `garda review-capabilities disable <api|test|performance|infra|dependency>`
+
+The CLI validates that a matching live review skill is installed before enabling a supported optional capability. Bridge presence is surfaced separately for bridge-hosted providers, but root-entrypoint providers execute the live skill directly.
+
+`skills-index.json` is still a generated runtime index under `live/config/`, but it is **not** part of `garda.config.json` and is **not** validated by `gate validate-config`.
+
+## Review Catalog
+
+The review catalog extends the compatibility-owned built-in review lanes with repo-local declarative lanes.
+
+**Optional file:** `live/config/review-catalog.json`
+
+```json
+{
+  "version": 1,
+  "custom_review_types": [
+    {
+      "id": "architecture",
+      "display_label": "Architecture review",
+      "enabled_by_default": false,
+      "skill_id": "architecture-review",
+      "trigger": {
+        "mode": "signals",
+        "signal_ids": ["architecture"]
+      },
+      "coverage_category_ids": ["maintainability"],
+      "reviewer_role": {
+        "role_id": "architecture-reviewer",
+        "focus_tags": ["maintainability"]
+      }
+    }
+  ]
+}
+```
+
+Built-in lanes remain defined by Garda compatibility contracts and retain their canonical pass/fail tokens. Custom IDs are stable lowercase kebab-case identifiers; Garda derives their canonical verdict tokens and rejects prompt bodies, verdict overrides, built-in replacements, unknown metadata, and `enabled_by_default: true`. A custom lane becomes eligible only after its skill is installed, its capability is enabled, and the selected profile assigns it `auto` or `required`.
+
+Triggers use either `manual` mode or validated `signals`. The selected profile supplies lane state and its `review_dependency_graph`; preflight resolves those inputs into the immutable task catalog/policy snapshot and launch order. Existing tasks never observe later catalog, capability, profile, or dependency changes. Normal task agents use the compact `TaskStartReviewCatalog` and preflight snapshot, while reviewers receive only their generated launch input; neither should load the full catalog as routine context.
+
+Inspection is read-only and safe for legacy workspaces:
+
+```text
+garda review-catalog list --target-root "."
+garda review-catalog show architecture --profile balanced --target-root "."
+garda review-catalog explain architecture --profile balanced --target-root "."
+garda review-catalog validate --target-root "."
+```
+
+When the file is absent, these commands resolve the built-in compatibility catalog and validation still passes. Fresh init and reinit materialize the default `{ "version": 1, "custom_review_types": [] }` and preserve valid custom definitions. Existing legacy workspaces remain untouched until an operator explicitly runs the guarded migration:
+
+```text
+garda review-catalog migrate --target-root "."
+garda review-catalog migrate --confirm --expected-state-sha256 <hash> --expected-plan-sha256 <hash> --operator-confirmed yes --operator-confirmed-at-utc <ISO-8601> --target-root "."
+garda review-catalog migrate --apply --expected-state-sha256 <hash> --expected-plan-sha256 <hash> --confirmation-receipt-sha256 <hash> --target-root "."
+```
+
+The preview proves that the normalized explicit catalog/profile/capability configuration preserves required reviews, verdict and receipt tokens, dependency order, task-report review lanes, and the configured or implicit review-execution preset. Migration retains the legacy capability source, preserves explicit capability choices, and leaves custom lanes disabled. Confirmation and apply bind both managed config and workflow policy state; invalid or stale input fails before writes, interrupted multi-file publication rolls back from the transaction backup, and a repeated normalized migration is an auditable `NO_CHANGE`.
+
+Mutation commands are `create`, `update`, `enable`, `disable`, `profile-bind`, and `dependency`. They never write immediately: the first call returns a semantic preview plus current-state and plan hashes; `--confirm` with fresh operator confirmation creates a one-time receipt; `--apply` consumes that receipt and revalidates the same hashes and managed filesystem boundaries under the transaction lock. Management is rejected while agent tasks are active.
+
+Successful changes record an audit entry and recovery backup. A failed multi-file publish automatically restores the pre-write state and records `ROLLED_BACK`; use the reported backup and audit paths for diagnosis, then run the inverse guarded mutation when recovery is needed. Do not hand-edit runtime receipts or treat a backup as an apply receipt.
+
+Troubleshooting order:
+
+1. Run `review-catalog validate` and `review-catalog explain <id> --profile <name>`.
+2. Verify the referenced skill, capability flag, profile state, and dependency IDs.
+3. If confirmation is stale, discard it and create a new preview after all active tasks finish.
+4. If publish failed, inspect the rollback diagnostic and audit record; do not replay a consumed or stale receipt.
+
+## Profile Review Finding Policy
+
+Profiles can define how findings reported by delegated reviewers are handled independently from which review lanes run.
+
+**File:** `live/config/profiles.json`
+
+```json
+{
+  "review_finding_policy": {
+    "schema_version": 1,
+    "policy_id": "balanced",
+    "findings": {
+      "critical": "fix_now",
+      "high": "fix_now",
+      "medium": "fix_now",
+      "low": "create_follow_up"
+    },
+    "residual_risk": "create_follow_up"
+  }
+}
+```
+
+| Field | Values | Description |
+|---|---|---|
+| `policy_id` | `soft`, `balanced`, `strict`, `custom` | Named disposition preset, or `custom` for explicit per-severity behavior. |
+| `findings.critical` | `fix_now` | Critical findings are always fixed in the current task. The resolver and schemas reject or normalize weaker critical actions. |
+| `findings.high`, `findings.medium`, `findings.low` | `fix_now`, `create_follow_up`, `ignore` | Disposition for each non-critical reviewer finding severity. |
+| `residual_risk` | `fix_now`, `create_follow_up`, `ignore` | Disposition for reviewer residual-risk entries. |
+
+Built-in presets:
+
+- `soft`: critical findings are fixed now; high findings create follow-up work; medium, low, and residual-risk entries are ignored.
+- `balanced`: critical, high, and medium findings are fixed now; low and residual-risk entries create follow-up work.
+- `strict`: every finding severity and residual-risk entry is fixed now.
+
+For backward compatibility, legacy profiles without `review_finding_policy` remain loadable. At runtime they resolve fail-closed to the `strict` preset and emit diagnostics so the missing field is visible in profile output and task evidence.
+
+Use the guarded profile-policy CLI instead of editing the policy object directly. Preview normalizes the candidate through the same `profiles.json` schema used by persistence and returns the normalized policy hash, the contextual plan hash, and the current config hash. `policy_sha256` identifies only the normalized policy content; `plan_sha256` binds the target profile, operation, source profile, normalized policy, and proposed config hash so the plan cannot be replayed against another profile:
+
+```bash
+garda profile policy preview balanced --preset strict --json
+```
+
+Apply must repeat the same policy input, bind it to all three preview hashes, and carry fresh operator confirmation:
+
+```bash
+garda profile policy apply balanced --preset strict \
+  --expected-policy-sha256 "<policy_sha256-from-preview>" \
+  --expected-plan-sha256 "<plan_sha256-from-preview>" \
+  --expected-config-sha256 "<before_config_sha256-from-preview>" \
+  --operator-confirmed yes \
+  --operator-confirmed-at-utc "<ISO-8601 timestamp>"
+```
+
+Use `--copy-from <profile>` to copy the source profile's effective policy or `--reset` to restore a built-in profile from the shipped definition. User-profile reset deterministically uses the shipped `balanced` policy and fails closed when that shipped baseline is unavailable. A legacy profile preview reports the fail-closed migration, and applying the unchanged preview materializes the explicit `strict` policy. Apply serializes all profile-config writers and rechecks the preview hash while holding the write lock. Changed mutations use an fsynced write-ahead audit transaction (`PREPARED` followed by `COMMITTED` or `ABORTED`); every CLI or UI profile writer removes a dead-owner lock and recovers an interrupted transaction from the current config hash before computing its mutation. Bounded hash-only evidence in `runtime/profile-finding-policy-audit.jsonl` stores the active-task count and full-list SHA-256 without raw task identifiers, distinguishes discovery failure from a verified empty result, and affects future task snapshots only; already-entered tasks retain their locked profile policy.
+
+For `--preset custom`, provide all five actions: `--critical fix_now`, `--high <action>`, `--medium <action>`, `--low <action>`, and `--residual-risk <action>`. Profile writers wait for a short bounded lock window before reporting contention, while active-task discovery is performed outside the serialized config-write section. Interactive profile creation also rejects a commit if `profiles.json` changed while prompts were open, preventing inheritance from a stale source snapshot.
+
+## Profile Remediation Review Mode Policy
+
+New shipped profiles declare an explicit conservative policy:
+
+```json
+{
+  "review_remediation_mode_policy": {
+    "schema_version": 2,
+    "policy_id": "conservative_review_remediation_mode_v1",
+    "initial_review_mode": "FULL",
+    "delta_eligible_review_types": ["api", "code", "db", "dependency", "infra", "performance", "refactor", "security", "test"],
+    "force_full_categories": ["ambiguous", "generated_churn", "global"],
+    "max_delta_changed_files": 4,
+    "max_delta_changed_lines": 240,
+    "max_consecutive_delta_reviews": 3
+  }
+}
+```
+
+Schema 2 enables every review lane present in the current catalog for bounded DELTA remediation when a profile
+is created or a schema-1 policy is migrated. Custom lanes use their stable lowercase kebab-case ID and must be
+registered in `review-catalog.json`.
+Profile validation and effective-policy resolution reject syntactically valid but unregistered lane IDs. Remove a lane from `delta_eligible_review_types`
+to force only that lane to FULL; an empty array disables DELTA for every lane. Existing schema-2 allowlists are
+preserved so explicit removals remain stable. Valid schema-1 policies are upgraded
+once during init. An unresolved schema-1 policy and a profile with no policy both keep legacy FULL-only behavior.
+
+The first review for every lane remains `FULL`. Eligible remediation may use
+`DELTA` only while the immutable task snapshot, exhaustive baseline lineage,
+scope membership, findings reconciliation, and bounded risk checks remain
+valid. Missing policy is not defaulted during init/update of an existing
+profile: it is preserved as a visible legacy `FULL`-only state. To migrate,
+create a current profile or add the exact schema-valid policy explicitly before
+starting the next task. Existing task snapshots never change retroactively.
+
+After a failed review, Garda repeats a review only when the fix reached it:
+
+| Review | When it repeats | Mode |
+|---|---|---|
+| The failed review | Always | `DELTA` for a small fix, `FULL` otherwise |
+| A review that already passed | The fix reached its scope | `DELTA` for a small fix, `FULL` otherwise |
+| A review that already passed | The fix stayed outside its scope | Kept, not repeated |
+| A review that has not run yet | As planned | `FULL` |
+
+A kept PASS can survive consecutive fixes only through authenticated restart decisions that each preserved that lane and whose result and baseline trees link up. A kept review retains that proof when refreshed full-suite evidence requires its context to be rebuilt. The walk stops at an unusable older link and keeps the links already authenticated; a failed timeline integrity check keeps only the current baseline. A reached lane that has no accepted review on the latest failed-review tree also runs FULL: for example, after test fails on tree A and code DELTA fails on tree B, test runs FULL on tree C because it never reviewed B.
+
+A fix is small when it stays within `max_delta_changed_files`, `max_delta_changed_lines` and `max_consecutive_delta_reviews`, keeps the list of reviewed code files and only edits existing files. The defaults are 4 files and 240 changed lines; configured limits cannot exceed 5 files, 400 changed lines and 3 consecutive DELTA reviews. A larger fix repeats those reviews in `FULL` mode in their usual order, starting with the first one it reached. Added non-test, non-document files expand the scope and repeat every review in `FULL`; added tests do not expand it.
+
+The scope of the `code` review is production code. The `test` review covers tests and the code they verify. Default helper folders do not make a source file a test helper unless its path names test code or it is in test context, wherever the source lives; project-added helper patterns still apply. Shared test helpers, structural test files and test edits over 50 changed lines reach `refactor` and `test`, without reaching `code` by themselves. The other built-in reviews use their `triggers` paths. Custom reviews use their own catalog `trigger` through the preflight signal evaluator; a required custom review whose trigger cannot be evaluated counts as reached. The `security` review also counts a changed line that contains a word from `trigger_name_tokens.security`, so a fix that removes a permission check from an ordinary file still reaches it. Such a word repeats an already required security review in `DELTA` for a small fix; it neither admits security nor forces `FULL`. A real redacted secret or protected path still does both.
+
+A fix that crosses a protected area asks `FULL` only of the review that owns the area: `security` for security, authorization and secrets, `api` for API contracts, `db` for databases and migrations, `dependency` for dependencies and lockfiles, `infra` for infrastructure. The other reviews the fix reached stay in `DELTA`. An owner admitted by a fix stays required through later preflights in the same task entry. An owner whose capability is disabled in the frozen task snapshot is not admitted. Changed task criteria or review policy repeat every required review in `FULL`. The `task_criteria_or_policy` path signal matches only root `TASK.md` and `profiles.json`, `paths.json`, `review-capabilities.json`, or `workflow-config.json` directly under `garda-agent-orchestrator/live/config/`; files with those names elsewhere do not raise that signal. Review-policy implementation paths under `src/policy/` and `src/core/`, plus `template/config/profiles.json`, count as review-policy changes only in Garda's own source repository, identified by root `package.json` having `"name": "garda-agent-orchestrator"`, as in the installed pre-commit guard. Missing or unreadable package metadata means it is not Garda's repository. The live config paths above count in every project. Files of the Garda bundle are otherwise treated like any other project file.
+
+Ordinary documents trigger no review. Their line comparisons use a separate budget from code, and the current-state snapshot spends its shared budget on other files first. They do not count toward the `DELTA` limits and do not make a fix larger. When a fix changes documents and nothing else, only the failed review repeats, in `FULL` mode, because reviewers cite reviewed code. A new test file reaches only the test review. Requirements files (`requirements*.txt` and `.txt` files under `requirements/`) and `.mdx` outside `doc/`, `docs/` or `documentation/`, or under a source root, are never ordinary documents; outside the dependency patterns they repeat every required review in `FULL` mode.
+
+Garda sorts every file the fix changed. A source file of any common language is production code wherever the project keeps it (`app/`, `lib/`, `internal/`, `Sources/`, a Python package). Dependency manifests (including `mix.exs`, `Package.swift` and `build.gradle.kts`), infrastructure files and owned configuration such as `api/openapi.yaml` and `.env.example` belong to their protected review owners. `AGENTS.md`, `CLAUDE.md` and rules under `docs/agent-rules/` are ordinary project files: a small fix repeats `code` and `test` in `DELTA`. The installed-bundle self-guard stays in force. Other configuration (`.yml`, `.toml`, `.conf`, `appsettings.json`, `vite.config.ts`, `karma.conf.js`, `settings.py` and its variants, Gradle scripts, `config/` folders at any depth) re-open every required review in `FULL` mode, also under `src/`. So do generated files (`*.pb.go`, `*_pb2.py`, `*.g.cs`, `*.Designer.cs`, `*_generated.ts`), vendored code at any depth (`vendor/`, `third_party/`, `node_modules/`) and build output (`gen/`, `obj/`, `target/`, `build/`, `out/`, `dist/`, `coverage/`), even with a source extension or a test name. A folder named like build output is an ordinary folder inside a source folder (`src/build/`) and when it holds one (`packages/build/src/`). Code in a `docs/` folder under a source folder stays code (`src/app/docs/page.tsx`), and tests of a documentation site or template stay tests. Inside test folders, a manifest still counts as a manifest unless it lies under `fixtures/`, `testdata/` or a test `data/` or `resources/` folder; configuration counts as a shared test helper, except a test file that merely sits in a `config` package; ordinary documents follow the preflight documentation predicate even inside test folders. In all four execution modes, an implied graph controls launch order and re-opens nothing: reviews outside the fix keep their results and are reused in order. A `review_dependency_graph` declared in the profile re-opens every review that depends on a re-opened lane, including lanes reached by scope. If Garda cannot classify the fix, for example because `paths.json` is unreadable or a protected trigger regex is invalid, every required review runs in `FULL` mode. If the fix cannot be authenticated at all, for example because its baseline is missing, every required review re-opens in `FULL` mode. Other files outside `src/`, `bin/` and `scripts/` are ambiguous and re-open every review as well; declare such a file with the `source` role in `file_roles` when it is production code.
+
+Profiles also control how non-blocking `create_follow_up` items become backlog work:
+
+```json
+{
+  "review_follow_up_policy": {
+    "schema_version": 1,
+    "materialization_mode": "grouped_by_parent"
+  }
+}
+```
+
+`per_finding` preserves the legacy one-child-per-item behavior. `grouped_by_parent` waits until all required review lanes finish, then creates one snapshot- and cycle-bound pending child and appends each validated deferred item with its source lane, severity, evidence, receipt, validation, disposition, and deterministic fingerprints. It never groups `fix_now` work and refuses to mutate a child that is no longer `TODO`. Legacy profiles and snapshots default compatibly to `per_finding`; changing a profile affects future task snapshots only.
+
+See [Findings-Only Review Contracts and Legacy Migration](findings-contracts.md)
+for the reviewer JSON Schema, derived evidence chain, selective remediation,
+exact legacy diagnostics, and explicit migration procedure.
+
+## Skill Packs
+
+Tracks which built-in domain packs are currently installed in the workspace.
+
+**File:** `live/config/skill-packs.json`
+
+Manage it through the CLI:
+- `garda skills list`
+- `garda skills add <pack-id>`
+- `garda skills remove <pack-id>`
+- `garda skills validate`
+
+This file is runtime state and should normally be changed through the CLI rather than by hand.
+
+Packs are install/discovery bundles for optional specialist skills.
+They are not a second copy of baseline skills; baseline skills stay available without any pack install.
+
+## Optional Skill Selection Policy
+
+Controls whether `preprompt` and the task-start lifecycle derive and validate a cheap optional-skill decision from `skills-headlines.json` before implementation begins.
+
+**File:** `live/config/optional-skill-selection-policy.json`
+
+```json
+{
+  "version": 1,
+  "mode": "optional"
+}
+```
+
+Modes:
+- `off` disables task-start optional-skill selection.
+- `optional` computes a read-mostly selection artifact and compact preview without blocking the task.
+- `mandatory` expects a materialized, internally valid selection artifact for the current task cycle before implementation proceeds. `preprompt task` exits non-zero for that start-time blocker, and `compile-gate` or downstream review gates also refuse the current cycle when the artifact is missing or drifted.
+
+Legacy values remain read-compatible for older workspaces: `advisory` maps to `optional`, and `required`/`strict` map to `mandatory`. Guarded saves write the canonical mode.
+
+## Optional Quality Checks
+
+Controls the advisory self-checklist gate that runs after implementation changes exist and before expensive validation gates.
+
+**File:** `live/config/workflow-config.json`
+
+```json
+{
+  "optional_quality_checks": {
+    "enabled": true,
+    "baseline_version": "2026-06-27.t846",
+    "rules": [
+      {
+        "id": "code_simplification",
+        "title": "Code simplification",
+        "prompt": "Check whether the changed code can be simplified without weakening behavior, validation, or diagnostics.",
+        "enabled": true
+      }
+    ]
+  }
+}
+```
+
+Contract:
+- the mode is default-enabled when the setting is absent;
+- the shipped baseline version records which default rule set was materialized;
+- default rules cover simplification, project style fit, unnecessary abstraction, class/function/file growth, hardcoded values or contracts, duplicated logic or contracts, and test/verification scope;
+- `next-step` routes the gate after implementation and before compile, delegated review, or full-suite work when a current changed-file preflight needs checklist evidence;
+- `PASS` continues the normal lifecycle, while `ACTION_REQUIRED` sends the agent back to implementation before the expensive gates run;
+- disabled mode skips only the quality-checklist gate and does not replace or weaken compile-gate, full-suite validation, or independent review;
+- baseline rule ids, titles, prompts, and deletion are managed by the shipped baseline; users can only toggle each baseline rule's `enabled` state;
+- custom rules, disabled mode, custom rule edits, and local audit metadata fields are preserved during init/update/materialization refresh;
+- update/setup refreshes shipped baseline text, adds missing shipped baseline rules, removes deprecated shipped baseline rules, and preserves each baseline rule's enabled or disabled state.
+
+Manage the toggle and rules through the audited workflow-setting path:
+
+```bash
+node bin/garda.js workflow set --optional-checks on --operator-confirmed yes --operator-confirmed-at-utc "<ISO-8601 timestamp>"
+node bin/garda.js workflow set --optional-check-rule-id custom_focus --optional-check-rule-title "Custom focus" --optional-check-rule-prompt "Check the custom concern." --optional-check-rule-enabled true --operator-confirmed yes --operator-confirmed-at-utc "<ISO-8601 timestamp>"
+node bin/garda.js workflow set --optional-check-rule-delete custom_focus --operator-confirmed yes --operator-confirmed-at-utc "<ISO-8601 timestamp>"
+```
+
+`garda ui --actions` exposes the same toggle and add/edit/delete controls in the workflow settings panel. The browser never writes `workflow-config.json` directly; it previews and runs the allow-listed `garda workflow set` commands with the normal typed confirmation and audit log.
+Baseline rows in the UI expose only the enabled toggle; title, prompt, and delete controls are reserved for custom rules.
+
+## Skills Index
+
+Compact discovery metadata for optional skills.
+
+**File:** `live/config/skills-index.json`
+
+Used by:
+- `garda skills suggest`
+- the agent-init specialist-skills recommendation flow
+
+Contract:
+- this index is the discovery surface for pack suggestion and agent-init-time specialist recommendations;
+- after the user selects a pack, installation should only materialize files into `live/skills/**` and must not require reading the full optional `SKILL.md`;
+- full optional `SKILL.md` files must stay unopened until a selected skill is actually activated for a task or a hard activation rule requires it;
+- the index is generated from pack manifests and should not be edited manually in deployed workspaces.
+
+## Skills Headlines
+
+Compact task-start selection metadata for already installed optional skills and available pack headlines.
+
+**File:** `live/config/skills-headlines.json`
+
+Used by:
+- `garda preprompt task`
+- task-start optional-skill selection before implementation
+
+Contract:
+- this file is the cheap surface for current-task optional-skill selection once task text and planned scope are known;
+- it should be read before opening any optional `SKILL.md`;
+- full optional `SKILL.md` files are opened only for skills that were actually selected for the current task;
+- the file is generated from live skills and pack manifests and should not be edited manually in deployed workspaces.
+
+## Paths Configuration
+
+Controls preflight classification roots and regex triggers for each review type.
+
+**File:** `live/config/paths.json`
+
+Defines:
+- **Root directories** for source code classification.
+- **Trigger patterns** (regexes) that map file paths to required review types.
+- **Sensitive path markers** for security, auth, payment, database, migration, and infrastructure paths.
+- **File-name words** (`trigger_name_tokens`) that require a review for code files whatever the folder layout or language.
+
+### File-name word triggers
+
+Path regexes catch folders such as `security/` or `auth/`, but a security-relevant file often lives in a neutral folder: `config/SecurityConfig.java`, `filters/JwtFilter.kt`, `middleware/auth-middleware.ts`, `Services/TokenService.cs`, `payment_gateway.py`. For code files (per `code_like_regexes`, excluding test paths), Garda splits the file name into words for camelCase, PascalCase, snake_case, kebab-case and dotted names. A review is required when any word equals a configured word. Matching is whole-word: `TokenService` contains the word `token`, but `tokenizer` does not.
+
+```json
+"trigger_name_tokens": {
+  "security": ["auth", "security", "jwt", "token", "password", "session", "payment", "..."],
+  "db": ["entity", "entities"]
+}
+```
+
+`security` words add the security review. `db` words count as a database signal, like `Repository` or `Dao` names: the database review is required when the project also shows database evidence. Edit the lists to fit your project; a list replaces the default for that review type. Updates add the default lists only to workspaces that do not define `trigger_name_tokens`.
+
+The default `infra` triggers cover Docker, GitHub Actions, GitLab CI, Jenkins, Azure Pipelines, Bitbucket Pipelines, CircleCI, Buildkite, Woodpecker and Drone files, Terraform/HCL files and Helm/Kustomize manifests. Workspaces that still use the previous default list get the new list on update; customized lists are kept.
+
+### Test paths
+
+`triggers.test` decides which files count as tests: test-only scopes, test-review remediation and the test lane all use it. The defaults include pytest `conftest.py`, Go `testdata/`, test support beside production code such as Go `testutil/` and `test-utils.tsx`, and `jest.setup.*` or `vitest.setup.*` scripts. For Cucumber and behave, the defaults recognize `features/step_definitions/`, `features/step-definitions/`, Ruby files under `features/support/`, `features/environment.py` and Python files directly in `features/steps/`. These feature layouts apply outside source folders such as `src/`, `app/` and `lib/`.
+
+Other files under `features/support/` and `features/steps/`, including JavaScript and TypeScript, stay code unless another test naming convention or a project test pattern applies. For example, a Cucumber-JS project can add `(^|/)features/support/` to `triggers.test`. A `testdata` or `testkit` folder inside a feature also stays production code unless another test convention applies.
+
+Ruby files under `spec/`, any files under `spec/fixtures/` or `cypress/`, and files under SpecFlow `*.Spec/` or `*.Specs/` projects also count as tests at repository or package roots. The same folders under source roots such as `src/`, `app/` or `lib/`, or inside production feature trees, do not establish test scope. Non-Ruby files elsewhere under `spec/`, such as `spec/openapi.yaml`, keep their domain reviews.
+
+`triggers.test_refactor_structural` lists shared test helpers, harnesses and fixtures. When a review fix changes one, Garda re-opens the refactor and test reviews, not only the failed one. The defaults include folders such as `helpers/`, `fixtures/` and `support/`, pytest `conftest.py`, Go `testdata/`, `tests/common/` and `tests/utils/` of integration tests, `testutil/` and `test-utils` modules, PHPUnit and Pest bootstrap files, base test classes such as `TestCase`, `TestBase` and `AbstractIntegrationTest`, recognized Cucumber and behave support, RSpec support and fixtures, Cypress plugins and support, SpecFlow `steps/`, and Jest or Vitest setup files. A production file under a feature or source-root framework folder is not a shared helper just because its folder has a helper-like name. For support the defaults do not recognize, add a test path pattern and, if needed, a shared-helper pattern. Patterns you add yourself always apply.
+
+Workspaces that still use a previous default list get the new list on update; customized lists are kept.
+
+Some conventions cannot be recognized by path and are not defaults:
+
+- Rust unit tests inside a production file (`#[cfg(test)] mod tests`) belong to that file, so editing them is a production change.
+- Shared test utilities in folders such as `test-utils/` or `src/testing/` are production code in some libraries.
+
+When such files are test code in your project, declare them by exact repository-relative path in `file_roles`:
+
+```json
+"file_roles": {
+  "src/testing/render.ts": "test"
+}
+```
+
+## Compact Command Hints
+
+Agent rules in `live/docs/agent-rules/40-commands.md` include a **Compact Command Hints** section that teaches agents to use efficient CLI flags. This reduces token consumption on everyday shell commands without any infrastructure changes.
+
+See `template/docs/agent-rules/40-commands.md` section `## Compact Command Hints` for the full reference.

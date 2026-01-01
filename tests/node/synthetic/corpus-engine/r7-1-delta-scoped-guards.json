@@ -1,0 +1,35 @@
+[
+  {
+    "note": "R7-1: an unchanged package.json and route elsewhere in the task forced FULL for a one-file code fix.",
+    "scenario": {
+      "id": "r7-1-code-fix-beside-unchanged-protected-files",
+      "stack": "node-ts",
+      "failedLane": "code",
+      "requiredLanes": ["code", "api", "dependency", "test"],
+      "scope": [
+        { "role": "PROD", "path": "src/invoice.ts", "lines": 30 },
+        { "role": "DEP_MANIFEST", "path": "package.json", "lines": 12 },
+        { "role": "API", "path": "src/routes/invoices.ts", "lines": 20 }
+      ],
+      "fix": [
+        { "role": "PROD", "path": "src/invoice.ts", "operation": "modified", "changedLines": 10 }
+      ]
+    }
+  },
+  {
+    "note": "R7-1: a required security review was itself a protected signal, so its remediation could never use DELTA.",
+    "scenario": {
+      "id": "r7-1-security-fix-of-ordinary-source",
+      "stack": "node-ts",
+      "failedLane": "security",
+      "requiredLanes": ["code", "security", "test"],
+      "scope": [
+        { "role": "PROD", "path": "src/invoice.ts", "lines": 30 },
+        { "role": "AUTH", "path": "src/auth/session.ts", "lines": 25 }
+      ],
+      "fix": [
+        { "role": "PROD", "path": "src/invoice.ts", "operation": "modified", "changedLines": 10 }
+      ]
+    }
+  }
+]

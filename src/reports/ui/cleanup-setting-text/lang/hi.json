@@ -1,0 +1,90 @@
+{
+  "tab_intro": {
+    "description": "`runtime-retention.json` में runtime प्रतिधारण नीति: निर्धारित रखरखाव सीमाएँ, compact करने के नियम, और सुरक्षित मैनुअल cleanup क्रियाएँ।"
+  },
+  "daily_maintenance_enabled": {
+    "label": "दैनिक रखरखाव",
+    "description": "निर्धारित दैनिक रखरखाव को चालू या बंद करता है। सक्षम होने पर orchestrator बिना मैनुअल हस्तक्षेप के समयानुसार सीमित संख्या में योग्य कार्यों को प्रोसेस कर सकता है।"
+  },
+  "daily_maintenance_max_tasks_per_run": {
+    "label": "प्रति रखरखाव रन अधिकतम कार्य",
+    "description": "एक रन में दैनिक रखरखाव कितने योग्य कार्य प्रोसेस करेगा इसकी ऊपरी सीमा। यदि थ्रेशहोल्ड गलत कॉन्फ़िगर हों तो प्रभाव का दायरा सीमित रहता है।"
+  },
+  "eligible_older_than_days": {
+    "label": "इससे पुराने tasks हटाएँ (दिन)",
+    "description": "Manual cleanup इतने दिनों से पुराने task runtime artifacts चुनता है। Active और नए tasks सुरक्षित रहते हैं।"
+  },
+  "keep_latest_tasks": {
+    "label": "कम से कम नवीनतम tasks रखें (संख्या)",
+    "description": "Age threshold से पुराने होने पर भी कम से कम इतने newest tasks हमेशा सुरक्षित रखता है। केवल age और active-task protection पर निर्भर रहने के लिए 0 सेट करें।"
+  },
+  "include_problematic_tasks": {
+    "label": "समस्याग्रस्त कार्य भी हटाएं"
+  },
+  "daily_maintenance_dry_run": {
+    "label": "दैनिक रखरखाव dry-run",
+    "description": "जब मान true हो, निर्धारित दैनिक रखरखाव केवल उम्मीदवारों की सूची बनाता है और audit output लिखता है; कोई artifact हटाता या compress नहीं करता। थ्रेशहोल्ड ठीक करते समय true रखें, फिर लागू करने के लिए false करें।"
+  },
+  "purge_require_confirm": {
+    "label": "स्वचालित cleanup पुष्टि सुरक्षा",
+    "description": "true होने पर scheduled या CLI destructive cleanup चुपचाप नहीं चलता और confirmation-gated रहता है। Manual UI cleanup और task-artifact cleanup हमेशा अपनी typed confirmation phrase मांगते हैं।"
+  },
+  "healthy_done_compact_after_days": {
+    "label": "स्वस्थ DONE को इतने दिन बाद compress करें",
+    "description": "इतने दिनों के बाद सफल DONE tasks ledger evidence सत्यापित होने पर ledger-only history में compress हो सकते हैं।"
+  },
+  "problem_tasks_compress_after_days": {
+    "label": "समस्याग्रस्त कार्य इतने दिन बाद compress करें",
+    "description": "इतने दिनों बाद विफल या अटके हुए कार्यों के भारी forensic artifact compress किए जा सकते हैं, जबकि recovery के लिए पढ़ने योग्य evidence सुरक्षित रहता है।"
+  },
+  "manual_runtime_cleanup": {
+    "label": "मैनुअल runtime cleanup",
+    "description": "इस पंक्ति के age और keep-latest controls से चुने गए non-active task-owned runtime artifacts हटाता है। Preview dry-run report है; सफाई चलाएँ चुने गए task artifacts हटाता है, shared indexes को एक बार repair करता है, और typed confirmation मांगता है।"
+  },
+  "task_purge": {
+    "label": "टास्क runtime artifact cleanup",
+    "description": "एक task ID के runtime artifacts हटाता है और shared indexes repair करता है। पूरी shared files नहीं हटाता; active-task protection server पर लागू रहती है।"
+  },
+  "task_id": {
+    "label": "कार्य ID"
+  },
+  "purge_task_button": {
+    "label": "Task runtime artifacts साफ करें"
+  },
+  "run_preview": {
+    "label": "प्रारंभिक गणना"
+  },
+  "value_true": {
+    "label": "true — सक्षम"
+  },
+  "value_false": {
+    "label": "false — अक्षम"
+  },
+  "run_apply": {
+    "label": "सफाई चलाएँ"
+  },
+  "cleanup_report": {
+    "label": "सफाई रिपोर्ट"
+  },
+  "cleanup_result": {
+    "label": "सफाई परिणाम"
+  },
+  "report_preview_tasks": {
+    "label": "पूर्वावलोकन उम्मीदवार"
+  },
+  "report_eligible_now": {
+    "label": "अभी पात्र"
+  },
+  "report_would_remove": {
+    "label": "हटाया जाएगा"
+  },
+  "report_would_free": {
+    "label": "खाली करेगा"
+  },
+  "report_removed": {
+    "label": "हटाया गया"
+  },
+  "report_freed": {
+    "label": "खाली किया गया"
+  }
+}

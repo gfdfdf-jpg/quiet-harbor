@@ -1,0 +1,158 @@
+[
+  {
+    "id": "r7-7-a-go-internal",
+    "layer": "path",
+    "note": "R7-7 A: Go code under internal/ was ambiguous, so any fix re-opened every review in FULL mode.",
+    "stack": "go",
+    "role": "PROD",
+    "file": "internal/invoice/invoice.go",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-a-python-package",
+    "layer": "path",
+    "note": "R7-7 A: a Python package at the repository root was ambiguous.",
+    "stack": "python",
+    "role": "PROD",
+    "file": "orders/invoice.py",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-a-rails-model",
+    "layer": "path",
+    "note": "R7-7 A: Rails app/ code was ambiguous.",
+    "stack": "ruby",
+    "role": "PROD",
+    "file": "app/models/invoice.rb",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-a-swift-sources",
+    "layer": "path",
+    "note": "R7-7 A: Swift Sources/ code was ambiguous.",
+    "stack": "swift",
+    "role": "PROD",
+    "file": "Sources/Orders/Invoice.swift",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-a-sql-migration",
+    "layer": "path",
+    "note": "R7-7 A: a root SQL migration was ambiguous.",
+    "stack": "node-ts",
+    "role": "DB_MIGRATION",
+    "file": "migrations/001_init.sql",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-c-dotnet-appsettings",
+    "layer": "path",
+    "note": "R7-7 C: appsettings.json under src/ was production, so a change re-opened only the current review.",
+    "stack": "dotnet",
+    "role": "CONFIG",
+    "file": "src/Orders/appsettings.json",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-c-dotnet-csproj",
+    "layer": "path",
+    "note": "R7-7 C: a project file under src/ was production.",
+    "stack": "dotnet",
+    "role": "DEP_MANIFEST",
+    "file": "src/Orders/Orders.csproj",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-c-spring-application-yml",
+    "layer": "path",
+    "note": "R7-7 C: Spring application.yml under src/ was production.",
+    "stack": "java-maven",
+    "role": "CONFIG",
+    "file": "src/main/resources/application.yml",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-c-gradle-kts-manifest",
+    "layer": "path",
+    "note": "R7-7 C guard: a Kotlin script manifest keeps re-opening every review after source extensions became production.",
+    "stack": "kotlin-gradle",
+    "role": "DEP_MANIFEST",
+    "file": "build.gradle.kts",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-c-tool-config-module",
+    "layer": "path",
+    "note": "R7-7 C guard: a tool configuration module keeps re-opening every review after source extensions became production.",
+    "stack": "node-ts",
+    "role": "CONFIG",
+    "file": "vite.config.ts",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-c-setup-py-manifest",
+    "layer": "path",
+    "note": "R7-7 C guard: setup.py matched the shared test helper names, so a change missed the dependency review.",
+    "stack": "python",
+    "role": "DEP_MANIFEST",
+    "file": "setup.py",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-f-rails-view-helper",
+    "layer": "path",
+    "note": "R7-7 F: Rails app/helpers/ production code matched the shared test helper names.",
+    "stack": "ruby",
+    "role": "PROD",
+    "file": "app/helpers/invoices_helper.rb",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-f-source-helpers-folder",
+    "layer": "path",
+    "note": "R7-7 F: a production src/helpers/ module matched the shared test helper names.",
+    "stack": "node-ts",
+    "role": "PROD",
+    "file": "src/helpers/format.ts",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  }
+]

@@ -1,0 +1,36 @@
+import { buildReviewerFocusedRunnerPolicyLines } from './reviewer-focused-validation-policy';
+
+export const REVIEWER_FOCUSED_SELF_VALIDATION_TOPIC = 'focused-self-validation';
+export const REVIEWER_MISSING_FOCUSED_VALIDATION_MARKER =
+    '[garda:evidence-only:missing-focused-validation]';
+export const REVIEWER_MISSING_FOCUSED_TEST_ACTION = 'run-and-record-focused-test';
+export const REVIEWER_MISSING_FOCUSED_VALIDATION_ACTION = 'run-and-record-focused-validation';
+export const REVIEWER_MISSING_FOCUSED_TEST_MARKER_TEMPLATE =
+    `${REVIEWER_MISSING_FOCUSED_VALIDATION_MARKER} test=<exact-repository-relative-test-path>; `
+    + `action=${REVIEWER_MISSING_FOCUSED_TEST_ACTION}`;
+export const REVIEWER_MISSING_FOCUSED_VALIDATION_MARKER_TEMPLATE =
+    `${REVIEWER_MISSING_FOCUSED_VALIDATION_MARKER} target=<exact-repository-relative-validation-path>; `
+    + `action=${REVIEWER_MISSING_FOCUSED_VALIDATION_ACTION}`;
+
+export function buildReviewerFocusedSelfValidationContractLines(): string[] {
+    return [
+        '- Missing prior focused execution evidence is not by itself a finding or residual risk.',
+        '- Only when the prospective finding is specifically that a relevant focused check may not have run, execute the smallest safe relevant local test or validation command yourself for exactly one relevant repository test or validation target file, with no unrelated or directory target, before deciding whether a finding exists.',
+        '- The focused self-check must stay inside the authenticated review scope and must not invoke Garda, access network services implicitly, start background services, mutate source or control artifacts, use shell command chaining, substitution, or expansion, run a broad build/full suite, or duplicate current gate-owned evidence.',
+        ...buildReviewerFocusedRunnerPolicyLines(),
+        '- Record the exact attempted command, command_outcome (`passed`, `failed`, `unavailable`, or `prohibited`), and concise non-placeholder diagnostics that state the concrete result, failure, or prohibition in a validation_notes entry whose topic is `focused-self-validation`. The command must identify the one exact check target. Its authenticated changed-file evidence must explain why that target is relevant. For a passed command, evidence does not need to repeat the target path, even when the review reports a separate finding.',
+        '- For a failed, unavailable, or prohibited focused command, keep evidence.location as a concrete path:line inside the assigned lane\'s authenticated changed-file evidence domain. Put the exact command target path and its concrete relationship to changed behavior in one clause of evidence.observation when the target itself is outside that domain; for example: `<exact-target> validates the changed behavior at this source location.` The target, `affected`/`changed`/`modified`/`new`/`updated` (or the current task id), and a relationship verb such as `validates`/`covers`/`exercises`/`asserts` must appear in that clause. Semicolons, newlines, sentence punctuation, and contrastive conjunctions `but`/`however`/`whereas`/`while` start a new clause. Reuse a finding\'s exact changed-file evidence location when finding_ids links the note. Naming the target only in note, command, or diagnostics does not satisfy the evidence contract.',
+        '- If the focused command passes, do not report missing prior execution as a finding or residual risk. If it exposes an actual defect or test failure, report that defect as an ordinary severity finding rather than as evidence-only F-000, link the failed validation note to the exact ordinary finding through finding_ids, and reuse at least one exact changed-file evidence location from each linked finding in that note.',
+        `- Use reserved id \`F-000\` only after a real focused attempt is unavailable or prohibited, and make either its title or description exactly \`${REVIEWER_MISSING_FOCUSED_TEST_MARKER_TEMPLATE}\` or \`${REVIEWER_MISSING_FOCUSED_VALIDATION_MARKER_TEMPLATE}\`, replacing only the angle-bracketed path. A \`failed\` check represents actual failure evidence and must use an ordinary severity finding. The focused-self-validation note must preserve the exact command and actionable diagnostics.`
+    ];
+}
+
+export function buildReviewerTerminalContractLines(): string[] {
+    return [
+        '- This reviewer-only handoff is not task implementation under repository AGENTS/start-task rules: do not open TASK.md or `.agents/workflows/start-task.md`, do not enter task mode, and do not act as the orchestrator.',
+        '- Reviewer terminal contract: inspect only the authenticated scope, write exactly one review JSON object to ReviewOutputPath, and run the read-only record-review-result --check-only command in the launch handoff. Fix every diagnostic and repeat until it passes, then return that same object and stop.',
+        '- Never invoke Garda navigation, launch, invocation, result recording, receipt, TASK.md, or project-memory commands; record-review-result --check-only is the required read-only exception.',
+        '- Never launch a reviewer, subagent, or descendant agent, and never mutate source files, task state, reviewer control evidence, receipts, or other handoff artifacts.',
+        '- The launcher/main agent exclusively owns delegation telemetry, result recording, downstream routing, completion, and cleanup after your single output is written.'
+    ];
+}

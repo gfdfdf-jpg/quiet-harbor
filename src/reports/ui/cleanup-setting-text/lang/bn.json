@@ -1,0 +1,90 @@
+{
+  "tab_intro": {
+    "description": "`runtime-retention.json`-এ runtime সংরক্ষণ নীতি: নির্ধারিত রক্ষণাবেক্ষণের সীমা, কমপ্যাকশন নীতি, এবং সুরক্ষিত ম্যানুয়াল ক্লিনআপ কার্যক্রম।"
+  },
+  "daily_maintenance_enabled": {
+    "label": "দৈনিক রক্ষণাবেক্ষণ",
+    "description": "নির্ধারিত দৈনিক রক্ষণাবেক্ষণ চালু বা বন্ধ করে। চালু থাকলে, orchestrator ম্যানুয়াল হস্তক্ষেপ ছাড়াই সময়সূচি অনুযায়ী সীমিত সংখ্যক উপযুক্ত টাস্ক প্রক্রিয়া করতে পারে।"
+  },
+  "daily_maintenance_max_tasks_per_run": {
+    "label": "প্রতি রক্ষণাবেক্ষণ রানে সর্বোচ্চ টাস্ক",
+    "description": "একটি রানে দৈনিক রক্ষণাবেক্ষণ কতগুলো উপযুক্ত টাস্ক প্রক্রিয়া করতে পারবে তার ঊর্ধ্বসীমা। থ্রেশহোল্ড ভুল কনফিগার হলে প্রভাবের পরিধি সীমিত রাখে।"
+  },
+  "eligible_older_than_days": {
+    "label": "এর চেয়ে পুরোনো task মুছুন (দিন)",
+    "description": "Manual cleanup এই সংখ্যক দিনের চেয়ে পুরোনো task runtime artifacts নির্বাচন করে। Active এবং নতুন tasks সুরক্ষিত থাকে।"
+  },
+  "keep_latest_tasks": {
+    "label": "কমপক্ষে সর্বশেষ task রাখুন (সংখ্যা)",
+    "description": "বয়সসীমার চেয়ে পুরোনো হলেও অন্তত এতগুলি সর্বশেষ task সবসময় সংরক্ষণ করে। শুধু বয়স এবং active-task protection ব্যবহার করতে 0 দিন।"
+  },
+  "include_problematic_tasks": {
+    "label": "সমস্যাযুক্ত কাজও মুছুন"
+  },
+  "daily_maintenance_dry_run": {
+    "label": "দৈনিক রক্ষণাবেক্ষণ dry-run",
+    "description": "মান true হলে, নির্ধারিত দৈনিক রক্ষণাবেক্ষণ শুধু প্রার্থী তালিকা করে এবং অডিট আউটপুট লেখে; কোনো আর্টিফ্যাক্ট মুছে ফেলে বা কমপ্রেস করে না। থ্রেশহোল্ড ঠিক করার সময় true রাখুন, পরে প্রয়োগের জন্য false করুন।"
+  },
+  "purge_require_confirm": {
+    "label": "স্বয়ংক্রিয় cleanup নিশ্চিতকরণ সুরক্ষা",
+    "description": "true হলে scheduled বা CLI destructive cleanup নীরবে চলে না, confirmation-gated থাকে। Manual UI cleanup এবং এক-task artifact cleanup সবসময় নিজস্ব typed confirmation phrase চায়।"
+  },
+  "healthy_done_compact_after_days": {
+    "label": "সুস্থ DONE সংকুচিত করুন (দিন পরে)",
+    "description": "এত দিন পরে সফল DONE task ledger evidence যাচাই হলে ledger-only history হিসেবে সংকুচিত হতে পারে।"
+  },
+  "problem_tasks_compress_after_days": {
+    "label": "সমস্যাযুক্ত টাস্ক কমপ্রেস করুন (দিন পরে)",
+    "description": "এত দিন পরে, ব্যর্থ বা আটকে থাকা টাস্কের ভারী ফরেনসিক আর্টিফ্যাক্ট কমপ্রেস করা যেতে পারে, তবে পুনরুদ্ধারযোগ্য পাঠযোগ্য প্রমাণ রাখা হবে।"
+  },
+  "manual_runtime_cleanup": {
+    "label": "ম্যানুয়াল runtime cleanup",
+    "description": "এই সারির age এবং keep-latest controls দিয়ে নির্বাচিত non-active task-owned runtime artifacts মুছে দেয়। Preview হলো dry-run report; ক্লিনআপ চালান নির্বাচিত task artifacts মুছে দেয়, shared indexes একবার repair করে এবং typed confirmation চায়।"
+  },
+  "task_purge": {
+    "label": "টাস্ক runtime artifact পরিষ্কার",
+    "description": "একটি task ID-এর runtime artifacts সরায় এবং shared indexes মেরামত করে। সম্পূর্ণ shared files সরায় না; active-task protection server-এ থাকে।"
+  },
+  "task_id": {
+    "label": "টাস্ক ID"
+  },
+  "purge_task_button": {
+    "label": "Task runtime artifacts পরিষ্কার করুন"
+  },
+  "run_preview": {
+    "label": "প্রাথমিক হিসাব"
+  },
+  "value_true": {
+    "label": "true — সক্রিয়"
+  },
+  "value_false": {
+    "label": "false — নিষ্ক্রিয়"
+  },
+  "run_apply": {
+    "label": "ক্লিনআপ চালান"
+  },
+  "cleanup_report": {
+    "label": "ক্লিনআপ প্রতিবেদন"
+  },
+  "cleanup_result": {
+    "label": "ক্লিনআপ ফলাফল"
+  },
+  "report_preview_tasks": {
+    "label": "পূর্বরূপ প্রার্থী"
+  },
+  "report_eligible_now": {
+    "label": "এখন উপযুক্ত"
+  },
+  "report_would_remove": {
+    "label": "মুছে দেবে"
+  },
+  "report_would_free": {
+    "label": "খালি করবে"
+  },
+  "report_removed": {
+    "label": "মুছে ফেলা হয়েছে"
+  },
+  "report_freed": {
+    "label": "খালি হয়েছে"
+  }
+}

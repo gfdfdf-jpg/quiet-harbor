@@ -1,0 +1,90 @@
+{
+  "tab_intro": {
+    "description": "`runtime-retention.json` にある runtime 保持ポリシーです。定期メンテナンスのしきい値、圧縮ルール、保護付きの手動クリーンアップ操作を定義します。"
+  },
+  "daily_maintenance_enabled": {
+    "label": "日次メンテナンス",
+    "description": "定期的な日次メンテナンスを有効または無効にします。有効な場合、オーケストレーターは手動介入なしで、スケジュールに従って適格なタスクを限定数だけ処理できます。"
+  },
+  "daily_maintenance_max_tasks_per_run": {
+    "label": "1 回のメンテナンスで処理する最大タスク数",
+    "description": "日次メンテナンスが 1 回の実行で処理する適格タスク数の上限です。しきい値設定を誤った場合の影響範囲を抑えます。"
+  },
+  "eligible_older_than_days": {
+    "label": "指定日数より古いタスクを削除",
+    "description": "手動クリーンアップは、この日数より古いタスクの runtime artifacts を選択します。アクティブなタスクと新しいタスクは保護されます。"
+  },
+  "keep_latest_tasks": {
+    "label": "最低限保持する最新タスク数",
+    "description": "最新のタスクを少なくともこの数だけ常に保持します。年齢しきい値より古い場合も保持されます。年齢とアクティブタスク保護だけに頼る場合は 0 に設定します。"
+  },
+  "include_problematic_tasks": {
+    "label": "問題のあるタスクも削除"
+  },
+  "daily_maintenance_dry_run": {
+    "label": "日次メンテナンスの dry-run",
+    "description": "true の場合、定期日次メンテナンスは候補を列挙して監査出力を書くだけで、アーティファクトの削除や圧縮は行いません。しきい値調整中は true を使い、適用時に false に切り替えてください。"
+  },
+  "purge_require_confirm": {
+    "label": "自動クリーンアップ確認保護",
+    "description": "true の場合、スケジュールまたは CLI の破壊的クリーンアップは確認必須のままで、暗黙には実行されません。UI の手動クリーンアップとタスク単位のアーティファクト cleanup は常に個別の入力確認フレーズを要求します。"
+  },
+  "healthy_done_compact_after_days": {
+    "label": "正常な DONE を指定日数後に圧縮",
+    "description": "この日数を過ぎると、正常完了した DONE タスクは ledger 証拠の検証後に ledger のみの履歴へ圧縮できます。"
+  },
+  "problem_tasks_compress_after_days": {
+    "label": "問題タスクを圧縮するまでの日数",
+    "description": "この日数を過ぎると、失敗または停止したタスクの大きなフォレンジックアーティファクトを、復旧時に読める証跡を残したまま圧縮できます。"
+  },
+  "manual_runtime_cleanup": {
+    "label": "手動 runtime cleanup",
+    "description": "この行の age と keep-latest コントロールで選択された、非アクティブなタスク所有の runtime artifacts を削除します。プレビューは dry-run レポートです。クリーンアップを実行 は選択されたタスク artifacts を削除し、共有インデックスを一度修復して、入力確認を要求します。"
+  },
+  "task_purge": {
+    "label": "タスク runtime アーティファクト cleanup",
+    "description": "1 つのタスク ID の runtime アーティファクトを削除し、共有インデックスを修復します。共有ファイル全体は削除しません。アクティブタスク保護はサーバー側で維持されます。"
+  },
+  "task_id": {
+    "label": "タスク ID"
+  },
+  "purge_task_button": {
+    "label": "runtime アーティファクトを cleanup"
+  },
+  "run_preview": {
+    "label": "事前計算"
+  },
+  "value_true": {
+    "label": "true — 有効"
+  },
+  "value_false": {
+    "label": "false — 無効"
+  },
+  "run_apply": {
+    "label": "クリーンアップを実行"
+  },
+  "cleanup_report": {
+    "label": "クリーンアップレポート"
+  },
+  "cleanup_result": {
+    "label": "クリーンアップ結果"
+  },
+  "report_preview_tasks": {
+    "label": "プレビュー候補"
+  },
+  "report_eligible_now": {
+    "label": "現在対象"
+  },
+  "report_would_remove": {
+    "label": "削除予定"
+  },
+  "report_would_free": {
+    "label": "解放予定"
+  },
+  "report_removed": {
+    "label": "削除済み"
+  },
+  "report_freed": {
+    "label": "解放済み"
+  }
+}

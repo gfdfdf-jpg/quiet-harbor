@@ -1,0 +1,90 @@
+{
+  "tab_intro": {
+    "description": "`runtime-retention.json` 中的 runtime 保留策略：计划维护阈值、压缩规则以及受保护的手动清理操作。"
+  },
+  "daily_maintenance_enabled": {
+    "label": "每日维护",
+    "description": "开启或关闭计划中的每日维护。启用后，编排器可以按计划在无需人工干预的情况下处理一批数量受限的合格任务。"
+  },
+  "daily_maintenance_max_tasks_per_run": {
+    "label": "每次维护运行的最大任务数",
+    "description": "每日维护在单次运行中可处理的合格任务数量上限。如果阈值配置错误，它可以限制影响范围。"
+  },
+  "eligible_older_than_days": {
+    "label": "删除早于指定天数的任务",
+    "description": "手动清理会选择早于此天数的任务 runtime artifacts。活动任务和较新的任务会保持受保护。"
+  },
+  "keep_latest_tasks": {
+    "label": "至少保留的最新任务数",
+    "description": "即使任务早于年龄阈值，也始终至少保留这么多最新任务。设置为 0 可仅依赖年龄和活动任务保护。"
+  },
+  "include_problematic_tasks": {
+    "label": "也删除有问题的任务"
+  },
+  "daily_maintenance_dry_run": {
+    "label": "每日维护 dry-run",
+    "description": "当值为 true 时，计划中的每日维护只会列出候选项并写入审计输出；不会删除或压缩任何制品。调试阈值时请使用 true，准备真正执行时再切换为 false。"
+  },
+  "purge_require_confirm": {
+    "label": "自动 cleanup 确认保护",
+    "description": "当值为 true 时，计划任务或 CLI 的破坏性 cleanup 仍需要确认，不会静默执行。UI 手动 cleanup 和单任务 artifact cleanup 始终需要各自输入确认短语。"
+  },
+  "healthy_done_compact_after_days": {
+    "label": "健康 DONE 在多少天后压缩",
+    "description": "超过这个天数后，成功完成的 DONE 任务在 ledger 证据验证后可以压缩为仅 ledger 历史。"
+  },
+  "problem_tasks_compress_after_days": {
+    "label": "问题任务在多少天后压缩",
+    "description": "失败或卡住的任务在达到这个天数后，可以压缩其较大的取证制品，同时保留可用于恢复的可读证据。"
+  },
+  "manual_runtime_cleanup": {
+    "label": "手动 runtime cleanup",
+    "description": "删除此行的年龄和 keep-latest 控件所选的非活动任务拥有的 runtime artifacts。预览是 dry-run 报告；运行清理 会删除选中的任务 artifacts，修复一次共享索引，并要求输入确认短语。"
+  },
+  "task_purge": {
+    "label": "任务 runtime artifact cleanup",
+    "description": "移除一个任务 ID 拥有的 runtime artifact，并修复共享索引。不会删除整个共享文件；活动任务保护仍在服务器端生效。"
+  },
+  "task_id": {
+    "label": "任务 ID"
+  },
+  "purge_task_button": {
+    "label": "清理 runtime artifact"
+  },
+  "run_preview": {
+    "label": "预先计算"
+  },
+  "value_true": {
+    "label": "true — 已启用"
+  },
+  "value_false": {
+    "label": "false — 已禁用"
+  },
+  "run_apply": {
+    "label": "运行清理"
+  },
+  "cleanup_report": {
+    "label": "清理报告"
+  },
+  "cleanup_result": {
+    "label": "清理结果"
+  },
+  "report_preview_tasks": {
+    "label": "预览候选项"
+  },
+  "report_eligible_now": {
+    "label": "当前符合条件"
+  },
+  "report_would_remove": {
+    "label": "将删除"
+  },
+  "report_would_free": {
+    "label": "将释放"
+  },
+  "report_removed": {
+    "label": "已删除"
+  },
+  "report_freed": {
+    "label": "已释放"
+  }
+}

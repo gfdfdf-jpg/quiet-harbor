@@ -1,0 +1,598 @@
+# Manually authorized CI for one exact checkout and a bounded job/OS/runtime selection.
+# Selecting all jobs, OS families and runtimes preserves the complete 22-job suite.
+# Gate and CLI test shards use GARDA_NODE_FOUNDATION_TEST_SHARDS=2 for parallel file execution.
+name: CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: Exact current owner/repository
+        required: true
+        type: string
+      commit:
+        description: Full lowercase SHA of the selected workflow ref
+        required: true
+        type: string
+      authorization:
+        description: Type I authorize this selected run
+        required: true
+        type: string
+      job:
+        description: Job selection (all is an explicit complete-suite request)
+        required: true
+        type: choice
+        default: typecheck
+        options: [typecheck, test-unit, test-gates, test-cli, test-lifecycle, test-bin, release, smoke, all]
+      os:
+        description: Hosted operating system selection
+        required: true
+        type: choice
+        default: ubuntu-latest
+        options: [ubuntu-latest, windows-latest, macos-latest, all]
+      runtime:
+        description: Node runtime selection
+        required: true
+        type: choice
+        default: '24'
+        options: ['22.13.0', '24', all]
+      release_mode:
+        description: Full Release validation or focused Windows native diagnosis
+        required: true
+        type: choice
+        default: full
+        options: [full, windows-native]
+
+# Preserve each separately authorized dispatch instead of replacing a queued run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.run_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  authorize:
+    name: Authorize CI selection
+    runs-on: ubuntu-latest
+    outputs:
+      selection: ${{ steps.selection.outputs.selection }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '24'
+      - name: Validate focused Release selection
+        if: inputs.release_mode == 'windows-native'
+        env:
+          MANUAL_JOB: ${{ inputs.job }}
+          MANUAL_OS: ${{ inputs.os }}
+        run: node scripts/ci/probe-windows-native-controls.cjs --validate-selection
+
+      - name: Authorize selected jobs
+        id: selection
+        env:
+          MANUAL_WORKFLOW: ci
+          MANUAL_REPOSITORY: ${{ inputs.repository }}
+          MANUAL_COMMIT: ${{ inputs.commit }}
+          MANUAL_AUTHORIZATION: ${{ inputs.authorization }}
+          MANUAL_JOB: ${{ inputs.job }}
+          MANUAL_OS: ${{ inputs.os }}
+          MANUAL_RUNTIME: ${{ inputs.runtime }}
+        run: node scripts/manual-workflow-authorization.cjs
+
+  typecheck:
+    name: Static Checks / Node ${{ matrix.node-version }}
+    runs-on: ${{ matrix.os }}
+    needs: [authorize]
+    if: ${{ always() && !cancelled() && needs.authorize.result == 'success' && fromJSON(needs.authorize.outputs.selection).jobs['typecheck'].enabled && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.authorize.outputs.selection).jobs['typecheck'].matrix }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-fund --no-audit
+
+      - name: Validate workflow references
+        run: node scripts/validate-workflow-references.cjs
+
+      - name: Run typecheck
+        run: npm run typecheck
+
+      - name: Run lint
+        run: npm run lint
+
+  # ── 2. Unit tests (core, gate-runtime, schemas, validators, etc.) ────────────
+  test-unit:
+    name: Unit Tests / Node ${{ matrix.node-version }}
+    runs-on: ${{ matrix.os }}
+    needs: [authorize, typecheck]
+    if: ${{ always() && !cancelled() && needs.authorize.result == 'success' && fromJSON(needs.authorize.outputs.selection).jobs['test-unit'].enabled && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.authorize.outputs.selection).jobs['test-unit'].matrix }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-fund --no-audit
+
+      - name: Install ripgrep for compact integration tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          rg_setup_started=$SECONDS
+          rg_binary_sha256=e62198eb19b136b88c330af83647b5a962cb99b6b1f066758568f12de1974849
+          rg_executable="$(command -v rg || true)"
+          if [ -z "$rg_executable" ] || ! printf '%s  %s\n' "$rg_binary_sha256" "$rg_executable" | sha256sum --check --status; then
+            rg_setup_root="$(mktemp -d "${RUNNER_TEMP}/garda-ripgrep.XXXXXX")"
+            rg_archive="$rg_setup_root/ripgrep.tar.gz"
+            curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+              https://github.com/BurntSushi/ripgrep/releases/download/15.2.0/ripgrep-15.2.0-x86_64-unknown-linux-musl.tar.gz \
+              --output "$rg_archive"
+            if ! printf '%s  %s\n' 33e15bcf1624b25cdd2a55813a47a2f95dbe126268203e76aa6a585d1e7b149c "$rg_archive" | sha256sum --check --status; then
+              printf 'Ripgrep archive checksum mismatch\n' >&2
+              exit 1
+            fi
+            tar -xzf "$rg_archive" -C "$rg_setup_root"
+            rg_executable="$rg_setup_root/ripgrep-15.2.0-x86_64-unknown-linux-musl/rg"
+          fi
+          if ! printf '%s  %s\n' "$rg_binary_sha256" "$rg_executable" | sha256sum --check --status; then
+            printf 'Ripgrep executable checksum mismatch\n' >&2
+            exit 1
+          fi
+          dirname "$rg_executable" >> "$GITHUB_PATH"
+          "$rg_executable" --version
+          printf 'Ripgrep setup duration: %ss\n' "$((SECONDS - rg_setup_started))"
+
+      - name: Build node-foundation
+        run: npm run build:node-foundation
+
+      - name: Run unit tests
+        env:
+          FORCE_COLOR: '1'
+        run: npm run test:unit
+
+      - name: Upload node foundation shard logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: node-foundation-shard-logs-test-unit-node-${{ matrix.node-version }}
+          path: .node-build/test-shard-logs/**
+          if-no-files-found: ignore
+          retention-days: 15
+          include-hidden-files: true
+
+  # ── 3. Gate tests (next-step, review, routing, workflow evidence) ─────────────
+  test-gates:
+    name: Gate Tests / Node ${{ matrix.node-version }}
+    runs-on: ${{ matrix.os }}
+    needs: [authorize, typecheck]
+    if: ${{ always() && !cancelled() && needs.authorize.result == 'success' && fromJSON(needs.authorize.outputs.selection).jobs['test-gates'].enabled && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.authorize.outputs.selection).jobs['test-gates'].matrix }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-fund --no-audit
+
+      - name: Build node-foundation
+        run: npm run build:node-foundation
+
+      - name: Run gate tests (parallel shards)
+        env:
+          FORCE_COLOR: '1'
+          GARDA_NODE_FOUNDATION_TEST_SHARDS: '2'
+        run: npm run test:gates
+
+      - name: Upload node foundation shard logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: node-foundation-shard-logs-test-gates-node-${{ matrix.node-version }}
+          path: .node-build/test-shard-logs/**
+          if-no-files-found: ignore
+          retention-days: 15
+          include-hidden-files: true
+
+  # ── 4. CLI tests (command surfaces, gate flows, review handlers) ──────────────
+  test-cli:
+    name: CLI Tests / Node ${{ matrix.node-version }}
+    runs-on: ${{ matrix.os }}
+    needs: [authorize, typecheck]
+    if: ${{ always() && !cancelled() && needs.authorize.result == 'success' && fromJSON(needs.authorize.outputs.selection).jobs['test-cli'].enabled && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.authorize.outputs.selection).jobs['test-cli'].matrix }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-fund --no-audit
+
+      - name: Build node-foundation
+        run: npm run build:node-foundation
+
+      - name: Run CLI tests (parallel shards)
+        env:
+          FORCE_COLOR: '1'
+          GARDA_NODE_FOUNDATION_TEST_SHARDS: '2'
+        run: npm run test:cli
+
+      - name: Upload node foundation shard logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: node-foundation-shard-logs-test-cli-node-${{ matrix.node-version }}
+          path: .node-build/test-shard-logs/**
+          if-no-files-found: ignore
+          retention-days: 15
+          include-hidden-files: true
+
+  # ── 5. Lifecycle tests (setup, update, on/off, uninstall, cleanup) ────────────
+  test-lifecycle:
+    name: Lifecycle Tests / Node ${{ matrix.node-version }}
+    runs-on: ${{ matrix.os }}
+    needs: [authorize, typecheck]
+    if: ${{ always() && !cancelled() && needs.authorize.result == 'success' && fromJSON(needs.authorize.outputs.selection).jobs['test-lifecycle'].enabled && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.authorize.outputs.selection).jobs['test-lifecycle'].matrix }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-fund --no-audit
+
+      - name: Build node-foundation
+        run: npm run build:node-foundation
+
+      - name: Run lifecycle tests
+        env:
+          FORCE_COLOR: '1'
+        run: npm run test:lifecycle
+
+      - name: Upload node foundation shard logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: node-foundation-shard-logs-test-lifecycle-node-${{ matrix.node-version }}
+          path: .node-build/test-shard-logs/**
+          if-no-files-found: ignore
+          retention-days: 15
+          include-hidden-files: true
+
+  # ── 5b. Binary & Materialization tests (bin, materialization) ────────────────
+  test-bin:
+    name: Binary Tests / Node ${{ matrix.node-version }}
+    runs-on: ${{ matrix.os }}
+    needs: [authorize, typecheck]
+    if: ${{ always() && !cancelled() && needs.authorize.result == 'success' && fromJSON(needs.authorize.outputs.selection).jobs['test-bin'].enabled && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.authorize.outputs.selection).jobs['test-bin'].matrix }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-fund --no-audit
+
+      - name: Build node-foundation
+        run: npm run build:node-foundation
+
+      - name: Run binary tests
+        env:
+          FORCE_COLOR: '1'
+        run: npm run test:bin
+
+      - name: Upload node foundation shard logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: node-foundation-shard-logs-test-bin-node-${{ matrix.node-version }}
+          path: .node-build/test-shard-logs/**
+          if-no-files-found: ignore
+          retention-days: 15
+          include-hidden-files: true
+
+  # ── 6. Release validation matrix (version parity + build + quality + pack smoke)
+  validate-release:
+    name: Release Validation / ${{ matrix.os }} / Node ${{ matrix.node-version }}
+    runs-on: ${{ matrix.os }}
+    needs: [authorize, typecheck, test-unit, test-gates, test-cli, test-lifecycle, test-bin]
+    if: ${{ always() && !cancelled() && needs.authorize.result == 'success' && fromJSON(needs.authorize.outputs.selection).jobs['release'].enabled && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.authorize.outputs.selection).jobs['release'].matrix }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-fund --no-audit
+
+      - name: Canonicalize Windows temporary paths
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $physicalTemp = node -p 'require("node:fs").realpathSync.native(require("node:os").tmpdir())'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "TEMP=$physicalTemp" >> $env:GITHUB_ENV
+          "TMP=$physicalTemp" >> $env:GITHUB_ENV
+          "TMPDIR=$physicalTemp" >> $env:GITHUB_ENV
+
+      - name: Install ripgrep for compact integration tests (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rg_setup_started=$SECONDS
+          rg_binary_sha256=e62198eb19b136b88c330af83647b5a962cb99b6b1f066758568f12de1974849
+          rg_executable="$(command -v rg || true)"
+          if [ -z "$rg_executable" ] || ! printf '%s  %s\n' "$rg_binary_sha256" "$rg_executable" | sha256sum --check --status; then
+            rg_setup_root="$(mktemp -d "${RUNNER_TEMP}/garda-ripgrep.XXXXXX")"
+            rg_archive="$rg_setup_root/ripgrep.tar.gz"
+            curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+              https://github.com/BurntSushi/ripgrep/releases/download/15.2.0/ripgrep-15.2.0-x86_64-unknown-linux-musl.tar.gz \
+              --output "$rg_archive"
+            if ! printf '%s  %s\n' 33e15bcf1624b25cdd2a55813a47a2f95dbe126268203e76aa6a585d1e7b149c "$rg_archive" | sha256sum --check --status; then
+              printf 'Ripgrep archive checksum mismatch\n' >&2
+              exit 1
+            fi
+            tar -xzf "$rg_archive" -C "$rg_setup_root"
+            rg_executable="$rg_setup_root/ripgrep-15.2.0-x86_64-unknown-linux-musl/rg"
+          fi
+          if ! printf '%s  %s\n' "$rg_binary_sha256" "$rg_executable" | sha256sum --check --status; then
+            printf 'Ripgrep executable checksum mismatch\n' >&2
+            exit 1
+          fi
+          dirname "$rg_executable" >> "$GITHUB_PATH"
+          "$rg_executable" --version
+          printf 'Ripgrep setup duration: %ss\n' "$((SECONDS - rg_setup_started))"
+
+      - name: Install ripgrep for compact integration tests (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $rgSetupTimer = [Diagnostics.Stopwatch]::StartNew()
+          $rgBinarySha256 = '14231169855ec5205cf5a1b6f1db358ff4aed4247c86b69ce8aae647c77f6680'
+          $rgCommand = Get-Command rg -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+          $rgExecutable = if ($rgCommand) { $rgCommand.Source } else { $null }
+          if (-not $rgExecutable -or (Get-FileHash -LiteralPath $rgExecutable -Algorithm SHA256).Hash.ToLowerInvariant() -ne $rgBinarySha256) {
+            $rgSetupRoot = Join-Path $env:RUNNER_TEMP ('garda-ripgrep-' + [Guid]::NewGuid().ToString('N'))
+            New-Item -ItemType Directory -Path $rgSetupRoot | Out-Null
+            $rgArchive = Join-Path $rgSetupRoot 'ripgrep.zip'
+            Invoke-WebRequest -Uri 'https://github.com/BurntSushi/ripgrep/releases/download/15.2.0/ripgrep-15.2.0-x86_64-pc-windows-msvc.zip' -OutFile $rgArchive
+            if ((Get-FileHash -LiteralPath $rgArchive -Algorithm SHA256).Hash.ToLowerInvariant() -ne '71b2fef860abe467217a538ff31de02f5258807c0129f771846f87bd029aafc5') {
+              throw 'Ripgrep archive checksum mismatch'
+            }
+            Expand-Archive -LiteralPath $rgArchive -DestinationPath $rgSetupRoot
+            $rgExecutable = Join-Path $rgSetupRoot 'ripgrep-15.2.0-x86_64-pc-windows-msvc/rg.exe'
+          }
+          if ((Get-FileHash -LiteralPath $rgExecutable -Algorithm SHA256).Hash.ToLowerInvariant() -ne $rgBinarySha256) {
+            throw 'Ripgrep executable checksum mismatch'
+          }
+          Split-Path -Parent $rgExecutable | Add-Content -LiteralPath $env:GITHUB_PATH -Encoding utf8
+          & $rgExecutable --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Output "Ripgrep setup duration: $($rgSetupTimer.ElapsedMilliseconds)ms"
+
+      - name: Prepare embedded release bundle
+        run: npm run build
+
+      - name: Bootstrap embedded release bundle
+        run: node bin/garda.js bootstrap --destination garda-agent-orchestrator
+
+      - name: Diagnose Windows native controls
+        if: inputs.release_mode == 'windows-native' && runner.os == 'Windows'
+        run: |
+          npm run build:node-foundation
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node node_modules/c8/bin/c8.js --check-coverage=false --all=false --reporter=json-summary --temp-directory "$env:RUNNER_TEMP/garda-native-diagnostic-coverage" --reports-dir "$env:RUNNER_TEMP/garda-native-diagnostic-report" node scripts/ci/probe-windows-native-controls.cjs
+
+      - name: Validate release
+        if: inputs.release_mode != 'windows-native' || runner.os != 'Windows'
+        run: npm run validate:release:fast
+
+      - name: Upload lcov coverage
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-lcov-${{ matrix.os }}-node-${{ matrix.node-version }}
+          path: coverage/lcov.info
+          if-no-files-found: warn
+          retention-days: 15
+
+  # ── 7. Cross-platform lifecycle smoke matrix ─────────────────────────────────
+  # Runs after all test shards pass. Covers: setup → update git → doctor → uninstall on all 3 OSes.
+  smoke:
+    name: Smoke / ${{ matrix.os }} / Node ${{ matrix.node-version }}
+    runs-on: ${{ matrix.os }}
+    needs: [authorize, typecheck, test-unit, test-gates, test-cli, test-lifecycle, test-bin]
+    if: ${{ always() && !cancelled() && needs.authorize.result == 'success' && fromJSON(needs.authorize.outputs.selection).jobs['smoke'].enabled && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.authorize.outputs.selection).jobs['smoke'].matrix }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-fund --no-audit
+
+      - name: Build
+        run: npm run build
+
+      - name: Build staged node-foundation test graph
+        run: npm run build:node-foundation
+
+      # Pack-install smoke: packs a tarball, installs it, exercises version/help/status.
+      - name: Pack and install smoke test
+        run: node --test .node-build/tests/node/packaging/pack-smoke.test.js
+
+      # Lifecycle smoke using the local built CLI.
+      # Stages map to: setup -> update git -> doctor -> uninstall.
+      - name: Lifecycle smoke (cross-platform E2E install → update → uninstall)
+        id: lifecycle-smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SMOKE_TEMP_ROOT="$(node -p 'require("node:fs").realpathSync.native(require("node:os").tmpdir()).split(require("node:path").sep).join("/")')"
+          export TMPDIR="$SMOKE_TEMP_ROOT" TEMP="$SMOKE_TEMP_ROOT" TMP="$SMOKE_TEMP_ROOT"
+          SMOKE_DIR="$(mktemp -d)"
+          SMOKE_DIR="$(node -p 'require("node:fs").realpathSync.native(process.argv[1]).split(require("node:path").sep).join("/")' "$SMOKE_DIR")"
+          echo "smoke_dir=$SMOKE_DIR" >> "$GITHUB_OUTPUT"
+          SMOKE_BRANCH="garda-ci-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git -C "$GITHUB_WORKSPACE" branch --force "$SMOKE_BRANCH" "$GITHUB_SHA"
+          git -C "$GITHUB_WORKSPACE" add -f -- dist bin/garda.js
+          git -C "$GITHUB_WORKSPACE" -c user.name='Garda CI' -c user.email='ci@garda.invalid' commit -m 'test: stage prebuilt Git update bundle' -- dist bin/garda.js
+          git -C "$GITHUB_WORKSPACE" branch --force "$SMOKE_BRANCH" HEAD
+          # Always use absolute paths in cross-platform test to avoid pathing drift
+          CLI="node ${GITHUB_WORKSPACE}/bin/garda.js"
+
+          echo "::group::1. Setup (built source checkout)"
+          # T-806 makes compile_gate.command fail closed when project discovery
+          # cannot prove a compile/build/type-check command. The smoke workspace
+          # is synthetic, so seed a tiny project-specific build script before
+          # setup and let normal discovery materialize `npm run build`.
+          cat > "$SMOKE_DIR/package.json" <<'JSON'
+          {"private":true,"scripts":{"build":"node --check index.js"}}
+          JSON
+          echo 'module.exports = {};' > "$SMOKE_DIR/index.js"
+          # First-run CI smoke must go through setup so init-answers are materialized
+          # non-interactively before install/init/review commands are exercised.
+          GIT_URL="$GITHUB_WORKSPACE"
+          $CLI setup --target-root "$SMOKE_DIR" --no-prompt --assistant-language "English" --assistant-brevity "concise" --source-of-truth "Antigravity" --enforce-no-auto-commit false --claude-orchestrator-full-access false --token-economy-enabled true --active-agent-files ".antigravity/rules.md"
+          node scripts/ci/finalize-smoke-workspace.cjs "$SMOKE_DIR"
+          echo "::endgroup::"
+
+          echo "::group::2. Update (git clone flow)"
+          # Exercise git-based update against a local branch anchored to the exact
+          # checked-out commit, including detached and shallow pull-request checkouts.
+          $CLI update git --target-root "$SMOKE_DIR" --repo-url "$GIT_URL" --branch "$SMOKE_BRANCH" --no-prompt --trust-override
+          echo "::endgroup::"
+
+          echo "::group::3. Doctor"
+          $CLI doctor --target-root "$SMOKE_DIR"
+          echo "::endgroup::"
+
+          echo "::group::4. Uninstall"
+          $CLI uninstall --target-root "$SMOKE_DIR" --no-prompt
+          echo "::endgroup::"
+
+          rm -rf "$SMOKE_DIR"
+          echo "Lifecycle smoke PASSED on $RUNNER_OS"
+
+      # ── Failure forensics: upload runtime evidence and logs ──────────────────
+      # Captures build output, runtime state, and npm debug logs when any smoke
+      # step fails, giving investigators actionable context without re-running.
+      - name: Collect smoke failure evidence
+        if: failure()
+        shell: bash
+        run: |
+          mkdir -p smoke-failure-evidence
+
+          # npm debug logs
+          for log in "$HOME"/.npm/_logs/*.log; do
+            [ -f "$log" ] && cp "$log" smoke-failure-evidence/ || true
+          done
+
+          # Build output (dist manifest, compiled CLI entrypoint)
+          [ -d dist ] && cp -r dist smoke-failure-evidence/dist || true
+          [ -f bin/garda.js ] && cp bin/garda.js smoke-failure-evidence/ || true
+
+          # Lifecycle smoke workspace state (if the step got far enough to create it)
+          SMOKE_DIR="${{ steps.lifecycle-smoke.outputs.smoke_dir }}"
+          if [ -n "$SMOKE_DIR" ] && [ -d "$SMOKE_DIR" ]; then
+            # Capture orchestrator runtime artifacts and agent config
+            if [ -d "$SMOKE_DIR/garda-agent-orchestrator/runtime" ]; then
+              cp -r "$SMOKE_DIR/garda-agent-orchestrator/runtime" smoke-failure-evidence/smoke-runtime
+            fi
+            if [ -d "$SMOKE_DIR/garda-agent-orchestrator/live/config" ]; then
+              cp -r "$SMOKE_DIR/garda-agent-orchestrator/live/config" smoke-failure-evidence/smoke-config
+            fi
+            # Capture materialized entrypoints for provider-routing diagnosis
+            for f in "$SMOKE_DIR"/.antigravity/rules.md "$SMOKE_DIR"/.agents/workflows/start-task.md; do
+              [ -f "$f" ] && cp "$f" smoke-failure-evidence/ || true
+            done
+          fi
+
+          # Runner environment snapshot
+          {
+            echo "runner_os=$RUNNER_OS"
+            echo "node_version=$(node --version 2>/dev/null || echo 'unavailable')"
+            echo "npm_version=$(npm --version 2>/dev/null || echo 'unavailable')"
+            echo "date_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo 'unavailable')"
+            echo "smoke_dir=$SMOKE_DIR"
+          } > smoke-failure-evidence/runner-env.txt
+
+      - name: Upload smoke failure evidence
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: smoke-failure-evidence-${{ matrix.os }}-node${{ matrix.node-version }}
+          path: smoke-failure-evidence/
+          retention-days: 15
+          if-no-files-found: ignore

@@ -1,0 +1,1001 @@
+import assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { performance } from 'node:perf_hooks';
+import test, { type TestContext } from 'node:test';
+import { queryObjects } from 'node:v8';
+
+import {
+    appendTaskEvent,
+    buildEventIntegrityHash,
+    inspectTaskEventFile,
+    readTaskTimelineBoundedJsonlTail,
+    readTaskTimelineJsonlEntries,
+    readTaskTimelineTextFile,
+    withTaskTimelineReadSnapshot
+} from '../../../src/gate-runtime/timeline/task-events';
+import { isTaskTimelineReadSnapshotActive } from '../../../src/gate-runtime/timeline/task-timeline-read-snapshot';
+
+const MULTI_MEGABYTE_FIXTURE_BYTES = 2 * 1024 * 1024;
+const LATENCY_SAMPLE_COUNT = 20;
+const MAX_ACCEPTANCE_SCENARIO_P95_LATENCY_MS = 5_000;
+const MAX_ACCEPTANCE_SCENARIO_P95_MEDIAN_SPREAD_MS = 1_000;
+const SCENARIO_HEAP_GROWTH_SAMPLE_BUDGET_BYTES = 2 * 1024 * 1024;
+const SCENARIO_HEAP_GROWTH_PAYLOAD_MULTIPLIER = 32;
+const OVERLAPPING_INVOCATION_COUNT = 2;
+// Direct seeding leaves the append index cold; its first reconstruction adds paired path checks.
+// The first integrity query checks the cadence-head container (one lstat)
+// and revalidates the route-query byte length (two lstat/two realpath).
+const INTEGRITY_QUERY_AUTHORITY_CHECKS = { lstat: 3, realpath: 2 };
+const COLD_APPEND_INDEX_AUTHORITY_CHECKS = { lstat: 25, realpath: 24 };
+const tempRoots: string[] = [];
+
+interface TimelineFixture {
+    orchestratorRoot: string;
+    eventsRoot: string;
+    timelinePath: string;
+}
+
+interface TimelineReadMetrics {
+    descriptorOpenCount: number;
+    readCallCount: number;
+    requestedBytes: number;
+    returnedBytes: number;
+    largestRequestedRead: number;
+    pathLstatCount: number;
+    pathStatCount: number;
+    descriptorStatCount: number;
+    pathRealpathCount: number;
+    pathExistsCount: number;
+    pathAccessCount: number;
+    pathReadlinkCount: number;
+    directoryEnumerationCount: number;
+    directFileReadCount: number;
+}
+
+interface TimelineReadProbe {
+    metrics: TimelineReadMetrics;
+    identityCompatibility: {
+        calls: number;
+        opens: number;
+        closes: number;
+        lstat: number;
+        stat: number;
+        fstat: number;
+        realpath: number;
+        payloadReads: number;
+        maxLiveDescriptors: number;
+    };
+    withoutRecording: <T>(callback: () => T) => T;
+    restore: () => void;
+}
+
+interface HeapUsageProbe {
+    sample: () => void;
+    maxGrowthBytes: () => number;
+}
+
+interface BufferAllocationProbe {
+    fullPayloadAllocationCount: () => number;
+    fullPayloadAllocationSizes: () => number[];
+    fullPayloadConcatCount: () => number;
+    fullPayloadStringConversionCount: () => number;
+    fullPayloadConversionsByAllocation: () => number[];
+    restore: () => void;
+}
+
+function createTimelineFixture(taskId: string): TimelineFixture {
+    const orchestratorRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gao-timeline-performance-'));
+    tempRoots.push(orchestratorRoot);
+    const eventsRoot = path.join(orchestratorRoot, 'runtime', 'task-events');
+    fs.mkdirSync(eventsRoot, { recursive: true });
+    return {
+        orchestratorRoot,
+        eventsRoot,
+        timelinePath: path.join(eventsRoot, `${taskId}.jsonl`)
+    };
+}
+
+function seedSmallTimeline(taskId: string, eventCount = 3): TimelineFixture {
+    const fixture = createTimelineFixture(taskId);
+    for (let index = 0; index < eventCount; index += 1) {
+        const result = appendTaskEvent(
+            fixture.orchestratorRoot,
+            taskId,
+            'PERFORMANCE_ACCEPTANCE_SEED',
+            'PASS',
+            `Seed event ${index + 1}`,
+            { index },
+            { passThru: true, lowNoiseRuntimeWrites: true }
+        );
+        assert.equal(result?.commit_status, 'committed');
+    }
+    return fixture;
+}
+
+function seedLargeIntegrityTimeline(taskId: string): TimelineFixture & { eventCount: number; byteLength: number } {
+    const fixture = createTimelineFixture(taskId);
+    const lines: string[] = [];
+    let byteLength = 0;
+    let previousHash: string | null = null;
+
+    while (byteLength < MULTI_MEGABYTE_FIXTURE_BYTES) {
+        const taskSequence = lines.length + 1;
+        const event: Record<string, unknown> = {
+            timestamp_utc: '2026-01-01T00:00:00.000Z',
+            task_id: taskId,
+            event_type: 'PERFORMANCE_ACCEPTANCE',
+            outcome: 'PASS',
+            actor: 'test',
+            message: `Large timeline event ${taskSequence}`,
+            details: {
+                payload: 'x'.repeat(2048),
+                task_sequence: taskSequence
+            },
+            integrity: {
+                schema_version: 2,
+                task_sequence: taskSequence,
+                prev_event_sha256: previousHash
+            }
+        };
+        const eventHash = buildEventIntegrityHash(event);
+        if (!eventHash) {
+            throw new Error('Failed to build large timeline fixture integrity hash.');
+        }
+        (event.integrity as Record<string, unknown>).event_sha256 = eventHash;
+        previousHash = eventHash;
+        const line = JSON.stringify(event);
+        lines.push(line);
+        byteLength += Buffer.byteLength(line) + 1;
+    }
+
+    fs.writeFileSync(fixture.timelinePath, `${lines.join('\n')}\n`, { encoding: 'utf8', mode: 0o600 });
+    return { ...fixture, eventCount: lines.length, byteLength };
+}
+
+function installTimelineReadProbe(timelinePath: string): TimelineReadProbe {
+    const fsModule = require('node:fs') as typeof fs;
+    const mutableStatFs = fsModule as unknown as {
+        lstatSync: typeof fs.lstatSync;
+        statSync: typeof fs.statSync;
+    };
+    const originalOpenSync = fsModule.openSync;
+    const originalReadSync = fsModule.readSync;
+    const originalCloseSync = fsModule.closeSync;
+    const originalLstatSync = fsModule.lstatSync;
+    const originalStatSync = fsModule.statSync;
+    const originalFstatSync = fsModule.fstatSync;
+    const originalRealpathSyncNative = fsModule.realpathSync.native;
+    const originalExistsSync = fsModule.existsSync;
+    const originalAccessSync = fsModule.accessSync;
+    const originalReadlinkSync = fsModule.readlinkSync;
+    const originalReaddirSync = fsModule.readdirSync;
+    const originalReadFileSync = fsModule.readFileSync;
+    const trackedDescriptors = new Set<number>();
+    const allTimelineDescriptors = new Set<number>();
+    const compatibilityDescriptors = new Set<number>();
+    const identityFs = require('../../../src/core/file-stat') as typeof import('../../../src/core/file-stat');
+    const originalIdentityLstat = identityFs.lstatFileIdentitySync;
+    const originalIdentityStat = identityFs.statFileIdentitySync;
+    const originalIdentityComplete = identityFs.completePathFileIdentitySync;
+    let identityScope: { originalPathStatAllowance: number; opens: number } | null = null;
+    const identityCompatibility = { calls: 0, opens: 0, closes: 0, lstat: 0, stat: 0,
+        fstat: 0, realpath: 0, payloadReads: 0, maxLiveDescriptors: 0 };
+    const resolvedTimelinePath = path.resolve(timelinePath);
+    const resolvedEventsRoot = path.dirname(resolvedTimelinePath);
+    let recording = true;
+    const metrics: TimelineReadMetrics = {
+        descriptorOpenCount: 0,
+        readCallCount: 0,
+        requestedBytes: 0,
+        returnedBytes: 0,
+        largestRequestedRead: 0,
+        pathLstatCount: 0,
+        pathStatCount: 0,
+        descriptorStatCount: 0,
+        pathRealpathCount: 0,
+        pathExistsCount: 0,
+        pathAccessCount: 0,
+        pathReadlinkCount: 0,
+        directoryEnumerationCount: 0,
+        directFileReadCount: 0
+    };
+
+    const isTrackedPath = (targetPath: unknown): boolean => {
+        if (typeof targetPath === 'number') return false;
+        try {
+            const resolved = path.resolve(String(targetPath));
+            return resolved === resolvedTimelinePath || resolved === resolvedEventsRoot;
+        } catch {
+            return false;
+        }
+    };
+
+    const traceIdentity = (allowance: number, callback: () => unknown): unknown => {
+        const previous = identityScope;
+        identityScope = { originalPathStatAllowance: allowance, opens: 0 };
+        try {
+            return callback();
+        } finally {
+            identityScope = previous;
+        }
+    };
+    identityFs.lstatFileIdentitySync = ((...args: unknown[]) =>
+        traceIdentity(1, () => Reflect.apply(originalIdentityLstat, identityFs, args))) as typeof originalIdentityLstat;
+    identityFs.statFileIdentitySync = ((...args: unknown[]) =>
+        traceIdentity(1, () => Reflect.apply(originalIdentityStat, identityFs, args))) as typeof originalIdentityStat;
+    identityFs.completePathFileIdentitySync = ((...args: unknown[]) =>
+        traceIdentity(0, () => Reflect.apply(originalIdentityComplete, identityFs, args))) as typeof originalIdentityComplete;
+
+    fsModule.openSync = ((targetPath: fs.PathLike, flags: fs.OpenMode, mode?: fs.Mode) => {
+        const fileDescriptor = originalOpenSync(targetPath, flags, mode);
+        if (recording && identityScope && isTrackedPath(targetPath)) {
+            if (identityScope.opens === 0) identityCompatibility.calls += 1;
+            identityScope.opens += 1;
+            identityCompatibility.opens += 1;
+            compatibilityDescriptors.add(fileDescriptor);
+            identityCompatibility.maxLiveDescriptors = Math.max(
+                identityCompatibility.maxLiveDescriptors, compatibilityDescriptors.size
+            );
+        } else if (path.resolve(String(targetPath)) === resolvedTimelinePath) {
+            allTimelineDescriptors.add(fileDescriptor);
+            const readOnly = flags === 'r' || (typeof flags === 'number'
+                && (flags & (fs.constants.O_WRONLY | fs.constants.O_RDWR)) === fs.constants.O_RDONLY);
+            if (recording && readOnly) {
+                metrics.descriptorOpenCount += 1;
+                trackedDescriptors.add(fileDescriptor);
+            }
+        }
+        return fileDescriptor;
+    }) as typeof fsModule.openSync;
+    fsModule.readSync = ((
+        fileDescriptor: number,
+        buffer: NodeJS.ArrayBufferView,
+        offset: number,
+        length: number,
+        position: number | null
+    ) => {
+        const bytesRead = originalReadSync(fileDescriptor, buffer, offset, length, position);
+        if (recording && compatibilityDescriptors.has(fileDescriptor)) identityCompatibility.payloadReads += 1;
+        if (recording && trackedDescriptors.has(fileDescriptor)) {
+            metrics.readCallCount += 1;
+            metrics.requestedBytes += length;
+            metrics.returnedBytes += bytesRead;
+            metrics.largestRequestedRead = Math.max(metrics.largestRequestedRead, length);
+        }
+        return bytesRead;
+    }) as typeof fsModule.readSync;
+    fsModule.closeSync = ((fileDescriptor: number) => {
+        try {
+            originalCloseSync(fileDescriptor);
+        } finally {
+            if (compatibilityDescriptors.delete(fileDescriptor)) identityCompatibility.closes += 1;
+            trackedDescriptors.delete(fileDescriptor);
+            allTimelineDescriptors.delete(fileDescriptor);
+        }
+    }) as typeof fsModule.closeSync;
+    mutableStatFs.lstatSync = ((...args: unknown[]) => {
+        if (recording && isTrackedPath(args[0])) {
+            if (identityScope && identityScope.originalPathStatAllowance === 0) identityCompatibility.lstat += 1;
+            else {
+                metrics.pathLstatCount += 1;
+                if (identityScope) identityScope.originalPathStatAllowance -= 1;
+            }
+        }
+        return Reflect.apply(originalLstatSync, fsModule, args);
+    }) as typeof fsModule.lstatSync;
+    mutableStatFs.statSync = ((...args: unknown[]) => {
+        if (recording && isTrackedPath(args[0])) {
+            if (identityScope && identityScope.originalPathStatAllowance === 0) identityCompatibility.stat += 1;
+            else {
+                metrics.pathStatCount += 1;
+                if (identityScope) identityScope.originalPathStatAllowance -= 1;
+            }
+        }
+        return Reflect.apply(originalStatSync, fsModule, args);
+    }) as typeof fsModule.statSync;
+    fsModule.fstatSync = ((...args: unknown[]) => {
+        if (recording && compatibilityDescriptors.has(args[0] as number)) identityCompatibility.fstat += 1;
+        else if (recording && allTimelineDescriptors.has(args[0] as number)) {
+            metrics.descriptorStatCount += 1;
+        }
+        return Reflect.apply(originalFstatSync, fsModule, args);
+    }) as typeof fsModule.fstatSync;
+    fsModule.realpathSync.native = ((...args: unknown[]) => {
+        if (recording && isTrackedPath(args[0])) {
+            if (identityScope) identityCompatibility.realpath += 1;
+            else metrics.pathRealpathCount += 1;
+        }
+        return Reflect.apply(originalRealpathSyncNative, fsModule.realpathSync, args);
+    }) as typeof fsModule.realpathSync.native;
+    fsModule.existsSync = ((targetPath: fs.PathLike) => {
+        if (recording && isTrackedPath(targetPath)) metrics.pathExistsCount += 1;
+        return originalExistsSync(targetPath);
+    }) as typeof fsModule.existsSync;
+    fsModule.accessSync = ((...args: unknown[]) => {
+        if (recording && isTrackedPath(args[0])) metrics.pathAccessCount += 1;
+        return Reflect.apply(originalAccessSync, fsModule, args);
+    }) as typeof fsModule.accessSync;
+    fsModule.readlinkSync = ((...args: unknown[]) => {
+        if (recording && isTrackedPath(args[0])) metrics.pathReadlinkCount += 1;
+        return Reflect.apply(originalReadlinkSync, fsModule, args);
+    }) as typeof fsModule.readlinkSync;
+    fsModule.readdirSync = ((...args: unknown[]) => {
+        if (recording && path.resolve(String(args[0])) === resolvedEventsRoot) {
+            metrics.directoryEnumerationCount += 1;
+        }
+        return Reflect.apply(originalReaddirSync, fsModule, args);
+    }) as typeof fsModule.readdirSync;
+    fsModule.readFileSync = ((...args: unknown[]) => {
+        if (recording && path.resolve(String(args[0])) === resolvedTimelinePath) {
+            metrics.directFileReadCount += 1;
+        }
+        return Reflect.apply(originalReadFileSync, fsModule, args);
+    }) as typeof fsModule.readFileSync;
+
+    return {
+        metrics,
+        identityCompatibility,
+        withoutRecording: <T>(callback: () => T): T => {
+            const previousRecording = recording;
+            recording = false;
+            try {
+                return callback();
+            } finally {
+                recording = previousRecording;
+            }
+        },
+        restore: () => {
+            identityFs.lstatFileIdentitySync = originalIdentityLstat;
+            identityFs.statFileIdentitySync = originalIdentityStat;
+            identityFs.completePathFileIdentitySync = originalIdentityComplete;
+            fsModule.openSync = originalOpenSync;
+            fsModule.readSync = originalReadSync;
+            fsModule.closeSync = originalCloseSync;
+            mutableStatFs.lstatSync = originalLstatSync;
+            mutableStatFs.statSync = originalStatSync;
+            fsModule.fstatSync = originalFstatSync;
+            fsModule.realpathSync.native = originalRealpathSyncNative;
+            fsModule.existsSync = originalExistsSync;
+            fsModule.accessSync = originalAccessSync;
+            fsModule.readlinkSync = originalReadlinkSync;
+            fsModule.readdirSync = originalReaddirSync;
+            fsModule.readFileSync = originalReadFileSync;
+        }
+    };
+}
+
+function installBufferAllocationProbe(fullPayloadThreshold: number): BufferAllocationProbe {
+    const bufferModule = Buffer as typeof Buffer;
+    const bufferPrototype = Buffer.prototype;
+    const originalAlloc = bufferModule.alloc;
+    const originalAllocUnsafe = bufferModule.allocUnsafe;
+    const originalAllocUnsafeSlow = bufferModule.allocUnsafeSlow;
+    const originalConcat = bufferModule.concat;
+    const originalFrom = bufferModule.from;
+    const originalToString = bufferPrototype.toString;
+    const originalSubarray = bufferPrototype.subarray;
+    const originalSlice = bufferPrototype.slice;
+    const observedAllocations = new WeakMap<Buffer, { conversions: number }>();
+    const allocationConversions: Array<{ conversions: number }> = [];
+    const observeAllocation = (buffer: Buffer): void => {
+        const counter = { conversions: 0 };
+        observedAllocations.set(buffer, counter);
+        allocationConversions.push(counter);
+    };
+    let fullPayloadAllocations = 0;
+    const fullPayloadAllocationSizes: number[] = [];
+    let fullPayloadConcats = 0;
+    let fullPayloadStringConversions = 0;
+
+    bufferModule.alloc = ((size: number, fill?: string | number | Uint8Array, encoding?: BufferEncoding) => {
+        const result = originalAlloc(size, fill as string, encoding);
+        if (size >= fullPayloadThreshold) {
+            fullPayloadAllocations += 1;
+            fullPayloadAllocationSizes.push(size);
+            observeAllocation(result);
+        }
+        return result;
+    }) as typeof Buffer.alloc;
+
+    bufferModule.allocUnsafe = ((size: number) => {
+        const result = originalAllocUnsafe(size);
+        if (size >= fullPayloadThreshold) {
+            fullPayloadAllocations += 1;
+            fullPayloadAllocationSizes.push(size);
+            observeAllocation(result);
+        }
+        return result;
+    }) as typeof Buffer.allocUnsafe;
+    bufferModule.allocUnsafeSlow = ((size: number) => {
+        const result = originalAllocUnsafeSlow(size);
+        if (size >= fullPayloadThreshold) {
+            fullPayloadAllocations += 1;
+            fullPayloadAllocationSizes.push(size);
+            observeAllocation(result);
+        }
+        return result;
+    }) as typeof Buffer.allocUnsafeSlow;
+    bufferModule.concat = ((list: readonly Uint8Array[], totalLength?: number) => {
+        const resolvedLength = totalLength ?? list.reduce((total, entry) => total + entry.byteLength, 0);
+        const result = originalConcat(list, totalLength);
+        if (resolvedLength >= fullPayloadThreshold) {
+            fullPayloadConcats += 1;
+            observeAllocation(result);
+        }
+        return result;
+    }) as typeof Buffer.concat;
+    bufferModule.from = ((...args: unknown[]) => {
+        const result = Reflect.apply(originalFrom, bufferModule, args) as Buffer;
+        if (result.byteLength >= fullPayloadThreshold) {
+            fullPayloadAllocations += 1;
+            fullPayloadAllocationSizes.push(result.byteLength);
+            observeAllocation(result);
+        }
+        return result;
+    }) as typeof Buffer.from;
+    const observeView = (source: Buffer, view: Buffer): Buffer => {
+        const counter = observedAllocations.get(source);
+        if (counter && view.byteLength >= fullPayloadThreshold) {
+            observedAllocations.set(view, counter);
+        }
+        return view;
+    };
+    bufferPrototype.subarray = function (this: Buffer, start?: number, end?: number) {
+        return observeView(this, originalSubarray.call(this, start, end));
+    } as typeof Buffer.prototype.subarray;
+    bufferPrototype.slice = function (this: Buffer, start?: number, end?: number) {
+        return observeView(this, originalSlice.call(this, start, end));
+    } as typeof Buffer.prototype.slice;
+    bufferPrototype.toString = function (this: Buffer, ...args: unknown[]) {
+        // Native Windows ACL subprocess output is not a measured payload allocation.
+        const counter = observedAllocations.get(this);
+        if (counter) {
+            fullPayloadStringConversions += 1;
+            counter.conversions += 1;
+        }
+        return Reflect.apply(originalToString, this, args) as string;
+    } as typeof Buffer.prototype.toString;
+
+    return {
+        fullPayloadAllocationCount: () => fullPayloadAllocations,
+        fullPayloadAllocationSizes: () => [...fullPayloadAllocationSizes],
+        fullPayloadConcatCount: () => fullPayloadConcats,
+        fullPayloadStringConversionCount: () => fullPayloadStringConversions,
+        fullPayloadConversionsByAllocation: () => allocationConversions.map(counter => counter.conversions),
+        restore: () => {
+            bufferModule.alloc = originalAlloc;
+            bufferModule.allocUnsafe = originalAllocUnsafe;
+            bufferModule.allocUnsafeSlow = originalAllocUnsafeSlow;
+            bufferModule.concat = originalConcat;
+            bufferModule.from = originalFrom;
+            bufferPrototype.toString = originalToString;
+            bufferPrototype.subarray = originalSubarray;
+            bufferPrototype.slice = originalSlice;
+        }
+    };
+}
+
+test('payload conversion probe counts full buffer views and excludes unrelated native buffers', () => {
+    const unrelated = Buffer.alloc(64);
+    const probe = installBufferAllocationProbe(64);
+    try {
+        const payload = Buffer.alloc(64);
+        payload.toString();
+        payload.subarray().toString();
+        payload.slice().toString();
+        unrelated.toString();
+        payload.subarray(0, 32).toString();
+        assert.equal(probe.fullPayloadAllocationCount(), 1);
+        assert.equal(probe.fullPayloadStringConversionCount(), 3);
+        assert.deepEqual(probe.fullPayloadConversionsByAllocation(), [3]);
+    } finally {
+        probe.restore();
+    }
+});
+
+function createHeapUsageProbe(): HeapUsageProbe {
+    // This private function is never constructed. queryObjects completes a
+    // full collection without retaining heap objects or changing V8 flags.
+    queryObjects(createHeapUsageProbe, { format: 'count' });
+    const baselineHeapUsed = process.memoryUsage().heapUsed;
+    let maximumHeapUsed = baselineHeapUsed;
+    return {
+        sample: () => {
+            // Record the real pre-collection high-water sample, then discard
+            // unreachable prior generations before measuring the next one.
+            maximumHeapUsed = Math.max(maximumHeapUsed, process.memoryUsage().heapUsed);
+            queryObjects(createHeapUsageProbe, { format: 'count' });
+        },
+        maxGrowthBytes: () => Math.max(0, maximumHeapUsed - baselineHeapUsed)
+    };
+}
+
+function scenarioHeapBudgetBytes(payloadBytes: number, concurrentInvocations: number): number {
+    return Math.max(
+        LATENCY_SAMPLE_COUNT * SCENARIO_HEAP_GROWTH_SAMPLE_BUDGET_BYTES,
+        payloadBytes * SCENARIO_HEAP_GROWTH_PAYLOAD_MULTIPLIER * concurrentInvocations
+    );
+}
+
+function assertHeapUsageBounded(probe: HeapUsageProbe, payloadBytes: number, concurrentInvocations = 1): void {
+    probe.sample();
+    const budgetBytes = scenarioHeapBudgetBytes(payloadBytes, concurrentInvocations);
+    assert.ok(
+        probe.maxGrowthBytes() <= budgetBytes,
+        `Scenario heap growth exceeded ${budgetBytes} bytes: ${probe.maxGrowthBytes()} bytes.`
+    );
+}
+
+function authorityCallMetrics(metrics: TimelineReadMetrics): Record<string, number> {
+    return {
+        pathLstatCount: metrics.pathLstatCount,
+        pathStatCount: metrics.pathStatCount,
+        descriptorStatCount: metrics.descriptorStatCount,
+        pathRealpathCount: metrics.pathRealpathCount,
+        pathExistsCount: metrics.pathExistsCount,
+        pathAccessCount: metrics.pathAccessCount,
+        pathReadlinkCount: metrics.pathReadlinkCount,
+        directoryEnumerationCount: metrics.directoryEnumerationCount,
+        directFileReadCount: metrics.directFileReadCount
+    };
+}
+
+function assertStableScenarioLatency(samplesMs: number[]): { medianMs: number; p95Ms: number } {
+    assert.equal(samplesMs.length, LATENCY_SAMPLE_COUNT);
+    assert.ok(LATENCY_SAMPLE_COUNT >= 20, 'A p95 order statistic requires at least 20 measured samples.');
+    const sortedSamples = [...samplesMs].sort((left, right) => left - right);
+    const medianUpperIndex = Math.floor(sortedSamples.length / 2);
+    const medianMs = sortedSamples.length % 2 === 0
+        ? (sortedSamples[medianUpperIndex - 1] + sortedSamples[medianUpperIndex]) / 2
+        : sortedSamples[medianUpperIndex];
+    const p95Ms = sortedSamples[Math.ceil(sortedSamples.length * 0.95) - 1];
+    assert.ok(
+        p95Ms <= MAX_ACCEPTANCE_SCENARIO_P95_LATENCY_MS,
+        `Acceptance scenario p95 exceeded ${MAX_ACCEPTANCE_SCENARIO_P95_LATENCY_MS} ms: ${p95Ms.toFixed(1)} ms.`
+    );
+    assert.ok(
+        p95Ms - medianMs <= MAX_ACCEPTANCE_SCENARIO_P95_MEDIAN_SPREAD_MS,
+        `Acceptance scenario p95-to-median spread exceeded ${MAX_ACCEPTANCE_SCENARIO_P95_MEDIAN_SPREAD_MS} ms: ${(p95Ms - medianMs).toFixed(1)} ms.`
+    );
+    return { medianMs, p95Ms };
+}
+
+function assertAppendAuthoritySamples(
+    samples: Array<{ lstat: number; realpath: number }>,
+    baseline: { lstat: number; realpath: number },
+    coldIndexChecks: { lstat: number; realpath: number }
+): void {
+    assert.deepEqual(samples, Array.from({ length: LATENCY_SAMPLE_COUNT }, (_, index) => ({
+        lstat: baseline.lstat + (index === 0 ? coldIndexChecks.lstat : 0),
+        realpath: baseline.realpath + (index === 0 ? coldIndexChecks.realpath : 0)
+    })));
+}
+
+function recordScenarioMeasurements(
+    context: TestContext,
+    latencySamplesMs: number[],
+    payloadBytes: number,
+    probes: {
+        io: TimelineReadProbe;
+        allocation: BufferAllocationProbe;
+        heap: HeapUsageProbe;
+        concurrentInvocations?: number;
+        retainedPayloadBytes?: number;
+    }
+): void {
+    // Preserve the exact snapshot algorithm counts and every latency, payload,
+    // allocation and heap budget. Account for mandatory device reconstruction
+    // separately, then report the sum as physical I/O instead of hiding its cost.
+    const compatibility = probes.io.identityCompatibility;
+    assert.equal(compatibility.opens, compatibility.calls * 2);
+    assert.equal(compatibility.closes, compatibility.opens);
+    assert.equal(compatibility.fstat, compatibility.calls * 3);
+    assert.equal(compatibility.realpath, compatibility.calls * 2);
+    assert.equal(compatibility.payloadReads, 0);
+    assert.ok(compatibility.maxLiveDescriptors <= 2);
+    assert.ok(compatibility.lstat + compatibility.stat >= compatibility.calls);
+    assert.ok(compatibility.lstat + compatibility.stat <= compatibility.calls * 2);
+    const latency = assertStableScenarioLatency(latencySamplesMs);
+    context.diagnostic(`TIMELINE_ACCEPTANCE_MEASUREMENTS ${JSON.stringify({
+        schema_version: 1,
+        scenario: context.name,
+        node_version: process.versions.node,
+        platform: process.platform,
+        payload_bytes: payloadBytes,
+        retained_payload_bytes: probes.retainedPayloadBytes ?? payloadBytes,
+        concurrent_invocations: probes.concurrentInvocations ?? 1,
+        sample_count: latencySamplesMs.length,
+        median_ms: Number(latency.medianMs.toFixed(3)),
+        p95_ms: Number(latency.p95Ms.toFixed(3)),
+        max_ms: Number(Math.max(...latencySamplesMs).toFixed(3)),
+        io_scope: 'canonical_timeline_and_events_root',
+        snapshot_io: { ...probes.io.metrics },
+        identity_compatibility_io: { ...compatibility },
+        physical_io: {
+            ...probes.io.metrics,
+            descriptorOpenCount: probes.io.metrics.descriptorOpenCount + compatibility.opens,
+            pathLstatCount: probes.io.metrics.pathLstatCount + compatibility.lstat,
+            pathStatCount: probes.io.metrics.pathStatCount + compatibility.stat,
+            descriptorStatCount: probes.io.metrics.descriptorStatCount + compatibility.fstat,
+            pathRealpathCount: probes.io.metrics.pathRealpathCount + compatibility.realpath
+        },
+        buffer_metrics: {
+            full_payload_allocations: probes.allocation.fullPayloadAllocationCount(),
+            full_payload_concats: probes.allocation.fullPayloadConcatCount(),
+            full_payload_string_conversions: probes.allocation.fullPayloadStringConversionCount()
+        },
+        heap_growth_bytes: probes.heap.maxGrowthBytes(),
+        heap_budget_bytes: scenarioHeapBudgetBytes(probes.retainedPayloadBytes ?? payloadBytes, probes.concurrentInvocations ?? 1)
+    })}`);
+}
+
+test.afterEach(() => {
+    for (const tempRoot of tempRoots.splice(0)) {
+        fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+});
+
+test('multi-megabyte read-only invocation captures and allocates the canonical payload once', (context) => {
+    const taskId = 'T-PERFORMANCE-LARGE-READ';
+    const fixture = seedLargeIntegrityTimeline(taskId);
+    withTaskTimelineReadSnapshot(fixture.eventsRoot, taskId, () => {
+        assert.equal(inspectTaskEventFile(fixture.timelinePath, taskId).status, 'PASS');
+    });
+    const ioProbe = installTimelineReadProbe(fixture.timelinePath);
+    const allocationProbe = installBufferAllocationProbe(fixture.byteLength);
+    const heapProbe = createHeapUsageProbe();
+    const latencySamplesMs: number[] = [];
+    const originalJsonParse = JSON.parse;
+    let jsonParseCalls = 0;
+    JSON.parse = ((text: string, reviver?: (this: unknown, key: string, value: unknown) => unknown) => {
+        jsonParseCalls += 1;
+        return originalJsonParse(text, reviver);
+    }) as typeof JSON.parse;
+
+    try {
+        for (let sampleIndex = 0; sampleIndex < LATENCY_SAMPLE_COUNT; sampleIndex += 1) {
+            const startedAt = performance.now();
+            withTaskTimelineReadSnapshot(fixture.eventsRoot, taskId, () => {
+                const firstInspection = inspectTaskEventFile(fixture.timelinePath, taskId);
+                assert.equal(firstInspection.status, 'PASS');
+                assert.equal(firstInspection.integrity_event_count, fixture.eventCount);
+                const parseCallsAfterFirstInspection = jsonParseCalls;
+
+                assert.equal(inspectTaskEventFile(fixture.timelinePath, taskId).status, 'PASS');
+                assert.equal(readTaskTimelineJsonlEntries(fixture.timelinePath).length, fixture.eventCount);
+                assert.equal(readTaskTimelineTextFile(fixture.timelinePath).length, fixture.byteLength);
+                assert.equal(readTaskTimelineTextFile(fixture.timelinePath).length, fixture.byteLength);
+                assert.equal(jsonParseCalls, parseCallsAfterFirstInspection);
+                heapProbe.sample();
+            });
+            latencySamplesMs.push(performance.now() - startedAt);
+        }
+
+        const expectedBytes = fixture.byteLength * LATENCY_SAMPLE_COUNT;
+        assert.equal(ioProbe.metrics.descriptorOpenCount, LATENCY_SAMPLE_COUNT);
+        assert.equal(ioProbe.metrics.readCallCount, LATENCY_SAMPLE_COUNT);
+        assert.equal(ioProbe.metrics.requestedBytes, expectedBytes);
+        assert.equal(ioProbe.metrics.returnedBytes, expectedBytes);
+        assert.equal(ioProbe.metrics.largestRequestedRead, fixture.byteLength);
+        assert.equal(allocationProbe.fullPayloadAllocationCount(), LATENCY_SAMPLE_COUNT);
+        assert.deepEqual(
+            allocationProbe.fullPayloadAllocationSizes(),
+            Array.from({ length: LATENCY_SAMPLE_COUNT }, () => fixture.byteLength)
+        );
+        assert.equal(allocationProbe.fullPayloadConcatCount(), 0);
+        assert.equal(allocationProbe.fullPayloadStringConversionCount(), LATENCY_SAMPLE_COUNT);
+        assert.deepEqual(authorityCallMetrics(ioProbe.metrics), {
+            pathLstatCount: (32 + INTEGRITY_QUERY_AUTHORITY_CHECKS.lstat) * LATENCY_SAMPLE_COUNT,
+            pathStatCount: 0,
+            descriptorStatCount: 2 * LATENCY_SAMPLE_COUNT,
+            pathRealpathCount: (32 + INTEGRITY_QUERY_AUTHORITY_CHECKS.realpath) * LATENCY_SAMPLE_COUNT,
+            pathExistsCount: 0,
+            pathAccessCount: 0,
+            pathReadlinkCount: 0,
+            directoryEnumerationCount: 0,
+            directFileReadCount: 0
+        });
+        assertHeapUsageBounded(heapProbe, fixture.byteLength);
+    } finally {
+        JSON.parse = originalJsonParse;
+        allocationProbe.restore();
+        ioProbe.restore();
+    }
+    recordScenarioMeasurements(context, latencySamplesMs, fixture.byteLength, {
+        io: ioProbe, allocation: allocationProbe, heap: heapProbe
+    });
+});
+
+test('standalone bounded-tail capture reads and allocates only its configured window', (context) => {
+    const taskId = 'T-PERFORMANCE-BOUNDED-TAIL';
+    const fixture = createTimelineFixture(taskId);
+    const record = JSON.stringify({ task_id: taskId, sequence: 1, payload: 'x'.repeat(512) });
+    const recordCount = Math.ceil((3 * 1024 * 1024) / (Buffer.byteLength(record) + 1));
+    fs.writeFileSync(fixture.timelinePath, `${Array.from({ length: recordCount }, () => record).join('\n')}\n`, {
+        encoding: 'utf8',
+        mode: 0o600
+    });
+    const configuredWindowBytes = 4096;
+    const tailOptions = {
+        maxBytes: configuredWindowBytes,
+        maxLines: 32,
+        maxEvents: 16,
+        maxParseAttempts: 16
+    };
+    readTaskTimelineBoundedJsonlTail<Record<string, unknown>>(fixture.timelinePath, tailOptions);
+    const ioProbe = installTimelineReadProbe(fixture.timelinePath);
+    const allocationProbe = installBufferAllocationProbe(configuredWindowBytes + 1);
+    const heapProbe = createHeapUsageProbe();
+    const latencySamplesMs: number[] = [];
+
+    try {
+        for (let sampleIndex = 0; sampleIndex < LATENCY_SAMPLE_COUNT; sampleIndex += 1) {
+            const startedAt = performance.now();
+            const result = readTaskTimelineBoundedJsonlTail<Record<string, unknown>>(
+                fixture.timelinePath,
+                tailOptions
+            );
+            latencySamplesMs.push(performance.now() - startedAt);
+            assert.equal(result.bytesRead, configuredWindowBytes);
+            assert.ok(result.records.length > 0);
+            heapProbe.sample();
+        }
+
+        const expectedBytes = configuredWindowBytes * LATENCY_SAMPLE_COUNT;
+        assert.equal(ioProbe.metrics.descriptorOpenCount, LATENCY_SAMPLE_COUNT);
+        assert.equal(ioProbe.metrics.readCallCount, LATENCY_SAMPLE_COUNT);
+        assert.equal(ioProbe.metrics.requestedBytes, expectedBytes);
+        assert.equal(ioProbe.metrics.returnedBytes, expectedBytes);
+        assert.equal(ioProbe.metrics.largestRequestedRead, configuredWindowBytes);
+        assert.equal(allocationProbe.fullPayloadAllocationCount(), 0);
+        assert.deepEqual(allocationProbe.fullPayloadAllocationSizes(), []);
+        assert.equal(allocationProbe.fullPayloadConcatCount(), 0);
+        assert.equal(allocationProbe.fullPayloadStringConversionCount(), 0);
+        assert.deepEqual(authorityCallMetrics(ioProbe.metrics), {
+            pathLstatCount: 6 * LATENCY_SAMPLE_COUNT,
+            pathStatCount: 0,
+            descriptorStatCount: 2 * LATENCY_SAMPLE_COUNT,
+            pathRealpathCount: 6 * LATENCY_SAMPLE_COUNT,
+            pathExistsCount: 0,
+            pathAccessCount: 0,
+            pathReadlinkCount: 0,
+            directoryEnumerationCount: 0,
+            directFileReadCount: 0
+        });
+        assertHeapUsageBounded(heapProbe, configuredWindowBytes);
+    } finally {
+        allocationProbe.restore();
+        ioProbe.restore();
+    }
+    recordScenarioMeasurements(context, latencySamplesMs, (Buffer.byteLength(record) + 1) * recordCount, {
+        io: ioProbe, allocation: allocationProbe, heap: heapProbe, retainedPayloadBytes: configuredWindowBytes
+    });
+});
+
+function verifyCanonicalSelfWrite(context: TestContext, fixtureSize: 'small' | 'multi-megabyte'): void {
+    const taskId = `T-PERFORMANCE-REPEATED-APPEND-${fixtureSize === 'small' ? 'SMALL' : 'LARGE'}`;
+    const fixture = fixtureSize === 'small' ? seedSmallTimeline(taskId) : seedLargeIntegrityTimeline(taskId);
+    const initialByteLength = fs.statSync(fixture.timelinePath).size;
+    const coldIndexChecks = fixtureSize === 'small' ? { lstat: 0, realpath: 0 } : COLD_APPEND_INDEX_AUTHORITY_CHECKS;
+    if (fixtureSize === 'multi-megabyte') assert.ok(initialByteLength >= MULTI_MEGABYTE_FIXTURE_BYTES);
+    withTaskTimelineReadSnapshot(fixture.eventsRoot, taskId, () => {
+        assert.equal(inspectTaskEventFile(fixture.timelinePath, taskId).status, 'PASS');
+    });
+    const ioProbe = installTimelineReadProbe(fixture.timelinePath);
+    const allocationProbe = installBufferAllocationProbe(initialByteLength);
+    const heapProbe = createHeapUsageProbe();
+    const generationByteLengths = [initialByteLength];
+    const latencySamplesMs: number[] = [];
+    const appendAuthoritySamples: Array<{ lstat: number; realpath: number }> = [];
+
+    try {
+        withTaskTimelineReadSnapshot(fixture.eventsRoot, taskId, () => {
+            const seedEventType = fixtureSize === 'small' ? 'PERFORMANCE_ACCEPTANCE_SEED' : 'PERFORMANCE_ACCEPTANCE';
+            assert.ok(readTaskTimelineTextFile(fixture.timelinePath).includes(`"event_type":"${seedEventType}"`));
+            for (let index = 0; index < LATENCY_SAMPLE_COUNT; index += 1) {
+                const beforeAuthority = { lstat: ioProbe.metrics.pathLstatCount, realpath: ioProbe.metrics.pathRealpathCount };
+                const startedAt = performance.now();
+                const result = appendTaskEvent(
+                    fixture.orchestratorRoot,
+                    taskId,
+                    `PERFORMANCE_ACCEPTANCE_APPEND_${index + 1}`,
+                    'PASS',
+                    `Measured append ${index + 1}`,
+                    { index },
+                    { passThru: true, lowNoiseRuntimeWrites: true }
+                );
+                assert.equal(result?.commit_status, 'committed');
+                generationByteLengths.push(ioProbe.withoutRecording(() => fs.statSync(fixture.timelinePath).size));
+                assert.match(readTaskTimelineTextFile(fixture.timelinePath), /PERFORMANCE_ACCEPTANCE_APPEND_/);
+                heapProbe.sample();
+                latencySamplesMs.push(performance.now() - startedAt);
+                appendAuthoritySamples.push({
+                    lstat: ioProbe.metrics.pathLstatCount - beforeAuthority.lstat,
+                    realpath: ioProbe.metrics.pathRealpathCount - beforeAuthority.realpath
+                });
+            }
+
+            const parseCallsBeforeInspection = ioProbe.metrics.readCallCount;
+            assert.equal(inspectTaskEventFile(fixture.timelinePath, taskId).status, 'PASS');
+            assert.equal(inspectTaskEventFile(fixture.timelinePath, taskId).status, 'PASS');
+            assert.equal(ioProbe.metrics.readCallCount, parseCallsBeforeInspection);
+        });
+
+        const expectedGenerationBytes = generationByteLengths.reduce((total, byteLength) => total + byteLength, 0);
+        assert.equal(ioProbe.metrics.descriptorOpenCount, generationByteLengths.length);
+        assert.equal(ioProbe.metrics.readCallCount, generationByteLengths.length);
+        assert.equal(ioProbe.metrics.requestedBytes, expectedGenerationBytes);
+        assert.equal(ioProbe.metrics.returnedBytes, expectedGenerationBytes);
+        assert.equal(ioProbe.metrics.largestRequestedRead, generationByteLengths.at(-1));
+        assert.equal(allocationProbe.fullPayloadAllocationCount(), generationByteLengths.length);
+        assert.deepEqual(allocationProbe.fullPayloadAllocationSizes(), generationByteLengths);
+        assert.equal(allocationProbe.fullPayloadConcatCount(), 0);
+        assert.equal(allocationProbe.fullPayloadStringConversionCount(), generationByteLengths.length);
+        assertAppendAuthoritySamples(appendAuthoritySamples, { lstat: 31, realpath: 30 }, coldIndexChecks);
+        assert.deepEqual(authorityCallMetrics(ioProbe.metrics), {
+            pathLstatCount: (32 * LATENCY_SAMPLE_COUNT) + 4 + INTEGRITY_QUERY_AUTHORITY_CHECKS.lstat + coldIndexChecks.lstat,
+            pathStatCount: 2 * LATENCY_SAMPLE_COUNT,
+            descriptorStatCount: (5 * LATENCY_SAMPLE_COUNT) + 2,
+            pathRealpathCount: (31 * LATENCY_SAMPLE_COUNT) + 4 + INTEGRITY_QUERY_AUTHORITY_CHECKS.realpath + coldIndexChecks.realpath,
+            pathExistsCount: 0,
+            pathAccessCount: 0,
+            pathReadlinkCount: 0,
+            directoryEnumerationCount: 0,
+            directFileReadCount: 0
+        });
+        assertHeapUsageBounded(heapProbe, generationByteLengths.at(-1) || initialByteLength);
+    } finally {
+        allocationProbe.restore();
+        ioProbe.restore();
+    }
+    recordScenarioMeasurements(context, latencySamplesMs, generationByteLengths.at(-1) || initialByteLength, {
+        io: ioProbe, allocation: allocationProbe, heap: heapProbe
+    });
+}
+
+async function verifyOverlappingInvocations(context: TestContext, fixtureSize: 'small' | 'multi-megabyte'): Promise<void> {
+    const taskId = `T-PERFORMANCE-OVERLAPPING-${fixtureSize === 'small' ? 'SMALL' : 'LARGE'}`;
+    const fixture = fixtureSize === 'small' ? seedSmallTimeline(taskId) : seedLargeIntegrityTimeline(taskId);
+    const initialByteLength = fs.statSync(fixture.timelinePath).size;
+    const coldIndexChecks = fixtureSize === 'small' ? { lstat: 0, realpath: 0 } : COLD_APPEND_INDEX_AUTHORITY_CHECKS;
+    if (fixtureSize === 'multi-megabyte') assert.ok(initialByteLength >= MULTI_MEGABYTE_FIXTURE_BYTES);
+    withTaskTimelineReadSnapshot(fixture.eventsRoot, taskId, () => {
+        readTaskTimelineTextFile(fixture.timelinePath);
+    });
+    const ioProbe = installTimelineReadProbe(fixture.timelinePath);
+    const allocationProbe = installBufferAllocationProbe(initialByteLength);
+    const heapProbe = createHeapUsageProbe();
+    const latencySamplesMs: number[] = [];
+    const generationByteLengths: number[] = [];
+    const appendAuthoritySamples: Array<{ lstat: number; realpath: number }> = [];
+
+    try {
+        for (let index = 0; index < LATENCY_SAMPLE_COUNT; index += 1) {
+            const beforeAuthority = { lstat: ioProbe.metrics.pathLstatCount, realpath: ioProbe.metrics.pathRealpathCount };
+            const beforeAppendByteLength = ioProbe.withoutRecording(() => fs.statSync(fixture.timelinePath).size);
+            let releaseFirst!: () => void;
+            let signalFirstReady!: () => void;
+            let signalSecondReady!: () => void;
+            let signalFirstOverlapConfirmed!: () => void;
+            let firstInvocationSettled = false;
+            const firstReady = new Promise<void>((resolve) => {
+                signalFirstReady = resolve;
+            });
+            const secondReady = new Promise<void>((resolve) => {
+                signalSecondReady = resolve;
+            });
+            const firstOverlapConfirmed = new Promise<void>((resolve) => {
+                signalFirstOverlapConfirmed = resolve;
+            });
+            const firstRelease = new Promise<void>((resolve) => {
+                releaseFirst = resolve;
+            });
+            const startedAt = performance.now();
+            const firstInvocation = withTaskTimelineReadSnapshot(fixture.eventsRoot, taskId, async () => {
+                try {
+                    readTaskTimelineTextFile(fixture.timelinePath);
+                    assert.equal(isTaskTimelineReadSnapshotActive(fixture.timelinePath), true);
+                    signalFirstReady();
+                    await secondReady;
+                    try {
+                        assert.equal(isTaskTimelineReadSnapshotActive(fixture.timelinePath), true);
+                    } finally {
+                        signalFirstOverlapConfirmed();
+                    }
+                    await firstRelease;
+                    assert.equal(isTaskTimelineReadSnapshotActive(fixture.timelinePath), true);
+                    assert.throws(() => readTaskTimelineTextFile(fixture.timelinePath), /snapshot is unavailable/);
+                } finally {
+                    firstInvocationSettled = true;
+                }
+            });
+            await Promise.race([firstReady, firstInvocation]);
+
+            try {
+                await withTaskTimelineReadSnapshot(fixture.eventsRoot, taskId, async () => {
+                    signalSecondReady();
+                    assert.equal(isTaskTimelineReadSnapshotActive(fixture.timelinePath), true);
+                    assert.equal(firstInvocationSettled, false);
+                    await firstOverlapConfirmed;
+                    assert.equal(isTaskTimelineReadSnapshotActive(fixture.timelinePath), true);
+                    assert.equal(firstInvocationSettled, false);
+                    const result = appendTaskEvent(
+                        fixture.orchestratorRoot,
+                        taskId,
+                        `PERFORMANCE_ACCEPTANCE_OVERLAP_${index + 1}`,
+                        'PASS',
+                        `Measured overlapping append ${index + 1}`,
+                        { index },
+                        { passThru: true, lowNoiseRuntimeWrites: true }
+                    );
+                    assert.equal(result?.commit_status, 'committed');
+                    assert.match(readTaskTimelineTextFile(fixture.timelinePath), /PERFORMANCE_ACCEPTANCE_OVERLAP_/);
+                    assert.equal(firstInvocationSettled, false);
+                    heapProbe.sample();
+                });
+                const appendedByteLength = ioProbe.withoutRecording(() => fs.statSync(fixture.timelinePath).size);
+                generationByteLengths.push(beforeAppendByteLength, beforeAppendByteLength, appendedByteLength);
+            } finally {
+                releaseFirst();
+                await firstInvocation;
+            }
+            heapProbe.sample();
+            latencySamplesMs.push(performance.now() - startedAt);
+            appendAuthoritySamples.push({
+                lstat: ioProbe.metrics.pathLstatCount - beforeAuthority.lstat,
+                realpath: ioProbe.metrics.pathRealpathCount - beforeAuthority.realpath
+            });
+        }
+
+        const expectedGenerationBytes = generationByteLengths.reduce((total, byteLength) => total + byteLength, 0);
+        assert.equal(ioProbe.metrics.descriptorOpenCount, generationByteLengths.length);
+        assert.equal(ioProbe.metrics.readCallCount, generationByteLengths.length);
+        assert.equal(ioProbe.metrics.requestedBytes, expectedGenerationBytes);
+        assert.equal(ioProbe.metrics.returnedBytes, expectedGenerationBytes);
+        assert.equal(ioProbe.metrics.largestRequestedRead, generationByteLengths.at(-1));
+        assert.equal(allocationProbe.fullPayloadAllocationCount(), generationByteLengths.length);
+        assert.deepEqual(allocationProbe.fullPayloadAllocationSizes(), generationByteLengths);
+        assert.equal(allocationProbe.fullPayloadConcatCount(), 0);
+        // Every cycle still captures all three authenticated generations. The middle
+        // capture is used for append byte limits, not text; only a cold large-file
+        // append-index rebuild consumes that text. Count each allocation separately
+        // so an extra conversion cannot hide behind an unused generation.
+        const expectedConversions = generationByteLengths.map((_, index) => (
+            index % 3 !== 1 || (fixtureSize === 'multi-megabyte' && index === 1) ? 1 : 0
+        ));
+        assert.deepEqual(allocationProbe.fullPayloadConversionsByAllocation(), expectedConversions);
+        assert.equal(allocationProbe.fullPayloadStringConversionCount(),
+            expectedConversions.reduce<number>((sum, count) => sum + count, 0));
+        assertAppendAuthoritySamples(appendAuthoritySamples, { lstat: 41, realpath: 40 }, coldIndexChecks);
+        assert.deepEqual(authorityCallMetrics(ioProbe.metrics), {
+            pathLstatCount: (41 * LATENCY_SAMPLE_COUNT) + coldIndexChecks.lstat,
+            pathStatCount: 2 * LATENCY_SAMPLE_COUNT,
+            descriptorStatCount: 9 * LATENCY_SAMPLE_COUNT,
+            pathRealpathCount: (40 * LATENCY_SAMPLE_COUNT) + coldIndexChecks.realpath,
+            pathExistsCount: 0,
+            pathAccessCount: 0,
+            pathReadlinkCount: 0,
+            directoryEnumerationCount: 0,
+            directFileReadCount: 0
+        });
+        assertHeapUsageBounded(heapProbe, generationByteLengths.at(-1) || initialByteLength, OVERLAPPING_INVOCATION_COUNT);
+    } finally {
+        allocationProbe.restore();
+        ioProbe.restore();
+    }
+    recordScenarioMeasurements(context, latencySamplesMs, generationByteLengths.at(-1) || initialByteLength, {
+        io: ioProbe, allocation: allocationProbe, heap: heapProbe, concurrentInvocations: OVERLAPPING_INVOCATION_COUNT
+    });
+}
+
+for (const fixtureSize of ['small', 'multi-megabyte'] as const) {
+    const prefix = fixtureSize === 'small' ? '' : 'multi-megabyte ';
+    test(`${prefix}repeated canonical appends perform one authenticated payload capture per generation`, (context) => {
+        verifyCanonicalSelfWrite(context, fixtureSize);
+    });
+    test(`${prefix}overlapping invocations keep independent bounded generations without a recovery reread`, async (context) => {
+        await verifyOverlappingInvocations(context, fixtureSize);
+    });
+}

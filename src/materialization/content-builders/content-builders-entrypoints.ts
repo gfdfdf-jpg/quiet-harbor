@@ -1,0 +1,151 @@
+import { resolveBundleName } from '../../core/constants';
+import { buildTaskStartNavigatorPrompt, NOT_EVERY_REQUEST_IS_A_TASK_RULE } from '../../core/onboarding-contract';
+import {
+    buildFreshMainAgentStartBannerSentence,
+    START_BANNER_GATE_LIST_RULE
+} from '../../core/orchestrator-start-banner';
+import { formatProviderIdList, getProviderBridgeEntries } from '../../core/provider-registry';
+import {
+    REVIEWER_CLEANUP_AFTER_RECEIPT_INSTRUCTION,
+    REVIEWER_FRESH_CONTEXT_LAUNCH_INSTRUCTION
+} from '../../gate-runtime/reviewer-session-contract';
+import { getGardaCliCommand, getGardaGateCommandPrefix, getNodeHumanCommitCommand, type GardaCliMode } from '../command-constants';
+import {
+    addAntigravityCanonicalStopInstruction,
+    ANTIGRAVITY_INDEPENDENT_REVIEW_UNAVAILABLE_STOP_INSTRUCTION,
+    COMMIT_GUARD_AGENT_MARKERS,
+    COMMIT_GUARD_END,
+    COMMIT_GUARD_ENV_NAME,
+    COMMIT_GUARD_EXTRA_MARKERS_ENV,
+    COMMIT_GUARD_START,
+    extractManagedBlockFromContent,
+    INSTALLED_BUNDLE_OWNERSHIP_RULE,
+    isAntigravityEntrypointPath,
+    MANAGED_END,
+    MANAGED_START,
+    restoreEntrypointRuleLinks
+} from './content-builders-shared';
+
+export function buildCanonicalManagedBlock(
+    canonicalFile: string,
+    entrypointTemplateContent: string,
+    cliMode: GardaCliMode = 'deployed'
+): string {
+    const baseBlock = extractManagedBlockFromContent(entrypointTemplateContent, MANAGED_START, MANAGED_END);
+    if (!baseBlock) {
+        throw new Error('Entrypoint template managed block is missing; cannot build canonical entrypoint.');
+    }
+    const canonicalBlock = restoreEntrypointRuleLinks(baseBlock)
+        // The template names the deployed CLI so older runtimes render a working command; source mode swaps it.
+        .split(getGardaCliCommand('deployed')).join(getGardaCliCommand(cliMode))
+        .replace(/^# .+$/m, `# ${canonicalFile}\n\n${INSTALLED_BUNDLE_OWNERSHIP_RULE}`)
+        .replace(
+            /At setup, source of truth is selected via `-SourceOfTruth` \([^)]+\)\./,
+            `At setup, source of truth is selected via \`-SourceOfTruth\` (\`${formatProviderIdList('`, `')}\`).`
+        );
+    return addAntigravityCanonicalStopInstruction(canonicalBlock, canonicalFile);
+}
+
+export function buildRedirectManagedBlock(
+    targetFile: string,
+    canonicalFile: string,
+    providerBridgePaths: string[] | null | undefined,
+    cliMode: GardaCliMode = 'deployed'
+): string {
+    const gate = getGardaGateCommandPrefix(cliMode);
+    const providerLines = [];
+    const bridgeToLabel = new Map(
+        getProviderBridgeEntries().map((e) => [
+            e.bridge!.orchestratorRelativePath,
+            e.displayLabel
+        ])
+    );
+    for (const bridgePath of (providerBridgePaths || [])) {
+        const normalized = bridgePath.replace(/\\/g, '/');
+        const label = bridgeToLabel.get(normalized);
+        if (label) {
+            providerLines.push(`For ${label} Agents, run task execution through \`${normalized}\`.`);
+        }
+    }
+    const uniqueProviderLines = [...new Set(providerLines)].sort();
+    const providerBridgeSection = uniqueProviderLines.length > 0
+        ? uniqueProviderLines.join('\r\n')
+        : 'No provider-specific bridge files are enabled for this workspace.';
+    const targetSpecificInstructions = isAntigravityEntrypointPath(targetFile)
+        ? [ANTIGRAVITY_INDEPENDENT_REVIEW_UNAVAILABLE_STOP_INSTRUCTION]
+        : [];
+
+    return [
+        MANAGED_START,
+        `# ${targetFile}`,
+        '',
+        'This file is a redirect.',
+        INSTALLED_BUNDLE_OWNERSHIP_RULE,
+        `Canonical source of truth for agent workflow rules: \`${canonicalFile}\`.`,
+        '',
+        `Hard stop: read \`${canonicalFile}\` first and follow its routing links before responding to anything.`,
+        `Hard stop: before any task execution, open \`${canonicalFile}\`, \`TASK.md\`, and \`.agents/workflows/start-task.md\`.`,
+        NOT_EVERY_REQUEST_IS_A_TASK_RULE,
+        'Do not implement tasks directly without orchestration preflight and required review gates.',
+        `Canonical task-start command: ${buildTaskStartNavigatorPrompt()}`,
+        buildFreshMainAgentStartBannerSentence(),
+        START_BANNER_GATE_LIST_RULE,
+        'If the workspace already contains modified files before task-mode entry, stop and isolate scope via `--use-staged` or explicit `--changed-file ...` preflight inputs before continuing.',
+        'Use compact command protocol from `40-commands.md`: first `scan`, then `inspect`, then verbose `debug` only by exception.',
+        'Treat `.agents/workflows/start-task.md` as the shared start-task router for root entrypoints and provider bridges; it routes to the canonical workflow and does not replace `80-task-workflow.md`.',
+        `After opening downstream workflow files, record them via \`${gate} load-rule-pack ...\`.`,
+        `Before each required reviewer invocation, run \`${gate} build-review-context ...\`; completion for code-changing tasks expects review-skill telemetry from that step. ${REVIEWER_FRESH_CONTEXT_LAUNCH_INSTRUCTION} ${REVIEWER_CLEANUP_AFTER_RECEIPT_INSTRUCTION} Downstream \`test\` review must wait for current-cycle PASS evidence from every required upstream non-\`test\` review.`,
+        ...targetSpecificInstructions,
+        `Ignored orchestration control-plane files (for example \`TASK.md\`, \`${resolveBundleName()}/runtime/**\`, and \`${resolveBundleName()}/live/docs/changes/CHANGELOG.md\`) are expected local artifacts; never \`git add -f\` them in an installed project, even with operator approval.`,
+        providerBridgeSection,
+        MANAGED_END
+    ].join('\r\n');
+}
+
+export function buildCommitGuardManagedBlock() {
+    const agentEnvLines = COMMIT_GUARD_AGENT_MARKERS.map((m) => `  "${m}"`).join('\n');
+    return `${COMMIT_GUARD_START}
+# Installed bundle ownership is independent of commit approval.
+# Index removals only untrack bundle files; additions, modifications and type changes stay blocked.
+if ! node -e 'try { process.exit(require(process.cwd()+"/package.json").name === "garda-agent-orchestrator" ? 0 : 1); } catch { process.exit(1); }'; then
+  git diff --cached --quiet --no-renames --diff-filter=d -- ':(top,icase)garda-agent-orchestrator'
+  garda_bundle_status=$?
+  if [ "$garda_bundle_status" != "0" ]; then
+    echo "Commit blocked: installed Garda bundle files cannot be committed. Record Garda defects in the TASK.md orchestrator-problems section."
+    exit 1
+  fi
+fi
+# Commit blocked by Garda auto-commit guard only for detected agent sessions.
+if [ "\${${COMMIT_GUARD_ENV_NAME}:-}" = "1" ]; then
+  exit 0
+fi
+
+garda_agent_env_markers=(
+${agentEnvLines}
+)
+
+if [ -n "\${${COMMIT_GUARD_EXTRA_MARKERS_ENV}:-}" ]; then
+  IFS=', ' read -r -a garda_extra_agent_markers <<< "\${${COMMIT_GUARD_EXTRA_MARKERS_ENV}}"
+  for garda_marker in "\${garda_extra_agent_markers[@]}"; do
+    if [[ "$garda_marker" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+      garda_agent_env_markers+=("$garda_marker")
+    fi
+  done
+fi
+
+garda_detected_agent_var=""
+for garda_marker in "\${garda_agent_env_markers[@]}"; do
+  if [ -n "\${!garda_marker:-}" ]; then
+    garda_detected_agent_var="$garda_marker"
+    break
+  fi
+done
+
+if [ -n "$garda_detected_agent_var" ]; then
+  echo "Commit blocked: agent commit guard is enabled (detected env: $garda_detected_agent_var)."
+  echo "For completed and audited task scope under authenticated local commit permission ON, use helper:"
+  echo "  ${getNodeHumanCommitCommand().replace(/"/g, '\\"')}"
+  exit 1
+fi
+${COMMIT_GUARD_END}`;
+}
