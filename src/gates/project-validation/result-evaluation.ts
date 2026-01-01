@@ -16,8 +16,7 @@ import { getTaskModeEvidence } from '../task-mode/task-mode';
 import { resolveTaskProfileReviewTriggerPolicy } from '../../policy/task-profile-policy-snapshot';
 import { bindContainedDestination, assertExistingPathIdentity } from '../../core/contained-filesystem';
 import { withFilesystemLockAsync } from '../../gate-runtime/timeline/task-events-locking';
-import { freezeValidationRecipe, validationPaths } from './authority';
-import { declaredValidationTestPaths } from './focused';
+import { freezeValidationRecipe, readProjectValidationAuthority, validationPaths } from './authority';
 import { readValidationEvents, readValidationRecipeSnapshot, recordValidationEvent, writeValidationFact,
     type ValidationEvidenceBatch, type ValidationEvidenceInspection } from './attempt-evidence';
 
@@ -25,6 +24,7 @@ export function assertValidationExpectedRed(repoRoot: string, taskId: string, re
     if (isInvocationReadObservationActive()) readCurrentValidationSnapshot(repoRoot, taskId);
     else readValidationEvents(repoRoot, taskId);
     const snapshot = freezeValidationRecipe(repoRoot, taskId, recipeId);
+    const authority = readProjectValidationAuthority(repoRoot);
     const preflight = JSON.parse(readValidationFile(repoRoot, validationPaths(repoRoot, taskId).preflight).bytes.toString('utf8')) as Record<string, unknown>;
     const taskMode = getTaskModeEvidence(repoRoot, taskId);
     if (taskMode.evidence_status !== 'PASS')
@@ -33,13 +33,15 @@ export function assertValidationExpectedRed(repoRoot: string, taskId: string, re
         ? resolveTaskProfileReviewTriggerPolicy(taskMode.profile_policy_snapshot) : undefined;
     const config = getClassificationConfig(repoRoot, { reviewTriggerPolicy }), changedFiles = preflight.changed_files as string[];
     const category = classifyScopeCategory(changedFiles, config.code_like_regexes, config.runtime_roots, { testTriggerRegexes: config.test_trigger_regexes,
-        declaredTestPaths: [...declaredValidationTestPaths(repoRoot)],
+        declaredTestPaths: authority?.approved.contract.recipes.flatMap(recipe => recipe.inputs
+            .filter(input => input.role === 'test').map(input => input.path)) ?? [],
         protectedControlPlaneRoots: config.protected_control_plane_roots, ordinaryDocPaths: config.ordinary_doc_paths,
         sqlOrMigrationRegexes: config.sql_or_migration_regexes, dbTriggerRegexes: config.db_trigger_regexes,
         securityTriggerRegexes: config.security_trigger_regexes, apiTriggerRegexes: config.api_trigger_regexes, dependencyTriggerRegexes: config.dependency_trigger_regexes });
     if (preflight.scope_category !== 'test-only' || category.category !== 'test-only'
         || !hasTestFirstExpectedRedDeclaration(readTaskQueueEntries(repoRoot).get(taskId))) throw new Error('Expected-red requires current native test-only scope and TASK declaration');
-    if (!eligibleExpectedRedRecipes([snapshot.recipe], requiredExpectedRedFiles(preflight, repoRoot, config)).some(recipe => recipe.id === recipeId)) throw new Error('Expected-red recipe lacks changed declared test targets');
+    if (!eligibleExpectedRedRecipes(authority?.approved.contract.recipes ?? [snapshot.recipe], requiredExpectedRedFiles(preflight, repoRoot, config))
+        .some(recipe => recipe.id === recipeId)) throw new Error('Expected-red recipe lacks changed declared test targets');
 }
 export function readValidationAttemptFacts(repoRoot: string, taskId: string, attemptId: string,
     inspection: ValidationEvidenceInspection = 'active', batch?: ValidationEvidenceBatch, expectedRedHistory = false) {

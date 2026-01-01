@@ -19,8 +19,11 @@ import {
 } from '../../../../src/gates/review-remediation/review-remediation-review-contract';
 import { buildReviewerFindingsOutputTemplateJson } from '../../../../src/gates/review/reviewer-findings-prompt-contract';
 import {
+    findJsonReviewMissingFocusedValidationTestPaths,
     validateReviewFindingsContract
 } from '../../../../src/gates/review/review-findings-artifact-verdict';
+import { buildReviewFindingsValidationArtifact, findReviewFindingsValidationMissingFocusedValidationTestPaths }
+    from '../../../../src/gates/review/review-findings-validation-artifact';
 
 const HASH_A = 'a'.repeat(64);
 const HASH_B = 'b'.repeat(64);
@@ -504,17 +507,14 @@ test('validateReviewFindingsReport keeps the canonical F-000 marker case-sensiti
     assert.ok(result.violations.some((entry) => entry.includes('exact canonical missing-focused-validation marker')));
 });
 
-test('validateReviewFindingsReport rejects focused commands with unrelated additional targets', () => {
+test('validateReviewFindingsReport rejects unsafe or unresolved focused target operands', () => {
     const commands = [
-        'node --test tests/node/example.test.ts tests/node/other.test.ts',
-        'node tools/validate-contract.js api/openapi.yaml api/other.yaml',
         'node --test tests/node/example.test.ts tests/node/*.test.ts',
         'node --test tests/node/example.test.ts not-a-target',
         'node --test "./" tests/node/example.test.ts',
         'node --test "" tests/node/example.test.ts',
         'node --test tests/node/example.test.ts tests/../outside.test.ts',
-        'node --test tests/node/example.test.ts C:outside.test.ts',
-        'node --test --test-name-pattern="parser branch|schema branch" tests/node/example.test.ts tests/node/other.test.ts'
+        'node --test tests/node/example.test.ts C:outside.test.ts'
     ];
     const results = commands.map((command) => {
         const report = validReport();
@@ -537,6 +537,20 @@ test('validateReviewFindingsReport rejects focused commands with unrelated addit
         };
     });
     assert.deepEqual(results, commands.map((command) => ({ command, valid: false, targetViolation: true })));
+});
+
+test('focused command syntax permits more than one declared concrete target', () => {
+    for (const command of [
+        'node --test tests/node/example.test.ts tests/node/other.test.ts',
+        'node tools/validate-contract.js api/openapi.yaml api/other.yaml',
+        'node --test --test-name-pattern="parser branch|schema branch" tests/node/example.test.ts tests/node/other.test.ts'
+    ]) {
+        const report = validReport();
+        report.validation_notes = [{ id: 'N-001', topic: 'focused-self-validation', note: 'Check both related task targets.',
+            command, command_outcome: 'passed', diagnostics: 'The command returned zero for both task targets.', evidence: [evidence()] }];
+        const result = validateReviewFindingsReport(report, validationOptions);
+        assert.equal(result.valid, true, result.violations.join('\n'));
+    }
 });
 
 test('validateReviewFindingsReport accepts one focused target with selector option values', () => {
@@ -1666,7 +1680,29 @@ for (const channel of ['finding', 'risk'] as const) {
     });
 }
 
-test('validateReviewFindingsReport rejects conflicting F-000 marker targets across title and description', () => {
+test('canonical focused markers retain every target in one JSON evidence-only finding', () => {
+    const targets = ['probes/Покупка.orbit', 'satellites/Refund.quasar', 'archives/Related.nebula'];
+    const markers = targets.map(target => `[garda:evidence-only:missing-focused-validation] target=${target}; action=run-and-record-focused-validation`);
+    const report = missingFocusedValidationReport();
+    const finding = (report.findings as Record<string, Array<Record<string, unknown>>>).medium[0];
+    finding.title = markers[0]; finding.description = markers.slice(1).join('\n');
+    const note = (report.validation_notes as Array<Record<string, unknown>>)[0];
+    note.command = `node --test ${targets.map(target => JSON.stringify(target)).join(' ')}`;
+    note.evidence = targets.map(target => evidence('src/example.ts:10', `The changed parser branch is covered by ${target}, which motivated this focused attempt.`));
+    const result = validateReviewFindingsReport(report, validationOptions);
+    assert.equal(result.valid, true, result.violations.join('\n'));
+    assert.ok(result.report);
+    assert.deepEqual(findJsonReviewMissingFocusedValidationTestPaths(result.report), targets);
+    const artifact = buildReviewFindingsValidationArtifact({ taskId: 'T-979-1', reviewType: 'code',
+        validation: { ...result, detected: true, coverage_validation: null } });
+    assert.deepEqual(findReviewFindingsValidationMissingFocusedValidationTestPaths(artifact), [...targets].sort());
+    note.command = `node --test ${JSON.stringify(targets[0])}`;
+    const partial = validateReviewFindingsReport(report, validationOptions);
+    assert.equal(partial.valid, false, 'Every declared marker needs its own associated attempt.');
+    assert.ok(partial.violations.some(reason => reason.includes(targets[2])));
+});
+
+test('validateReviewFindingsReport requires an associated attempt for every F-000 marker target', () => {
     const sameTargetReport = missingFocusedValidationReport();
     const sameTargetFinding = (sameTargetReport.findings as Record<string, Array<Record<string, unknown>>>).medium[0];
     sameTargetFinding.description = sameTargetFinding.title;
@@ -1681,7 +1717,6 @@ test('validateReviewFindingsReport rejects conflicting F-000 marker targets acro
     const conflictingResult = validateReviewFindingsReport(conflictingReport, validationOptions);
 
     assert.equal(conflictingResult.valid, false);
-    assert.ok(conflictingResult.violations.some((entry) => entry.includes('must not declare different')));
     assert.ok(conflictingResult.violations.some((entry) => entry.includes("target 'api/openapi.yaml'")));
 });
 

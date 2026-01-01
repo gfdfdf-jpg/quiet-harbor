@@ -98,6 +98,10 @@ function seedTempRepoScaffold(root: string): void {
     fs.mkdirSync(path.join(root, 'garda-agent-orchestrator', 'runtime'), { recursive: true });
     fs.writeFileSync(path.join(root, 'src', 'app.ts'), 'const a = 1;\nconst b = 2;\nconsole.log(a + b);\n', 'utf8');
     
+    // Seed the declared regression input before Git/preflight capture, never during selection.
+    fs.mkdirSync(path.join(root, 'tests'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'tests/fixture-task-validation.test.cjs'),
+        "require('node:test').test('fixture regression input', () => {});\n");
     seedRuleFiles(root);
     writeTestCompileFixture(root);
     const workflowConfig = buildDefaultWorkflowConfig();
@@ -186,6 +190,9 @@ export function createDependentValidationFixture(): {
     fs.mkdirSync(path.join(repoRoot, 'tests', 'node'), { recursive: true });
     fs.mkdirSync(path.join(repoRoot, 'scripts', 'node-foundation'), { recursive: true });
     fs.mkdirSync(nestedCwd, { recursive: true });
+    fs.writeFileSync(path.join(repoRoot, 'package.json'), JSON.stringify({ scripts: {
+        'build:node-foundation': 'node scripts/node-foundation/build-scripts.cjs build.js node-foundation'
+    } }));
     fs.writeFileSync(sourcePath, 'export const feature = true;\n', 'utf8');
     fs.writeFileSync(path.join(repoRoot, 'tests', 'node', 'sample.test.ts'), 'void 0;\n', 'utf8');
     fs.writeFileSync(path.join(repoRoot, 'scripts', 'node-foundation', 'helper.ts'), 'void 0;\n', 'utf8');

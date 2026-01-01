@@ -71,6 +71,7 @@ import type { QualityValidationObligation } from '../../../../src/gates/quality-
 import { readValidationEvents } from '../../../../src/gates/project-validation/attempt-evidence';
 import { inspectFullSuiteReports, startFullSuiteReports } from '../../../../src/gates/full-suite/full-suite-report-evidence';
 import { collectFullSuiteValidationEvidence } from '../../../../src/gates/completion/completion-full-suite-evidence';
+import { buildFullSuiteValidationEvidence } from '../../../../src/gates/review-context/review-context-validation-evidence';
 import { collectOrderedTimelineEvents } from '../../../../src/gates/completion/completion-evidence';
 import { createTempRepo, loadTaskEntryRulePack, runEnterTaskMode, runHandshakeForTask,
     runShellSmokeForTask, seedInitAnswers, seedTaskQueue } from '../../cli/commands/gates/preflight/gates-preflight-fixtures';
@@ -284,15 +285,20 @@ describe('native full-suite declared report channel', () => {
             };
             assert.equal(artifact.exit_code, 0, 'The actual test process completed successfully in every report scenario.');
             assert.equal(artifact.report_attempts.length, 1);
-            if (mode !== 'fresh') {
-                assert.notEqual(suite.exitCode, 0, suite.outputText);
-                assert.equal(artifact.status, 'FAILED');
-                assert.equal(inspect().attempts[0].violations.length, 1);
-                return;
-            }
             assert.equal(suite.exitCode, 0, suite.outputText);
             assert.equal(artifact.status, 'PASSED');
             assert.deepEqual(completionErrors(), []);
+            const projected = () => buildFullSuiteValidationEvidence({ repoRoot: f.repoRoot, taskId: f.taskId,
+                reviewType: 'code', preflightPath: f.preflightPath, preflightSha256: fileSha256(f.preflightPath) });
+            if (mode !== 'fresh') {
+                assert.equal(artifact.report_attempts[0].violations.length, 1);
+                assert.throws(inspect, /Failed declared reports cannot become accepted full-suite evidence/u);
+                assert.ok(projected()?.warnings.some(warning => warning.includes(artifact.report_attempts[0].violations[0])),
+                    'The existing reviewer receives the concrete optional report observation.');
+                assert.equal(f.next().next_gate, 'build-review-context', f.next().reason);
+                assert.ok(fs.existsSync((await f.review()).outputPath));
+                return;
+            }
             assert.equal(artifact.output_artifact_path, null, 'Clean stdout retention policy remains unchanged.');
             const proof = inspect();
             assert.match(proof.texts[0], /<case id="declared case">passed<\/case>/);
@@ -302,8 +308,9 @@ describe('native full-suite declared report channel', () => {
             assert.deepEqual(inspect().texts, proof.texts);
             fs.appendFileSync(path.join(f.repoRoot, proof.attempts[0].output_path), 'tampered');
             assert.throws(inspect, /output changed/);
-            assert.match(completionErrors().join('\n'), /report evidence rejected/);
-            assert.equal(f.next().next_gate, 'full-suite-validation', f.next().reason);
+            assert.deepEqual(completionErrors(), []);
+            assert.match(projected()?.warnings.join('\n') ?? '', /Optional report adapter finding.*output changed/isu);
+            assert.ok(['build-review-context', 'record-review-routing'].includes(f.next().next_gate ?? ''), f.next().reason);
             await startFullSuiteReports({ repoRoot: f.repoRoot, taskId: f.taskId, reviewsRoot: directory,
                 eventsRoot: path.join(directory, '../task-events'), command: artifact.command,
                 declarations: [{ path: 'reports/suite.xml', max_bytes: 4096 }], attempt: 1,
@@ -1546,7 +1553,7 @@ describe('gates/next-step quality checklist routing', () => {
             code: true,
             test: true
         }, { reviewPolicyMode: 'parallel_all' });
-        seedCompilePass(repoRoot, TASK_ID, undefined, { qualityChecklist: false });
+        seedCompilePass(repoRoot, TASK_ID, undefined, { qualityChecklist: false, testSelection: false });
 
         const result = resolveNextStep({ taskId: TASK_ID, repoRoot });
 
@@ -1940,7 +1947,7 @@ describe('gates/next-step quality checklist routing', () => {
         assert.ok(!result.commands[0].command.includes('gate quality-checklist'));
     });
 
-    it('continues through after-compile full-suite after accepted WARN evidence', () => {
+    it('continues to mandatory task-test selection after accepted WARN evidence', () => {
         const repoRoot = makeTempRepo();
         writeWorkflowConfig(repoRoot, {
             fullSuiteEnabled: true,
@@ -1952,13 +1959,13 @@ describe('gates/next-step quality checklist routing', () => {
             code: true,
             test: true
         }, { reviewPolicyMode: 'parallel_all' });
-        seedCompilePass(repoRoot, TASK_ID);
+        seedCompilePass(repoRoot, TASK_ID, undefined, { testSelection: false });
         writeQualityChecklistArtifact(repoRoot, TASK_ID, 'WARN');
 
         const result = resolveNextStep({ taskId: TASK_ID, repoRoot });
 
-        assert.equal(result.next_gate, 'full-suite-validation', result.reason);
-        assert.ok(result.commands[0].command.includes('gate full-suite-validation'));
+        assert.equal(result.next_gate, 'task-test-selection', result.reason);
+        assert.ok(result.commands[0].command.includes('workflow set'));
     });
 
     it('routes ACTION_REQUIRED quality checklist evidence back to implementation', () => {
@@ -2093,7 +2100,7 @@ describe('gates/next-step quality checklist routing', () => {
             code: true,
             test: true
         }, { reviewPolicyMode: 'parallel_all' });
-        seedCompilePass(repoRoot, TASK_ID, undefined, { qualityChecklist: false });
+        seedCompilePass(repoRoot, TASK_ID, undefined, { qualityChecklist: false, testSelection: false });
         writeQualityChecklistArtifact(repoRoot, TASK_ID, 'ACTION_REQUIRED', {
             actionsRequired: [...T839_DERIVED_QUALITY_ACTIONS]
         });

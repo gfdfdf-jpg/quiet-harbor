@@ -714,6 +714,8 @@ describe('gates/next-step startup routing', () => {
         assert.match(result.reason, /preflight omits currently declared required reviews: api/u);
         assert.match(result.reason, /native recovery/u);
         assert.doesNotMatch(result.reason, /Correct the task notes/u);
+        assert.equal(result.commands.length, 1);
+        assert.match(result.commands[0].command, /gate classify-change/u);
     });
 
     it('uses task profile depth for fresh task-mode command defaults', () => {

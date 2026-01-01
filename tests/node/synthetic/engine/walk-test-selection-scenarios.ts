@@ -13,6 +13,8 @@ import { loadTaskFullSuiteConfig } from '../../../../src/gates/full-suite/task-f
 import { taskTestExecutionProofSatisfied } from '../../../../src/gates/full-suite/task-test-execution-proof';
 import { runGit } from '../../cli/commands/gate-test-helpers';
 import type { WalkScenario } from './navigator-walk';
+import { LEGACY_TASK_TARGET, executeLegacyLiteralSelection, legacyRepairFixture, legacyTaskFixture } from './walk-legacy-task-contract';
+import { NODE_WALK_FIXTURE } from './walk-fixture';
 
 const CONFIG = 'garda-agent-orchestrator/live/config/workflow-config.json';
 const TARGET = 'backend/application/src/test/java/example/StatusTest.java';
@@ -22,12 +24,13 @@ function outOfScopeRepairScenario(): WalkScenario {
     const parent = 'T-WALK', child = parent + '-F1', repairPath = 'src/module-boundary.cjs';
     const lanes = ['code', 'security', 'performance', 'test'];
     const parentPath = 'tests/app.test.ts', parentEdit = '// Task-only regression.\n';
+    const childFixture = legacyRepairFixture(repairPath, 'tests/module-boundary.test.cjs', 'module boundary repair');
     let currentTask = parent, declared = false, restored = false, implemented = false;
     const committed = new Set<string>();
     return {
         id: 'coverage-full-suite-out-of-scope',
         preferredOutOfScopeRepair: true,
-        counterState: 'full-suite-child-tree',
+        counterState: 'task-local-full-suite-child-tree',
         fullSuitePlacement: 'after_compile_before_reviews',
         edits: [{ path: parentPath, append: parentEdit }],
         expectedGates: ['task-test-selection', 'full-suite-validation', 'materialize-full-suite-repair-task',
@@ -36,11 +39,17 @@ function outOfScopeRepairScenario(): WalkScenario {
         expectedReviews: { code: 1, security: 1, performance: 1, test: 2 },
         expectedModes: [...lanes.map(lane => lane + ':FULL'), 'test:FULL'],
         inspectTask: () => currentTask,
+        get fixture() { return currentTask === parent ? NODE_WALK_FIXTURE : childFixture; },
+        get taskTitle() { return currentTask === parent ? 'Change the status renderer' : 'tests/module-boundary.test.cjs verifies the repair in src/module-boundary.cjs'; },
+        get selectionTargets() { return currentTask === parent ? [parentPath] : ['tests/module-boundary.test.cjs']; },
+        get testSelectionCommand() { return currentTask === parent ? 'node scripts/full-suite-check.cjs' : childFixture.taskTestCommand; },
         setup: root => {
             fs.writeFileSync(path.join(root, repairPath), 'module.exports = false;\n');
+            fs.writeFileSync(path.join(root, 'tests/module-boundary.test.cjs'),
+                'require("node:test")("module boundary repair", () => require("node:assert/strict").equal(require("../src/module-boundary.cjs"), true));\n');
             fs.writeFileSync(path.join(root, 'scripts/full-suite-check.cjs'),
                 'if (!require("../src/module-boundary.cjs")) { console.error("FAIL tests/unrelated.test.cjs:1 ModuleBoundaryTest: pre-existing production module debt"); process.exitCode = 1; }\n');
-            runGit(root, ['add', repairPath, 'scripts/full-suite-check.cjs']);
+            runGit(root, ['add', repairPath, 'scripts/full-suite-check.cjs', 'tests/module-boundary.test.cjs']);
             runGit(root, ['commit', '-qm', 'Seed unrelated module debt in disposable fixture']);
         },
         prepare: async (root, steps, run) => {
@@ -109,9 +118,13 @@ function narrowingScenario(profile: 'balanced' | 'fast' | 'strict', unattributed
     return {
         id: 'coverage-full-suite-out-of-scope-narrow' + (profile === 'balanced' ? '' : '-' + profile) + (unattributed ? '-unattributed' : ''),
         profile,
+        fixture: { ...legacyTaskFixture(), selectionReason: 'tests/app.test.ts verifies the status regression in src/app.ts' },
         expectedDoneGuidance: unattributed ? /Task completed with recorded out-of-scope failures: not attributed/u
             : /Task completed with recorded out-of-scope failures: tests\/unrelated.test.cjs/u,
-        get testSelectionCommand() { return narrowAfterFailure ? 'node --test tests/app.test.ts' : undefined; },
+        get testSelectionCommand() { return narrowAfterFailure ? 'node --test tests/app.test.ts'
+            : profile === 'fast' ? 'node scripts/full-suite-check.cjs tests/app.test.ts' : undefined; },
+        selectionTargets: [LEGACY_TASK_TARGET],
+        execute: async (root, step) => profile === 'fast' && executeLegacyLiteralSelection(root, step),
         counterState: 'full-suite-out-of-scope-narrow',
         fullSuitePlacement: 'after_compile_before_reviews',
         edits: [{ path: profile === 'fast' ? 'src/app.ts' : 'tests/app.test.ts', append: '// task-only regression\n' }],
@@ -227,6 +240,85 @@ function moduleSelectionScenario(failFirst = false): WalkScenario {
             step.exitCode = 0;
             step.output = 'Fixed the selected StatusTest#status failure; refresh preflight and rerun.';
             return true;
+        }
+    };
+}
+
+export function recordedFailureRecheckScenario(): WalkScenario {
+    const parent = 'T-WALK', child = parent + '-1';
+    const unrelated = 'tests/unrelated.test.cjs', flag = '.git/reproduce-recorded-test-failure';
+    const command = 'node --test tests/app.test.ts ' + unrelated;
+    const narrow = narrowingScenario('balanced');
+    let currentTask = parent, narrowed = false;
+    return {
+        ...narrow,
+        id: 'field-onlinestore-t006-7-1-audit-only',
+        disturbanceReason: 'OnlineStore T-006-7-1: the retained test command passes on unchanged source in a grouped child task.',
+        inspectTask: () => currentTask,
+        inspectNavigation: result => {
+            if (currentTask !== child || result.next_gate !== 'task-test-selection') return;
+            const argv = splitCommandLine(result.commands[0].command);
+            assert.equal(argv[argv.indexOf('--task-test-command') + 1], command);
+            assert.equal(argv[argv.indexOf('--focused-required-test-path') + 1], LEGACY_TASK_TARGET);
+        },
+        expectedDoneGuidance: undefined,
+        expectedReviews: { test: 1 },
+        expectedModes: ['test:FULL'],
+        execute: async (root, step) => currentTask === child && executeLegacyLiteralSelection(root, step),
+        get testSelectionCommand() { return currentTask === child || !narrowed ? command : 'node --test tests/app.test.ts'; },
+        setup: root => {
+            fs.writeFileSync(path.join(root, unrelated),
+                'require("node:test")("recorded unrelated regression", () => require("node:assert/strict").equal(require("node:fs").existsSync("' + flag + '"), false));\n');
+            fs.writeFileSync(path.join(root, flag), '');
+            assert.equal(runGit(root, ['add', unrelated]).status, 0);
+            assert.equal(runGit(root, ['commit', '-qm', 'Seed a reproducible test outside the parent scope']).status, 0);
+        },
+        prepare: async (root, steps, run) => {
+            if (!steps.length) {
+                currentTask = parent;
+                narrowed = false;
+                handleSet({ targetRoot: root, localCommitEnabled: 'true', json: true,
+                    operatorConfirmed: 'yes', operatorConfirmedAtUtc: new Date().toISOString() });
+            }
+            const last = steps.at(-1);
+            if (currentTask === child) {
+                if (last?.gate === 'record-no-op' && last.exitCode === 0) {
+                    assert.throws(() => handleSet({ targetRoot: root, taskId: child,
+                        fullSuiteCommand: 'node --test tests/app.test.ts', focusedRequiredTestPath: [LEGACY_TASK_TARGET],
+                        taskTestSelectionReason: child + ' verifies the retained regression command.', json: true }),
+                    /select the original authenticated failure command/u);
+                }
+                return;
+            }
+            await narrow.prepare?.(root, steps, run);
+            if (last?.gate === 'full-suite-validation' && last.exitCode !== 0) narrowed = true;
+            if (last?.gate !== 'completion-gate' || last.exitCode !== 0) return;
+            assert.equal(runGit(root, ['add', LEGACY_TASK_TARGET]).status, 0);
+            assert.equal(await runHumanCommitCommand(['--task-id', parent, '-m', 'test: accept parent regression'], { cwd: root }), 0);
+            fs.unlinkSync(path.join(root, flag));
+            currentTask = child;
+        },
+        inspectResult: (root, result) => {
+            assert.equal(result.outcome, 'done', result.detail);
+            assert.equal(currentTask, child);
+            const childSteps = result.steps.filter(step => step.taskId === child);
+            assert.equal(result.events.filter(event => event.type === 'TASK_MODE_ENTERED').length, 1);
+            assert.equal(result.events.filter(event => event.type === 'NO_OP_RECORDED').length, 1);
+            assert.equal(childSteps.filter(step => step.gate === 'record-no-op').length, 1);
+            assert.equal(childSteps.filter(step => step.gate === 'task-test-selection').length, 1);
+            assert.equal(childSteps.filter(step => step.gate === 'full-suite-validation' && step.exitCode === 0).length, 1);
+            assert.ok(!childSteps.some(step => /reviewer-launch|build-review-context|restart-coherent-cycle/u.test(step.gate ?? '')));
+            assert.equal(loadTaskFullSuiteConfig(root, child).selection.command, command);
+            const docs = path.join(root, 'docs/guide.md');
+            const before = fs.readFileSync(docs);
+            try {
+                fs.appendFileSync(docs, '\nChanged after the zero-diff test selection.\n');
+                const stale = loadTaskFullSuiteConfig(root, child).selection;
+                assert.equal(stale.status, 'stale');
+                assert.match(stale.reason ?? '', /requires a native command binding and a clean workspace/u);
+            } finally {
+                fs.writeFileSync(docs, before);
+            }
         }
     };
 }

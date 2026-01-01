@@ -15,6 +15,7 @@ import { taskRequiresExpectedRed } from '../test-first/expected-red-evidence';
 import { getCurrentNoOpEventSha256, getNoOpEvidence, resolveCurrentNoOpPreflightPath } from '../task-mode/no-op';
 import { isFullSuiteNotRequiredForZeroDiffNoReviewableScope } from '../full-suite/full-suite-validation-results';
 import { readValidationFile, validationDigest } from '../../core/project-validation-identity';
+import { readReviewContextTrustBoundaryAnalysis, assertReviewContextTrustBoundaryAnalysisReady } from '../review-context/review-context-trust-boundary-analysis';
 
 interface TerminalReviewArtifact { content: string; receipt?: unknown }
 
@@ -99,6 +100,19 @@ export function getValidationTerminalViolations(options: {
                 const noOp = getNoOpEvidence(options.repoRoot, options.taskId, '', preflightPath);
                 if (getCurrentNoOpEventSha256(options.repoRoot, options.taskId, noOp)) return [];
             }
+        }
+        // A declared project recipe may be unrelated to this task. Authenticate the empty
+        // task projection before requiring a semantic lane; expected RED remains mandatory.
+        if (declaredOrMatrix && !expectedRed) {
+            const preflightPath = resolveCurrentNoOpPreflightPath(options.repoRoot, options.taskId, options.preflightPath);
+            const retained = readValidationFile(options.repoRoot,
+                path.relative(path.resolve(options.repoRoot), preflightPath).replace(/\\/gu, '/'));
+            if (validationDigest(JSON.parse(retained.bytes.toString('utf8'))) !== validationDigest(options.preflight))
+                throw new Error('Declared terminal preflight differs from current canonical projection.');
+            const analysis = readReviewContextTrustBoundaryAnalysis({ repoRoot: options.repoRoot, taskId: options.taskId,
+                preflight: options.preflight, preflightSha256: retained.identity.sha256, inspection: options.inspection });
+            assertReviewContextTrustBoundaryAnalysisReady(analysis);
+            if (analysis.validation_phases?.obligations.length === 0) return [];
         }
         const lanes = resolveValidationSemanticReviewLanes(options.preflight.effective_review_snapshot as EffectiveReviewSnapshot);
         const targets = resolveAuthoritativeReviewValidationObligations({ ...options, preflight: options.preflight,

@@ -1,4 +1,5 @@
 import * as path from 'node:path';
+import { createHash } from 'node:crypto';
 import { types } from 'node:util';
 import { createInvocationReadMemoKey, isInvocationReadObservationActive, memoizeInvocationRead, registerInvocationDependency } from './invocation-read-observation';
 import { describeProcessInputs } from './next-step-measurement';
@@ -7,6 +8,15 @@ import { observeDerivationInput, fingerprintObservationData } from './derivation
 type NativeExec = (this: unknown, ...args: unknown[]) => unknown;
 type GitValue = string | Buffer | import('node:child_process').SpawnSyncReturns<string | Buffer>;
 type GitObservation = { value: GitValue; fingerprint: string } | { error: unknown; failure: string };
+type GitObservationFailure = 'changed-inputs' | 'changed-result' | 'native-unavailable';
+
+/** A refusal is not a Git result and must never be interpreted as an empty workspace. */
+export class InvocationGitObservationError extends Error {
+    constructor(readonly reason: GitObservationFailure, message: string) {
+        super(message);
+        this.name = 'InvocationGitObservationError';
+    }
+}
 const GIT_RESULTS = createInvocationReadMemoKey<GitObservation>('git-command-results');
 const SMALL_BATCH_RESULTS = createInvocationReadMemoKey<GitObservation | null>('git-small-batch-results');
 const READ_COMMANDS = new Set(['rev-parse', 'diff', 'ls-files', 'ls-tree', 'status', 'check-ignore', 'cat-file', 'merge-base', 'log', 'show', 'for-each-ref', 'rev-list']);
@@ -129,9 +139,77 @@ function capture(read: () => unknown): GitObservation | null {
         return fingerprint === null ? null : { value: cloneResult(value as GitValue), fingerprint };
     } catch (error: unknown) {
         const failure = failedResult(error);
-        if (failure === null) throw error;
+        if (failure === null) return null;
         return { error, failure };
     }
+}
+
+function dataField(value: unknown, key: string): unknown {
+    if (!value || typeof value !== 'object' || types.isProxy(value)) return undefined;
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return descriptor && 'value' in descriptor ? descriptor.value : undefined;
+}
+
+function nativeUnavailable(observation: GitObservation | null): boolean {
+    if (!observation) return true;
+    const result = 'error' in observation ? observation.error : observation.value;
+    if (typeof result === 'string' || Buffer.isBuffer(result)) return false;
+    return dataField(result, 'status') == null || dataField(result, 'error') != null;
+}
+
+function boundedText(value: string, limit: number): string {
+    return value.length <= limit ? value : value.slice(0, limit) + '…';
+}
+
+function describeOutput(value: unknown): string {
+    if (typeof value !== 'string' && !Buffer.isBuffer(value)) return 'unavailable';
+    const bytes = Buffer.isBuffer(value) ? value : Buffer.from(value);
+    return `${bytes.length} bytes, sha256=${createHash('sha256').update(bytes).digest('hex').slice(0, 16)}`;
+}
+
+function describeAttempt(observation: GitObservation | null | undefined, timeout: unknown): string {
+    if (observation === undefined) return 'not attempted';
+    const timeoutText = typeof timeout === 'number' ? timeout + 'ms' : 'not specified';
+    if (!observation) return `status=unavailable, signal=unknown, error=unrecognizable native result, timeout=${timeoutText}`;
+    const value = 'error' in observation ? observation.error : observation.value;
+    const isText = typeof value === 'string' || Buffer.isBuffer(value);
+    const error = dataField(value, 'error') ?? ('error' in observation ? value : undefined);
+    const status = isText ? 0 : dataField(value, 'status');
+    const signal = dataField(value, 'signal');
+    const code = dataField(error, 'code');
+    const message = dataField(error, 'message');
+    const stdout = isText ? value : dataField(value, 'stdout');
+    const stderr = dataField(value, 'stderr');
+    return `status=${typeof status === 'number' || typeof status === 'string' ? boundedText(String(status), 80) : 'unavailable'}`
+        + `, signal=${typeof signal === 'string' ? boundedText(signal, 80) : 'none'}`
+        + `, error=${typeof code === 'string' || typeof code === 'number' ? boundedText(String(code), 80)
+            : error ? typeof status === 'number' ? 'nonzero-exit' : 'unknown' : 'none'}`
+        + (typeof message === 'string' ? ` (${JSON.stringify(boundedText(message, 240))})` : '')
+        + `, timeout=${timeoutText}`
+        + `, stdout=${describeOutput(stdout)}, stderr=${describeOutput(stderr)}`;
+}
+
+function observationError(reason: GitObservationFailure, args: unknown[], initial: GitObservation | null,
+    final?: GitObservation | null): InvocationGitObservationError {
+    const argv = Array.isArray(args[1]) ? args[1] as string[] : [];
+    let index = 0;
+    for (; index < argv.length; index++) {
+        const value = argv[index];
+        if (value === '-C' || value === '-c' || value === '--git-dir' || value === '--work-tree') { index++; continue; }
+        if (READ_GLOBAL_FLAGS.has(value) || value.startsWith('--git-dir=') || value.startsWith('--work-tree=')) continue;
+        break;
+    }
+    const command = boundedText([String(args[0]), ...argv].map(value => JSON.stringify(boundedText(value, 256))).join(' '), 2048);
+    const timeout = dataField(args[2], 'timeout');
+    return new InvocationGitObservationError(reason, `Invocation Git observation ${reason}: ${command}; verb=${JSON.stringify(boundedText(argv[index] || 'unknown', 80))}; `
+        + `initial: ${describeAttempt(initial, timeout)}; final: ${describeAttempt(final, timeout)}.`);
+}
+
+function assertSameGitObservation(args: unknown[], initial: GitObservation, read: () => GitObservation | null): void {
+    if (nativeUnavailable(initial)) throw observationError('native-unavailable', args, initial);
+    const final = read();
+    if (nativeUnavailable(final)) throw observationError('native-unavailable', args, initial, final);
+    if (!sameResult(initial, final)) throw observationError('changed-result', args, initial, final);
 }
 
 function sameResult(left: GitObservation, right: GitObservation | null): boolean {
@@ -157,19 +235,30 @@ export function tryReadSmallInvocationGitBatch(repoRoot: string, objectIds: read
     const observation = memoizeInvocationRead(SMALL_BATCH_RESULTS, input.text, () => {
         const candidateRead = () => {
             const candidate = read();
+            if (nativeUnavailable(candidate)) {
+                const nativeError = candidate && ('error' in candidate ? candidate.error : dataField(candidate.value, 'error'));
+                // An intentional maxBuffer overflow declines this optional size probe; the
+                // size-first reader is the documented path for larger objects, not a timeout retry.
+                if (dataField(nativeError, 'code') === 'ENOBUFS') return null;
+                const failure = observationError('native-unavailable', args, candidate);
+                registerInvocationDependency(failure, () => { throw failure; });
+                throw failure;
+            }
             return candidate && 'value' in candidate && Buffer.isBuffer(candidate.value) && accept(Buffer.from(candidate.value)) ? candidate : null;
         };
         const assertInputs = () => {
             const current = describe();
-            if (current.opaque || current.text !== input.text) throw new Error('Recorded Git command inputs changed.');
+            if (current.opaque || current.text !== input.text) throw observationError('changed-inputs', args, entryForDiagnostics);
         };
+        let entryForDiagnostics: GitObservation | null = null;
         const entry = observeDerivationInput('process-result', 1, { command: input.text }, candidateRead,
             value => fingerprintObservationData(value ? { output: value.fingerprint } : { optional_probe_not_consumed: true }),
             () => { assertInputs(); return candidateRead(); });
         if (!entry) return null;
+        entryForDiagnostics = entry;
         registerInvocationDependency(entry, () => {
             assertInputs();
-            if (!sameResult(entry, read())) throw new Error('Invocation Git observation changed: git');
+            assertSameGitObservation(args, entry, read);
         });
         return entry;
     }).value;
@@ -193,24 +282,30 @@ export function withInvocationGitReadObservation<T>(callback: () => T): T {
                 const self = this;
                 const observation = memoizeInvocationRead(GIT_RESULTS, input.text, () => {
                     const savedArgs = cloneData(args) as unknown[];
+                    let entryForDiagnostics: GitObservation | null = null;
                     const entry = observeDerivationInput('process-result', 1, { command: input.text },
                         () => capture(() => Reflect.apply(original, self, args)),
                         result => fingerprintObservationData(result === null ? null
                             : 'error' in result ? { failure: result.failure } : { output: result.fingerprint }),
                         () => {
                             const current = describeProcessInputs({ name, args: savedArgs, cwd: process.cwd(), environment: process.env });
-                            if (current.opaque || current.text !== input.text) throw new Error('Recorded Git command inputs changed.');
+                            if (current.opaque || current.text !== input.text) throw observationError('changed-inputs', savedArgs, entryForDiagnostics);
                             return capture(() => Reflect.apply(original, self, savedArgs));
                         });
-                    if (!entry) throw new Error('Git observation did not return a native command result.');
+                    entryForDiagnostics = entry;
+                    if (!entry) {
+                        const failure = observationError('native-unavailable', savedArgs, null);
+                        registerInvocationDependency(failure, () => { throw failure; });
+                        throw failure;
+                    }
                     registerInvocationDependency(entry, () => {
                         const current = describeProcessInputs({ name, args: savedArgs, cwd: process.cwd(), environment: process.env });
-                        if (current.opaque || current.text !== input.text || !sameResult(entry, capture(() => Reflect.apply(original, self, savedArgs)))) {
-                            throw new Error('Invocation Git observation changed: ' + String(savedArgs[0]));
-                        }
+                        if (current.opaque || current.text !== input.text) throw observationError('changed-inputs', savedArgs, entry);
+                        assertSameGitObservation(savedArgs, entry, () => capture(() => Reflect.apply(original, self, savedArgs)));
                     });
                     return entry;
                 }).value;
+                if (nativeUnavailable(observation)) throw observationError('native-unavailable', args, observation);
                 if ('error' in observation) throw cloneResult(observation.error);
                 return cloneResult(observation.value);
             };

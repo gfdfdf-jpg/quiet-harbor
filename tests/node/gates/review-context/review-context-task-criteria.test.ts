@@ -35,6 +35,17 @@ function withScopeScenario(
 }
 
 describe('gates/review-context task criteria', () => {
+    it('shows the latest classified intent to later reviewers instead of the original task-mode summary', () => {
+        const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'garda-latest-intent-'));
+        try {
+            const criteria = buildTaskCriteria({ repoRoot, taskId: 'T-1', preflight: {
+                task_intent: 'old top-level text', effective_review_snapshot: { inputs: { task_intent: 'Refined current wording' } }
+            }, taskModeEvidence: { task_summary: 'Original task-mode wording' } as Parameters<typeof buildTaskCriteria>[0]['taskModeEvidence'] });
+            assert.equal(criteria.task_intent.text, 'Refined current wording');
+            assert.equal(criteria.task_intent.source, 'preflight');
+            assert.match(buildTaskCriteriaMarkdown(criteria).join('\n'), /Refined current wording/u);
+        } finally { fs.rmSync(repoRoot, { recursive: true, force: true }); }
+    });
     it('preserves justified private caller scope and emits coupled-fix guidance in both formats', () => {
         const intent = 'Repair response validation and its authorized private caller';
         const files = ['src/response.ts', 'src/private/caller.ts', 'tests/response.test.ts'];

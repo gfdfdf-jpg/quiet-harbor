@@ -5,7 +5,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as childProcess from 'node:child_process';
 import { withInvocationReadObservation } from '../../../src/core/invocation-read-observation';
-import { withInvocationGitReadObservation } from '../../../src/core/invocation-git-observation';
+import { InvocationGitObservationError, tryReadSmallInvocationGitBatch, withInvocationGitReadObservation } from '../../../src/core/invocation-git-observation';
 import { withNextStepMeasurement, type NextStepMeasurement } from '../../../src/core/next-step-measurement';
 import { runGit } from '../../../src/core/git-helpers';
 import { collectGitChangeClassificationSnapshot } from '../../../src/core/git-change-classification';
@@ -120,6 +120,9 @@ test('Q2 cached Git failures cannot be mutated through a previous consumer error
 
 test('Q2 production classification and workspace fingerprint reject an untracked path after their status read', t => {
     const root = fixture(t);
+    // Native HEAD authority is required before testing mutation of the observed status.
+    runGit(root, ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+        'commit', '--allow-empty', '-qm', 'baseline']);
     const file = path.join(root, 'new.ts');
     for (const read of [
         () => collectGitChangeClassificationSnapshot(root),
@@ -198,4 +201,171 @@ test('explicit native environment snapshots still reject environment changes bef
     } finally {
         if (previous === undefined) delete process.env[key]; else process.env[key] = previous;
     }
+});
+
+test('Git input changes name the command and avoid a final native read', () => {
+    const native = require('node:child_process') as typeof childProcess;
+    const original = native.execFileSync;
+    const key = 'GARDA_TEST_GIT_DIAGNOSTIC', previous = process.env[key];
+    let calls = 0;
+    native.execFileSync = (() => { calls++; return 'initial'; }) as unknown as typeof native.execFileSync;
+    try {
+        process.env[key] = 'before';
+        assert.throws(() => observe(() => {
+            childProcess.execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8', timeout: 1234 });
+            process.env[key] = 'after';
+        }), (error: unknown) => {
+            assert.ok(error instanceof InvocationGitObservationError);
+            assert.equal(error.reason, 'changed-inputs');
+            assert.match(error.message, /"git" "status" "--porcelain"/u);
+            assert.match(error.message, /initial: status=0.*timeout=1234ms.*final: not attempted/u);
+            return true;
+        });
+        assert.equal(calls, 1);
+    } finally {
+        native.execFileSync = original;
+        if (previous === undefined) delete process.env[key]; else process.env[key] = previous;
+    }
+});
+
+test('changed Git results include bounded descriptions of both attempts', () => {
+    const native = require('node:child_process') as typeof childProcess;
+    const original = native.execFileSync;
+    let calls = 0;
+    native.execFileSync = (() => ++calls === 1 ? 'initial' : 'different'.repeat(1000)) as unknown as typeof native.execFileSync;
+    try {
+        assert.throws(() => observe(() => childProcess.execFileSync('git', ['status'], { encoding: 'utf8' })), (error: unknown) => {
+            assert.ok(error instanceof InvocationGitObservationError);
+            assert.equal(error.reason, 'changed-result');
+            assert.match(error.message, /initial: status=0.*stdout=7 bytes, sha256=[a-f0-9]{16}/u);
+            assert.match(error.message, /final: status=0.*stdout=9000 bytes, sha256=[a-f0-9]{16}/u);
+            assert.ok(error.message.length < 1500);
+            return true;
+        });
+        assert.equal(calls, 2);
+    } finally { native.execFileSync = original; }
+});
+
+test('a timed-out final Git observation is unavailable, with no hidden retry', () => {
+    const native = require('node:child_process') as typeof childProcess;
+    const original = native.execFileSync;
+    let calls = 0;
+    native.execFileSync = (() => {
+        if (++calls === 1) return 'initial';
+        throw Object.assign(new Error('process timed out'), { status: null, signal: 'SIGTERM', code: 'ETIMEDOUT', stdout: '', stderr: '' });
+    }) as unknown as typeof native.execFileSync;
+    try {
+        assert.throws(() => observe(() => childProcess.execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', timeout: 25 })),
+            (error: unknown) => {
+                assert.ok(error instanceof InvocationGitObservationError);
+                assert.equal(error.reason, 'native-unavailable');
+                assert.match(error.message, /"git" "rev-parse" "HEAD"/u);
+                assert.match(error.message, /initial: status=0.*final: status=unavailable, signal=SIGTERM, error=ETIMEDOUT.*timeout=25ms/u);
+                return true;
+            });
+        assert.equal(calls, 2);
+    } finally { native.execFileSync = original; }
+});
+
+test('a changed native Git exit includes both statuses and a bounded error', () => {
+    const native = require('node:child_process') as typeof childProcess;
+    const original = native.execFileSync;
+    let calls = 0;
+    native.execFileSync = (() => {
+        if (++calls === 1) return 'initial';
+        throw Object.assign(new Error('failure '.repeat(2000)), { status: 128, signal: null, stdout: '', stderr: 'fatal: broken' });
+    }) as unknown as typeof native.execFileSync;
+    try {
+        assert.throws(() => observe(() => childProcess.execFileSync('git', ['status'], { encoding: 'utf8' })), (error: unknown) => {
+            assert.ok(error instanceof InvocationGitObservationError);
+            assert.equal(error.reason, 'changed-result');
+            assert.match(error.message, /initial: status=0.*final: status=128.*error=nonzero-exit/u);
+            assert.match(error.message, /stderr=13 bytes, sha256=[a-f0-9]{16}/u);
+            assert.ok(error.message.length < 1500);
+            return true;
+        });
+        assert.equal(calls, 2);
+    } finally { native.execFileSync = original; }
+});
+
+test('a spawnSync timeout is refused even though spawnSync returns rather than throws', () => {
+    const native = require('node:child_process') as typeof childProcess;
+    const original = native.spawnSync;
+    let calls = 0;
+    native.spawnSync = (() => {
+        calls++;
+        return { pid: 0, status: null, signal: 'SIGTERM', output: [null, '', ''], stdout: '', stderr: '',
+            error: Object.assign(new Error('spawn timed out'), { code: 'ETIMEDOUT' }) };
+    }) as unknown as typeof native.spawnSync;
+    try {
+        assert.throws(() => observe(() => childProcess.spawnSync('git', ['status'], { encoding: 'utf8', timeout: 40 })),
+            (error: unknown) => {
+                assert.ok(error instanceof InvocationGitObservationError);
+                assert.equal(error.reason, 'native-unavailable');
+                assert.match(error.message, /initial: status=unavailable, signal=SIGTERM, error=ETIMEDOUT.*timeout=40ms/u);
+                return true;
+            });
+        assert.equal(calls, 1);
+    } finally { native.spawnSync = original; }
+});
+
+test('an unrecognizable native result remains unavailable and reports its timeout', () => {
+    const native = require('node:child_process') as typeof childProcess;
+    const original = native.spawnSync;
+    let calls = 0;
+    native.spawnSync = (() => { calls++; return { status: null }; }) as unknown as typeof native.spawnSync;
+    try {
+        assert.throws(() => observe(() => childProcess.spawnSync('git', ['status'], { timeout: 40 })), (error: unknown) => {
+            assert.ok(error instanceof InvocationGitObservationError);
+            assert.equal(error.reason, 'native-unavailable');
+            assert.match(error.message, /status=unavailable, signal=unknown, error=unrecognizable native result, timeout=40ms/u);
+            assert.match(error.message, /final: not attempted/u);
+            return true;
+        });
+        assert.equal(calls, 1);
+    } finally { native.spawnSync = original; }
+});
+
+test('a caught initial native timeout still refuses without treating it as an empty workspace', () => {
+    const native = require('node:child_process') as typeof childProcess;
+    const original = native.execFileSync;
+    let calls = 0;
+    native.execFileSync = (() => {
+        calls++;
+        throw Object.assign(new Error('process timed out'), { status: null, signal: 'SIGTERM', code: 'ETIMEDOUT', stdout: '', stderr: '' });
+    }) as typeof native.execFileSync;
+    try {
+        assert.throws(() => observe(() => {
+            try { childProcess.execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8', timeout: 25 }); }
+            catch { /* A consumer may handle ordinary nonzero Git exits. */ }
+        }), (error: unknown) => {
+            assert.ok(error instanceof InvocationGitObservationError);
+            assert.equal(error.reason, 'native-unavailable');
+            assert.match(error.message, /initial: status=unavailable.*error=ETIMEDOUT.*timeout=25ms.*final: not attempted/u);
+            return true;
+        });
+        assert.equal(calls, 1);
+    } finally { native.execFileSync = original; }
+});
+
+test('an optional Git batch timeout refuses instead of falling back to another Git read', () => {
+    const native = require('node:child_process') as typeof childProcess;
+    const original = native.execFileSync;
+    let calls = 0;
+    native.execFileSync = (() => {
+        calls++;
+        throw Object.assign(new Error('process timed out'), { status: null, signal: 'SIGTERM', code: 'ETIMEDOUT', stdout: '', stderr: '' });
+    }) as typeof native.execFileSync;
+    try {
+        assert.throws(() => observe(() => {
+            try { tryReadSmallInvocationGitBatch('.', ['a'.repeat(40)], 25, () => true); }
+            catch { /* The observation remains failed even if an optional-probe caller catches it. */ }
+        }), (error: unknown) => {
+            assert.ok(error instanceof InvocationGitObservationError);
+            assert.equal(error.reason, 'native-unavailable');
+            assert.match(error.message, /"git" .*"cat-file" "--batch".*error=ETIMEDOUT.*final: not attempted/u);
+            return true;
+        });
+        assert.equal(calls, 1);
+    } finally { native.execFileSync = original; }
 });

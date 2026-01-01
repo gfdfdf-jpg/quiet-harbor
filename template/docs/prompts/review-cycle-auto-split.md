@@ -21,18 +21,18 @@ StateRoute[validation_lane]: next_action=run_validation_lane; command={{VALIDATI
 StateRoute[child_creation]: next_action=route_decomposed_parent; command={{CHILD_CREATION_COMMAND}}
 
 ## Instructions
-1. Treat the current parent task as blocked by the review-cycle guard; do not continue compile, review, or full-suite gates on the parent as if the block did not exist.
+1. Treat the current parent task as blocked by the review-cycle guard; do not continue compile, review, or task test gates on the parent as if the block did not exist.
 2. Do not hand-edit the parent status. The guard should already have latched the parent as `SPLIT_REQUIRED`; do not rerun `next-step` on the parent to transition it to `DECOMPOSED` until the validation lane below has produced a passing compile/test baseline and ordinary linked child tasks are ready.
 3. Follow `CurrentState`, `NextAction`, and `NextActionCommand`; they are derived from the completed latch and WIP capture result, not from a pre-capture workspace assumption.
 4. For `no_diff`, the capture manifest is empty and the workspace is already clean. Do not create another checkpoint; run the validation-lane command.
 5. For `suspended_manifest`: The parent implementation is suspended in the manifest and the captured paths were removed from the worktree. Preview restore before selecting work-package paths; do not create a redundant checkpoint.
 6. For `checkpoint`, automatic WIP capture was unavailable. Inspect the scope first and preserve actual parent work through the repository-approved checkpoint or manifest route only when work is present; do not describe an uninspected workspace as dirty.
 7. For `restore`, restore only the paths owned by the selected logical work package. Restored files are unfinished implementation, not review or completion evidence.
-8. The `validation_lane` runs the configured full-suite command directly as advisory continuity evidence; do not wrap it in `run-intermediate-command`, whose command-source grammar may reject valid full-suite commands. It creates no linked child, implementation commit, review receipt, completion evidence, or release claim.
+8. The `validation_lane` runs the selected task test command directly as advisory continuity evidence; do not wrap it in `run-intermediate-command`, whose command-source grammar may reject valid task test commands. It creates no linked child, implementation commit, review receipt, completion evidence, or release claim.
 9. Before `child_creation`, write the root-cause work-package contract at `WorkPackageContractPath`. Group work by logical root cause or invariant, map every validated finding and downstream obligation to an owning package, and never create one child per finding.
 10. Create ordinary linked child tasks with parent-derived suffix task IDs only after validation passes and the work-package contract is complete. Then rerun `next-step` on the parent so the gate transitions it to `DECOMPOSED`.
 11. Enter each ordinary child task and refresh preflight, then record its task-scoped test selection. Keep current-child tests covered and exclude suspended sibling tests. Keep an already-suitable command through the same selector; operator confirmation is required only when `task_test_selection.require_operator_confirmation` is enabled. Refresh the selection during an active child cycle when scope changes.
-12. Do not run new compile, review, full-suite, completion, or final-closeout gates on the parent merely to make preserved work appear committable.
+12. Do not run new compile, review, task test validation, completion, or final-closeout gates on the parent merely to make preserved work appear committable.
 13. Execute ordinary child tasks sequentially through their own `next-step` and mandatory gates.
 
 ## Constraints

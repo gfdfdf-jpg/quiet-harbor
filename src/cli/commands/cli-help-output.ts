@@ -8,7 +8,6 @@ import {
     PRODUCT_NAME
 } from '../../core/constants';
 import { buildDefaultRetentionPolicy, RETENTION_POLICY_DEFAULTS } from '../../lifecycle/cleanup/cleanup-defaults';
-import { formatLocalUiLanguageCliChoices } from '../../reports/ui/ui-i18n';
 import { bold, cyan, dim, green, padRight, red, yellow } from './cli-colors';
 import { COMMAND_SUMMARY } from './cli-constants';
 import type { PackageJsonLike } from './cli-types';
@@ -186,19 +185,19 @@ export const COMMAND_HELP: Readonly<Record<CommandHelpName, CommandHelpDescripto
     workflow: Object.freeze({
         summary: 'Show and set repo-local workflow config.',
         usage: Object.freeze([
-            `${PRIMARY_CLI_NAME} workflow set --full-suite-command "<command that runs only this task's tests and required regressions>" --task-id "<task-id>" --reason "<task behavior>" --focused-required-test-path "<test path>" [--focused-required-test-path "<test path>" ...] [--target-root PATH]`,
-            `${PRIMARY_CLI_NAME} workflow set --full-suite-report-files '[{"path":"reports/suite.xml","max_bytes":1048576}]' ${WORKFLOW_SET_CONFIRMATION_EXAMPLE} [--target-root PATH]`,
+            `${PRIMARY_CLI_NAME} workflow set --task-test-command "<command that runs only this task's tests and required regressions>" --task-id "<task-id>" --reason "<task behavior>" --focused-required-test-path "<test path>" [--focused-required-test-path "<test path>" ...] [--target-root PATH]`,
+            `${PRIMARY_CLI_NAME} workflow set --task-test-report-files '[{"path":"reports/suite.xml","max_bytes":1048576}]' ${WORKFLOW_SET_CONFIRMATION_EXAMPLE} [--target-root PATH]`,
             `${PRIMARY_CLI_NAME} workflow [show] [--target-root PATH] [--bundle-root PATH] [--json]`,
-            `${PRIMARY_CLI_NAME} workflow set [--compile-gate-command CMD] [--full-suite on|off|--full-suite-enabled true|false] [--full-suite-command CMD] [--full-suite-timeout-ms N] [--full-suite-timeout-blocker true|false] [--full-suite-timeout-retry-count N] [--full-suite-placement after_compile_before_reviews|before_test_review|before_completion] [--review-execution-policy MODE] [--no-delegate true|false|--review-delegation-no-delegate true|false] [--scope-budget on|off|--scope-budget-enabled true|false] [--scope-budget-action BLOCK_FOR_SPLIT|WARN_ONLY] [--scope-budget-profiles LIST] [--scope-budget-max-files N] [--scope-budget-max-changed-lines N] [--scope-budget-max-required-reviews N] [--scope-budget-max-review-tokens N] [--scope-budget-warn-files N] [--scope-budget-block-files N] [--scope-budget-warn-changed-lines N] [--scope-budget-block-changed-lines N] [--scope-budget-warn-required-reviews N] [--scope-budget-block-required-reviews N] [--scope-budget-warn-review-tokens N] [--scope-budget-block-review-tokens N] [--review-cycle on|off|--review-cycle-enabled true|false] [--review-cycle-action BLOCK_FOR_OPERATOR_DECISION|WARN_ONLY] [--review-cycle-max-failed-non-test-reviews N] [--review-cycle-max-total-non-test-reviews N] [--review-cycle-excluded-review-types LIST] [--review-cycle-auto-split on|off|--review-cycle-auto-split-enabled true|false] [--project-memory on|off|--project-memory-enabled true|false] [--project-memory-mode off|check|update|strict] [--project-memory-run-before-final-closeout on|off] [--project-memory-require-user-approval-for-writes on|off] [--project-memory-max-compact-summary-chars N] [--project-memory-read-strategy index_first] [--project-memory-impact-artifact-retention-days N] [--task-reset on|off|--task-reset-enabled true|false] [--auto-backup on|off|--auto-backup-enabled true|false] [--auto-backup-interval-days N] [--auto-backup-keep-latest N] [--optional-checks on|off|--optional-checks-enabled true|false] [--optional-checks-review-failure-cadence-interval N] [--optional-check-rule-id ID --optional-check-rule-title TITLE --optional-check-rule-prompt PROMPT --optional-check-rule-enabled true|false --optional-check-rule-exclude-test-only true|false] [--optional-check-rule-delete ID] [--optional-skill-selection-mode off|optional|mandatory] [--garda-self-guard on|off] ${WORKFLOW_SET_CONFIRMATION_EXAMPLE} [--target-root PATH] [--json]`
+            `${PRIMARY_CLI_NAME} workflow set [--compile-gate-command CMD] [--task-tests on|off|--task-test-enabled true|false] [--task-test-command CMD] [--task-test-timeout-ms N] [--task-test-timeout-blocker true|false] [--task-test-timeout-retry-count N] [--task-test-placement after_compile_before_reviews|before_test_review|before_completion] [--review-execution-policy MODE] [--no-delegate true|false|--review-delegation-no-delegate true|false] [--scope-budget on|off|--scope-budget-enabled true|false] [--scope-budget-action BLOCK_FOR_SPLIT|WARN_ONLY] [--scope-budget-profiles LIST] [--scope-budget-max-files N] [--scope-budget-max-changed-lines N] [--scope-budget-max-required-reviews N] [--scope-budget-max-review-tokens N] [--scope-budget-warn-files N] [--scope-budget-block-files N] [--scope-budget-warn-changed-lines N] [--scope-budget-block-changed-lines N] [--scope-budget-warn-required-reviews N] [--scope-budget-block-required-reviews N] [--scope-budget-warn-review-tokens N] [--scope-budget-block-review-tokens N] [--review-cycle on|off|--review-cycle-enabled true|false] [--review-cycle-action BLOCK_FOR_OPERATOR_DECISION|WARN_ONLY] [--review-cycle-max-failed-non-test-reviews N] [--review-cycle-max-total-non-test-reviews N] [--review-cycle-excluded-review-types LIST] [--review-cycle-auto-split on|off|--review-cycle-auto-split-enabled true|false] [--project-memory on|off|--project-memory-enabled true|false] [--project-memory-mode off|check|update|strict] [--project-memory-run-before-final-closeout on|off] [--project-memory-require-user-approval-for-writes on|off] [--project-memory-max-compact-summary-chars N] [--project-memory-read-strategy index_first] [--project-memory-impact-artifact-retention-days N] [--task-reset on|off|--task-reset-enabled true|false] [--auto-backup on|off|--auto-backup-enabled true|false] [--auto-backup-interval-days N] [--auto-backup-keep-latest N] [--optional-checks on|off|--optional-checks-enabled true|false] [--optional-checks-review-failure-cadence-interval N] [--optional-check-rule-id ID --optional-check-rule-title TITLE --optional-check-rule-prompt PROMPT --optional-check-rule-enabled true|false --optional-check-rule-exclude-test-only true|false] [--optional-check-rule-delete ID] [--optional-skill-selection-mode off|optional|mandatory] [--garda-self-guard on|off] ${WORKFLOW_SET_CONFIRMATION_EXAMPLE} [--target-root PATH] [--json]`
         ]),
         examples: Object.freeze([
             `${PRIMARY_CLI_NAME} workflow`,
             `${PRIMARY_CLI_NAME} workflow set --compile-gate-command "<compile/build/type-check command>" ${WORKFLOW_SET_CONFIRMATION_EXAMPLE}`,
-            `${PRIMARY_CLI_NAME} workflow set --full-suite on ${WORKFLOW_SET_CONFIRMATION_EXAMPLE}`,
-            `${PRIMARY_CLI_NAME} workflow set --full-suite-enabled true --full-suite-command "npm test" ${WORKFLOW_SET_CONFIRMATION_EXAMPLE}`,
-            `${PRIMARY_CLI_NAME} workflow set --full-suite-timeout-ms 3600000 ${WORKFLOW_SET_CONFIRMATION_EXAMPLE}`,
-            `${PRIMARY_CLI_NAME} workflow set --full-suite-timeout-blocker true --full-suite-timeout-retry-count 1 ${WORKFLOW_SET_CONFIRMATION_EXAMPLE}`,
-            `${PRIMARY_CLI_NAME} workflow set --full-suite-placement before_test_review ${WORKFLOW_SET_CONFIRMATION_EXAMPLE}`,
+            `${PRIMARY_CLI_NAME} workflow set --task-tests on ${WORKFLOW_SET_CONFIRMATION_EXAMPLE}`,
+            `${PRIMARY_CLI_NAME} workflow set --task-test-enabled true --task-test-command "npm test" ${WORKFLOW_SET_CONFIRMATION_EXAMPLE}`,
+            `${PRIMARY_CLI_NAME} workflow set --task-test-timeout-ms 3600000 ${WORKFLOW_SET_CONFIRMATION_EXAMPLE}`,
+            `${PRIMARY_CLI_NAME} workflow set --task-test-timeout-blocker true --task-test-timeout-retry-count 1 ${WORKFLOW_SET_CONFIRMATION_EXAMPLE}`,
+            `${PRIMARY_CLI_NAME} workflow set --task-test-placement before_test_review ${WORKFLOW_SET_CONFIRMATION_EXAMPLE}`,
             `${PRIMARY_CLI_NAME} workflow set --review-execution-policy strict_sequential ${WORKFLOW_SET_CONFIRMATION_EXAMPLE}`,
             `${PRIMARY_CLI_NAME} workflow set --no-delegate true|false ${WORKFLOW_SET_CONFIRMATION_EXAMPLE}`,
             `${PRIMARY_CLI_NAME} workflow set --scope-budget on --scope-budget-warn-changed-lines 2000 --scope-budget-block-changed-lines 5000 ${WORKFLOW_SET_CONFIRMATION_EXAMPLE}`,
@@ -219,18 +218,18 @@ export const COMMAND_HELP: Readonly<Record<CommandHelpName, CommandHelpDescripto
         hints: Object.freeze([
             'Default mode: workflow with no subcommand behaves like workflow show.',
             'compile_gate.command is the executable compile-gate source; unconfigured workspaces fail closed instead of falling back to 40-commands.md.',
-            'Compile-gate command changes must stay compile/build/type-check commands and must not match the configured full-suite command.',
-            'Full-suite timeout blocker controls whether repeated timeout evidence blocks task progress; timeout retry count controls same-scope retries before blocker handling. --full-suite-timeout-ms sets the overall full-suite command ceiling (default 900000 ms); raise it when the project suite legitimately runs longer.',
+            'Compile-gate command changes must stay compile/build/type-check commands and must not match the selected task test command.',
+            'Task test timeout blocker controls whether repeated timeout evidence blocks task progress; timeout retry count controls same-scope retries before blocker handling. --task-test-timeout-ms sets the overall task test command ceiling (default 900000 ms); raise it when the selected task tests legitimately run longer.',
             'Review execution policy modes: parallel_all, test_after_code, code_first_optional, strict_sequential.',
             'Scope budget guard uses tiered warning and blocking thresholds; legacy --scope-budget-max-* and --scope-budget-action flags remain accepted for old automation.',
             'Legacy --scope-budget-action only controls how max_* values map to warn_* or block_* thresholds; explicit block_* thresholds still block in every mode.',
             'Scope budget guard warnings allow continuation; blocking thresholds move oversized tasks to split-required before compile/review loops.',
             'Review cycle guard can block runaway non-test review attempts; fresh defaults allow 15 failed non-test reviews and 30 total non-test reviews, with test review excluded by default.',
-            'Short aliases map exactly to existing boolean settings: --full-suite, --no-delegate, --scope-budget, --review-cycle, --review-cycle-auto-split, --project-memory, --task-reset, --auto-backup, and --optional-checks accept on|off.',
+            'Short aliases map exactly to existing boolean settings: --task-tests (legacy --full-suite), --no-delegate, --scope-budget, --review-cycle, --review-cycle-auto-split, --project-memory, --task-reset, --auto-backup, and --optional-checks accept on|off.',
             'Review cycle auto split is disabled by default and can be enabled with --review-cycle-auto-split on.',
             'Project memory maintenance defaults to update mode; use off, check, update, or strict mode for explicit repo-local policy.',
             'Task reset mutations are disabled by default and can be enabled with --task-reset on.',
-            'Optional quality checks are advisory, default-enabled, routed before expensive gates when current implementation changes need checklist evidence, and configurable with --optional-checks on|off plus --optional-checks-review-failure-cadence-interval and --optional-check-rule-* without replacing mandatory compile/review/full-suite gates. Use --optional-check-rule-exclude-test-only true to skip one rule only for pure test changes.',
+            'Optional quality checks are advisory, default-enabled, routed before expensive gates when current implementation changes need checklist evidence, and configurable with --optional-checks on|off plus --optional-checks-review-failure-cadence-interval and --optional-check-rule-* without replacing mandatory compile/review/task tests gates. Use --optional-check-rule-exclude-test-only true to skip one rule only for pure test changes.',
             'Garda self-guard defaults to on for application workspaces and blocks agent self-entry into --orchestrator-work.',
             'Durable local commit permission is OFF by default. --local-commit on (same as --local-commit-enabled true) lets completed and audited tasks commit through task-bound gate human-commit without asking. OFF revokes durable permission and requires a fresh operator confirmation and answer timestamp for each native task commit. Neither mode grants push or CI.',
             'Select a command that runs only this task\'s tests and relevant regressions; next-step prefills changed test targets and leaves an explicit command placeholder. The configured project command is a reference to narrow from. Audited task-scoped test selection requires a current authenticated preflight; unchanged regression targets need a reason relating them to a task file. A supported focused runner or a provably containing module or directory must include every changed test and every target carried from failed selections. A broad failure can be recorded with its authenticated command and artifact without per-test attribution, including older evidence without refs or verdict. Failure of selected task tests requires repair. The task timeline stores the selection; shared configuration is unchanged. Confirmation is required when task_test_selection.require_operator_confirmation is enabled.',
@@ -306,10 +305,13 @@ export const COMMAND_HELP: Readonly<Record<CommandHelpName, CommandHelpDescripto
     }),
     ui: Object.freeze({
         summary: 'Start a localhost UI with lazy task-detail loading and optional allow-listed actions.',
-        usage: Object.freeze([
-            `${PRIMARY_CLI_NAME} ui [--target-root PATH] [--port PORT] [--language ${formatLocalUiLanguageCliChoices()}] [--idle-minutes N] [--idle-warning-seconds N] [--no-idle-shutdown] [--read-only] [--actions]`,
-            `${PRIMARY_CLI_NAME} ui --target-root "."`
-        ]),
+        get usage(): readonly string[] {
+            const { formatLocalUiLanguageCliChoices } = require('../../reports/ui/ui-i18n') as typeof import('../../reports/ui/ui-i18n');
+            return Object.freeze([
+                `${PRIMARY_CLI_NAME} ui [--target-root PATH] [--port PORT] [--language ${formatLocalUiLanguageCliChoices()}] [--idle-minutes N] [--idle-warning-seconds N] [--no-idle-shutdown] [--read-only] [--actions]`,
+                `${PRIMARY_CLI_NAME} ui --target-root "."`
+            ]);
+        },
         examples: Object.freeze([
             `${PRIMARY_CLI_NAME} ui`,
             `${PRIMARY_CLI_NAME} ui --target-root "."`,
@@ -435,7 +437,7 @@ export const COMMAND_HELP: Readonly<Record<CommandHelpName, CommandHelpDescripto
             'Use dry-run first when removing runtime artifacts.',
             'Manual runtime cleanup batch purge selects non-active task-owned artifacts older than N days or outside the latest N by filesystem recency, and --include-problematic-tasks also includes stale problematic runtime-active histories while still protecting current active work.',
             'Runtime retention tiers are active evidence, ledger history for healthy DONE tasks, compressed forensic evidence for problem tasks, and confirmed purge.',
-            'Clean-success compile/full-suite raw logs may be omitted at gate time; warnings, failures, and non-clean runs retain raw output.',
+            'Clean-success compile/task test raw logs may be omitted at gate time; warnings, failures, and non-clean runs retain raw output.',
             'Working-plan cleanup is limited to runtime/plans/*.md and preserves active task plans.',
             'Task purge removes only runtime artifacts owned by the selected task id and repairs shared aggregates instead of deleting shared files wholesale.',
             'The policy subcommand is the human-facing review-artifact storage policy editor/viewer.'
@@ -824,7 +826,7 @@ export function buildHelpText(packageJson: PackageJsonLike): string {
             '  - older snapshots created before rollback metadata persistence cannot be restored automatically.',
             `  - cleanup uses retention defaults (${retentionDefaultsSummary}); override with ${retentionOverrideFlags}.`,
             '  - runtime retention is tiered: active evidence is preserved, healthy DONE tasks can compact to ledger history after verified ledger evidence, problem tasks keep recovery-readable evidence and compress heavy forensic artifacts, and purge requires explicit confirmation.',
-            '  - clean-success compile/full-suite raw logs may be intentionally omitted at gate time; retained summaries still record status, duration, hashes, and line/char counts.',
+            '  - clean-success compile/task test raw logs may be intentionally omitted at gate time; retained summaries still record status, duration, hashes, and line/char counts.',
             `  - use \`${PRIMARY_CLI_NAME} cleanup policy edit\` for the dialog-first review-artifact storage policy editor, or \`${PRIMARY_CLI_NAME} cleanup policy\` to inspect current settings.`,
             '  - gc/clean is dry-run by default; pass --confirm to apply retention-approved removal or compression. Supports --category, --runtime-retention-older-than-days, --runtime-retention-keep-latest-tasks, --max-working-plans, --max-aggregate-lines, and --max-metrics-lines.',
             `  - running \`${PRIMARY_CLI_NAME} profile create\` with no profile name in a TTY starts the full interactive profile builder.`,

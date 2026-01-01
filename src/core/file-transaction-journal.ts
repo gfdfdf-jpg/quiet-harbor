@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import { lstatFileIdentitySync } from './file-stat';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
+import { invocationExpectedStatMatches, readInvocationFileContentWithObservation, readInvocationPathObservation } from './invocation-file-observation';
 
 export const MAX_TRANSACTION_FILE_BYTES = 16 * 1024 * 1024;
 export const MAX_TRANSACTION_JOURNAL_BYTES = 64 * 1024 * 1024;
@@ -46,6 +47,19 @@ export function assertTransactionPath(root: string, filePath: string): void {
 }
 
 export function readTransactionBytes(root: string, filePath: string, limit = MAX_TRANSACTION_FILE_BYTES): Buffer | null {
+    return readCheckedTransactionBytes(root, filePath, limit, false);
+}
+
+/** Read-only inspection shares payloads; transaction/action readers retain their live reads. */
+export function readInvocationTransactionBytes(root: string, filePath: string, limit = MAX_TRANSACTION_FILE_BYTES): Buffer | null {
+    return readCheckedTransactionBytes(root, filePath, limit, true);
+}
+
+function readCheckedTransactionBytes(root: string, filePath: string, limit: number, observe: boolean): Buffer | null {
+    if (observe) {
+        readInvocationPathObservation(root);
+        readInvocationPathObservation(filePath);
+    }
     assertTransactionPath(root, filePath);
     let descriptor: number;
     try {
@@ -57,9 +71,13 @@ export function readTransactionBytes(root: string, filePath: string, limit = MAX
     try {
         const stat = fs.fstatSync(descriptor);
         if (!stat.isFile() || stat.nlink !== 1 || stat.size > limit) throw new Error('Invalid or oversized transaction file.');
-        const buffer = Buffer.alloc(stat.size);
+        const observed = observe ? readInvocationFileContentWithObservation(filePath, limit) : null;
+        if (observed && !invocationExpectedStatMatches(observed.alias, stat)) {
+            throw new Error('Transaction file identity changed while reading.');
+        }
+        const buffer = observed ? observed.content.copyBytes() : Buffer.alloc(stat.size);
         let offset = 0;
-        while (offset < buffer.length) {
+        while (!observed && offset < buffer.length) {
             const count = fs.readSync(descriptor, buffer, offset, buffer.length - offset, offset);
             if (count === 0) throw new Error('Transaction file changed while reading.');
             offset += count;

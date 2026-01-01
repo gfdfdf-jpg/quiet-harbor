@@ -161,7 +161,7 @@ test('AGENT_INIT_PROMPT keeps the task execution contract navigator-first', () =
     assert.ok(content.includes('next-step "<task-id>" --repo-root "."'));
     assert.ok(content.includes('garda-agent-orchestrator/live/config/profiles.json'));
     assert.ok(content.includes('profile current|list|use|create --target-root "."'));
-    assert.ok(content.includes('workflow set --full-suite-enabled true --full-suite-command "<project test command>"'));
+    assert.ok(content.includes('workflow set --task-test-enabled true --task-test-command "<project test command>"'));
     assert.ok(content.includes('garda-agent-orchestrator/'));
     assert.doesNotMatch(content, /default depth when omitted:\s*`2`/i);
 });

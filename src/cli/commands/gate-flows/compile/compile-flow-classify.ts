@@ -4,9 +4,13 @@ import { splitGeneratedRuntimeControlPlaneArtifacts } from '../../../../gates/sh
 import { assertNoInstalledBundleScope } from '../../../../gates/protected-control-plane/installed-bundle-guard';
 import * as fs from 'node:fs';
 import { freezeProjectValidationAdmission } from '../../../../gates/project-validation/authority';
+import { loadDeclaredTaskTestSelection } from '../../../../gates/full-suite/task-full-suite-config';
+import { taskValidationRequiresSemanticReview } from '../../../../core/task-validation-plan';
+import { isTestScopePath } from '../../../../core/file-role-bindings';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import { isPlainRecord } from '../../../../core/records';
+import { readRecordedFailureRecheck } from '../../../../gates/full-suite/recorded-out-of-scope-follow-ups';
 import { readValidationFile } from '../../../../core/project-validation-identity';
 import { computeTaskCriteriaBinding } from '../../../../gates/review-context/review-context-task-criteria-binding';
 import { preflightSnapshotPath, readLostPreflightSnapshot, restoredPreflightText } from '../../../../gates/preflight/preflight-restoration';
@@ -347,6 +351,8 @@ export interface ClassifyChangeCommandOptions {
     forceAllDomainReviews?: unknown;
     forceCodeReview?: unknown;
     remediationRequiredReviewTypes?: readonly string[];
+    /** Internal authority from the native review restart, never a classify-change CLI option. */
+    reviewRestartOrigin?: { reviewType: string; taskModeSha256: string };
     outputPath?: string;
     metricsPath?: string;
     emitMetrics?: unknown;
@@ -455,6 +461,9 @@ export function runClassifyChangeCommand(options: ClassifyChangeCommandOptions):
         : explicitChangedFilesProvided
         ? 'explicit_changed_files'
         : (options.useStaged ? (includeUntracked ? 'git_staged_plus_untracked' : 'git_staged_only') : 'git_auto');
+    const taskModeEvidenceForClassification = resolvedTaskId
+        ? getTaskModeEvidence(repoRoot, resolvedTaskId, resolvedTaskModePath)
+        : null;
     const ordinaryWorkspaceSnapshot = requestedSplitCheckpointRange
         ? null
         : getWorkspaceSnapshotCached(
@@ -504,9 +513,6 @@ export function runClassifyChangeCommand(options: ClassifyChangeCommandOptions):
         workspaceSnapshot.detection_source,
         workspaceSnapshot.changed_files
     );
-    const taskModeEvidenceForClassification = resolvedTaskId
-        ? getTaskModeEvidence(repoRoot, resolvedTaskId, resolvedTaskModePath)
-        : null;
     const snapshotReviewTriggerPolicy = taskModeEvidenceForClassification?.evidence_status === 'PASS'
         && taskModeEvidenceForClassification.profile_policy_snapshot_status === 'PASS'
         && taskModeEvidenceForClassification.profile_policy_snapshot
@@ -519,12 +525,19 @@ export function runClassifyChangeCommand(options: ClassifyChangeCommandOptions):
     const reviewExecutionPolicy = loadReviewExecutionPolicyConfig(repoRoot);
     const isSourceCheckout = gateHelpers.isOrchestratorSourceCheckout(repoRoot);
     const projectValidationAdmission = freezeProjectValidationAdmission(repoRoot);
+    const taskTestSelection = resolvedTaskId ? loadDeclaredTaskTestSelection(repoRoot, resolvedTaskId) : undefined;
+    const semanticTestReviewRequired = taskValidationRequiresSemanticReview(taskTestSelection?.validation_plan,
+        workspaceSnapshot.changed_files, classificationConfig.test_trigger_regexes);
+    const taskTestPaths = (taskTestSelection?.targets.map(target => target.path) ?? [])
+        .filter(file => !isTestScopePath(file, classificationConfig.test_trigger_regexes, classificationConfig.file_roles));
+    const declaredTestPaths = [...new Set([...projectValidationAdmission.declared_test_paths, ...taskTestPaths])];
     const result: ClassifyChangeResult = classifyChange({
-        declaredTestPaths: projectValidationAdmission.declared_test_paths,
+        declaredTestPaths,
         normalizedFiles: workspaceSnapshot.changed_files,
         repoRoot,
         isSourceCheckout,
         taskIntent: String(options.taskIntent || ''),
+        taskId: resolvedTaskId || undefined,
         fastPathMaxFiles: parseIntOption(options.fastPathMaxFiles, 2, 1),
         fastPathMaxChangedLines: parseIntOption(options.fastPathMaxChangedLines, 40, 1),
         performanceHeuristicMinLines: parseIntOption(options.performanceHeuristicMinLines, 120, 1),
@@ -540,6 +553,7 @@ export function runClassifyChangeCommand(options: ClassifyChangeCommandOptions):
         reviewCapabilities,
         reviewExecutionPolicyMode: reviewExecutionPolicy.mode
     });
+    if (semanticTestReviewRequired) result.required_reviews.test = true;
     (result as unknown as Record<string, unknown>).authorized_files = authorizedFiles;
     const projectValidation = projectValidationAdmission.binding;
     if (projectValidation) (result as unknown as Record<string, unknown>).project_validation = projectValidation;
@@ -707,6 +721,20 @@ export function runClassifyChangeCommand(options: ClassifyChangeCommandOptions):
                 // Initial or malformed preflight evidence cannot remove profile reviews.
             }
         }
+        const canRecheckRecordedFailure = actualZeroDiffDetected && zeroDiffReviewPolicyRefreshAllowed
+            && taskQueueMetadata?.notes?.includes('out_of_scope_follow_up=grouped')
+            && !semanticTestReviewRequired && !Object.values(domainSurface).some(Boolean)
+            && (taskModeEvidence.planned_changed_files || []).every(file =>
+                isTestScopePath(file, classificationConfig.test_trigger_regexes, classificationConfig.file_roles))
+            && (taskModeEvidence.profile_policy_snapshot?.review_execution_policy.full_suite_validation
+                ?? loadFullSuiteValidationConfig(repoRoot)).enabled
+            && (workspaceSnapshot.detection_source === 'git_auto' && includeUntracked
+                || getWorkspaceSnapshotCached(repoRoot, 'git_auto', true, []).changed_files.length === 0);
+        const recordedFailureRecheck = canRecheckRecordedFailure ? readRecordedFailureRecheck(repoRoot, resolvedTaskId) : null;
+        if (recordedFailureRecheck) {
+            result.triggers.recorded_failure_recheck = true;
+            result.recorded_failure_recheck = recordedFailureRecheck;
+        }
         const profileGuardrailOptions = {
             domainSurface,
             forceAllDomainReviews: parseBooleanOption(options.forceAllDomainReviews, false),
@@ -714,13 +742,13 @@ export function runClassifyChangeCommand(options: ClassifyChangeCommandOptions):
             localizationOnlyScope: isLocalizationOnlyReviewTriggerScope(result),
             protectedControlPlaneChanged: result.triggers.protected_control_plane_changed === true,
             protectedControlPlaneDocsOnly: result.triggers.protected_control_plane_docs_only === true,
-            zeroDiffBaselineOnly: zeroDiffReviewPolicyRefreshAllowed && isZeroDiffBaselineOnlyNoReviewableScope(
+            zeroDiffBaselineOnly: !!recordedFailureRecheck || (zeroDiffReviewPolicyRefreshAllowed && isZeroDiffBaselineOnlyNoReviewableScope(
                 result,
                 domainSurface,
                 taskModeEvidence.planned_changed_files || [],
                 taskModeEvidence.dirty_workspace_baseline?.changed_files || [],
                 authenticatedNoOpScope
-            )
+            ))
         };
         zeroDiffBaselineOnlyNoReviewableScope = profileGuardrailOptions.zeroDiffBaselineOnly;
         if (
@@ -1209,6 +1237,7 @@ export function runClassifyChangeCommand(options: ClassifyChangeCommandOptions):
                 legacyRequiredReviews: result.required_reviews,
                 codeReviewSafetyFloor: requiresCodeReviewSafetyFloor(result, effectiveTaskPolicy),
                 taskRequiredReviewIds: [...new Set([
+                    ...(semanticTestReviewRequired ? ['test'] : []),
                     ...result.task_required_review_declaration?.applied_reviews ?? [],
                     ...[...options.remediationRequiredReviewTypes ?? [],
                         ...collectRestartRequiredReviewTypes(orchestratorRoot, resolvedTaskId)]
@@ -1383,6 +1412,12 @@ export function runClassifyChangeCommand(options: ClassifyChangeCommandOptions):
                     mode: result.mode,
                     output_path: normalizeOptionalPath(outputPath),
                     output_sha256: outputSha256,
+                    ...(options.reviewRestartOrigin && outputSha256 ? {
+                        review_restart_origin: {
+                            review_type: options.reviewRestartOrigin.reviewType,
+                            task_mode_sha256: options.reviewRestartOrigin.taskModeSha256
+                        }
+                    } : {}),
                     changed_files_count: result.metrics.changed_files_count,
                     changed_lines_total: result.metrics.changed_lines_total,
                     scope_sha256: result.metrics.scope_sha256,

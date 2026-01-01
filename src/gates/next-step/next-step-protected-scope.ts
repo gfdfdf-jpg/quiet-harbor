@@ -87,44 +87,12 @@ function excludeUnchangedTaskModeBaselineFiles(
     };
 }
 
-function readWorkflowConfigProtectedManifestCandidates(repoRoot: string): string[] {
+function readWorkflowConfigProtectedManifestDrift(repoRoot: string): string[] {
     const manifestPath = resolveProtectedControlPlaneManifestPath(repoRoot);
     if (!fs.existsSync(manifestPath)) {
         return [];
     }
     try {
-        const parsed = JSON.parse(readInvocationTextFile(manifestPath)) as Record<string, unknown>;
-        const protectedSnapshot = parsed.protected_snapshot
-            && typeof parsed.protected_snapshot === 'object'
-            && !Array.isArray(parsed.protected_snapshot)
-            ? parsed.protected_snapshot as Record<string, unknown>
-            : {};
-        const protectedRoots = Array.isArray(parsed.protected_roots)
-            ? parsed.protected_roots.map((entry) => normalizePath(entry)).filter(Boolean)
-            : [];
-        return [...new Set([
-            ...Object.keys(protectedSnapshot).map((entry) => normalizePath(entry)).filter(Boolean),
-            ...protectedRoots.filter((entry) => isWorkflowConfigControlPlanePath(entry))
-        ])]
-            .filter((entry) => isWorkflowConfigControlPlanePath(entry))
-            .sort();
-    } catch {
-        return [];
-    }
-}
-
-function readChangedWorkflowConfigProtectedManifestFiles(
-    repoRoot: string,
-    gitChangedFiles: readonly string[],
-    gitIgnoredFiles: ReadonlySet<string>
-): string[] {
-    const manifestPath = resolveProtectedControlPlaneManifestPath(repoRoot);
-    if (!fs.existsSync(manifestPath)) {
-        return [];
-    }
-    try {
-        const gitChangedFileSet = new Set(gitChangedFiles.map((entry) => normalizePath(entry)).filter(Boolean));
-        const requireCurrentWorkspaceSignal = repoHasGitMetadata(repoRoot);
         const parsed = JSON.parse(readInvocationTextFile(manifestPath)) as Record<string, unknown>;
         const protectedSnapshot = parsed.protected_snapshot
             && typeof parsed.protected_snapshot === 'object'
@@ -148,11 +116,6 @@ function readChangedWorkflowConfigProtectedManifestFiles(
                 expectedHash
                     ? String(fileSha256(path.join(repoRoot, protectedPath)) || '').trim().toLowerCase() !== expectedHash
                     : fs.existsSync(path.join(repoRoot, protectedPath))
-            ))
-            .filter(({ protectedPath }) => (
-                !requireCurrentWorkspaceSignal
-                || gitChangedFileSet.has(protectedPath)
-                || gitIgnoredFiles.has(protectedPath)
             ))
             .map(({ protectedPath }) => protectedPath)
             .sort();
@@ -260,7 +223,7 @@ export function readCurrentProtectedScopeBeforePreflight(
     const workflowConfigManifestCandidates = fullManifestChangedProtectedFiles
         .filter((entry) => isWorkflowConfigControlPlanePath(entry));
     const standaloneWorkflowConfigCandidates = gitProtectedFiles.length === 0
-        ? readWorkflowConfigProtectedManifestCandidates(repoRoot)
+        ? readWorkflowConfigProtectedManifestDrift(repoRoot)
         : [];
     const gitIgnoredFiles = readGitIgnoredPathSet(repoRoot, [
         ...workflowConfigManifestCandidates,
@@ -276,7 +239,7 @@ export function readCurrentProtectedScopeBeforePreflight(
                 gitIgnoredFiles
             )
         ]
-        : readChangedWorkflowConfigProtectedManifestFiles(repoRoot, gitChangedFiles, gitIgnoredFiles);
+        : selectCurrentScopeWorkflowConfigManifestFiles(repoRoot, gitChangedFiles, standaloneWorkflowConfigCandidates, gitIgnoredFiles);
     const changedFiles = filterGeneratedRuntimeControlPlaneArtifacts([
         ...gitChangedFiles,
         ...manifestChangedProtectedFiles

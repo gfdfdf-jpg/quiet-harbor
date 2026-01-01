@@ -195,7 +195,7 @@ function buildInitReportLines(opts: BuildInitReportOptions): string[] {
         `- Review artifact storage config merge status: ${configMergeStatuses['review-artifact-storage'] || 'n/a'}`,
         '- Runtime retention config sync policy: preserve existing live values, fill missing keys from template.',
         `- Runtime retention config merge status: ${configMergeStatuses['runtime-retention'] || 'n/a'}`,
-        '- Workflow config sync policy: preserve existing live values, fill missing keys from template; if the live file is missing, malformed, or non-object, apply template defaults and report the effective full-suite setting.',
+        '- Workflow config sync policy: preserve existing live values, fill missing keys from template; if the live file is missing, malformed, or non-object, apply template defaults and report the effective task test validation setting.',
         `- Workflow config merge status: ${configMergeStatuses['workflow-config'] || 'n/a'}`,
         '- Root config manifest sync policy: rewrite the canonical root manifest from template on every init/update.',
         `- Root config manifest merge status: ${configMergeStatuses['garda.config'] || 'n/a'}`,
@@ -272,7 +272,7 @@ function buildUsageLines(opts: BuildUsageOptions): string[] {
         ? `Hard no-auto-commit guard is enabled. It blocks detected agent-session commits while normal human commits remain available; for intentional manual commits from the same agent shell use: \`${getNodeHumanCommitCommand()}\`.`
         : 'Hard no-auto-commit guard is disabled.';
     const fullSuiteLine = fullSuiteValidationEnabled
-        ? '- Mandatory full-suite validation is enabled through `garda-agent-orchestrator/live/config/workflow-config.json`; `next-step` routes `full-suite-validation` with the configured command when required.'
+        ? '- Mandatory task test validation is enabled through `garda-agent-orchestrator/live/config/workflow-config.json`; `next-step` routes `task-test-validation` with the configured command when required.'
         : `- ${buildFullSuiteDisabledGuidance(cliCommand)}`;
 
     return [
@@ -299,9 +299,9 @@ function buildUsageLines(opts: BuildUsageOptions): string[] {
         '- Scope budget, review-cycle guard, task-reset availability, and project-memory maintenance are workflow settings. Change them only through `node garda-agent-orchestrator/bin/garda.js workflow set ... --target-root "."`.',
         '- Ordinary document path exceptions live in `garda-agent-orchestrator/live/config/paths.json` as `ordinary_doc_paths`; they are auditable planning/changelog doc exceptions, not a global ignore list.', '',
         USAGE_CONTRACT_MARKERS.fullSuiteValidation,
-        '## Full-Suite Validation',
+        '## Task Test Validation',
         fullSuiteLine,
-        '- Full-suite out-of-scope handling is configured in `workflow-config.json`; do not change it to bypass a failing gate.', '',
+        '- Task test out-of-scope handling is configured in `workflow-config.json`; do not change it to bypass a failing gate.', '',
         USAGE_CONTRACT_MARKERS.indexingNote,
         '## Indexing Note',
         '- Where the host supports indexing controls, exclude `garda-agent-orchestrator/` from application-code, stack-detection, and IDE/AI semantic indexing. Keep explicit Garda rule/config/skill paths and `bin/garda.js` readable to agents.',

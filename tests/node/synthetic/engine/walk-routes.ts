@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as ts from 'typescript';
+import { observeStandOracle } from './stand-check-observation';
 
 export interface SourceRoute {
     id: string;
@@ -201,6 +202,7 @@ export interface RouteCoverage {
     invalidExemptions: string[];
 }
 export function routeCoverage(inventory: RouteInventory, steps: readonly { gate: string | null; status: string; routes?: string[]; stepId?: string }[], exemptions: UncoveredRoute[]): RouteCoverage {
+    observeStandOracle('route-coverage');
     const count = (observations: typeof steps) => new Set(observations.map((step, index) => step.stepId ?? index)).size;
     const gates = inventory.gates.map(id => ({ id: 'gate:' + id, steps: count(steps.filter(step => step.gate === id)) }));
     const blocked = inventory.points.filter(entry => entry.blocked).map(entry => ({ id: entry.id,

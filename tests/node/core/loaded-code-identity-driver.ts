@@ -233,7 +233,7 @@ try {
         // The path was observed earlier in this invocation; the read made now must still reject a later replacement.
         assert.throws(() => withInvocationReadObservation(() => {
             readInvocationPathObservation(dependency); replaceKeepingSizeAndTime(dependency, original); generic();
-        }), /Invocation file changed before read/);
+        }), /Invocation (?:file changed before read|descriptor does not match observed file)/);
         replaceKeepingSizeAndTime(dependency, original);
         observedCapture();
     } else if (scenario === 'observed-graph-changed') {

@@ -32,13 +32,14 @@ function diffSummary(root: string, files: string[], source = 'explicit_changed_f
         path.join(root, 'garda-agent-orchestrator/runtime/reviews/T-413-preflight.json'));
 }
 
-function legacyCacheFingerprint(root: string, filePath: string, content: string | null, source: string, version = 'v9'): string {
+function legacyCacheFingerprint(root: string, filePath: string, content: string | null, source: string, version = 'v10'): string {
     const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
     const normalizedRoot = path.resolve(root).replace(/\\/gu, '/');
     const params = {
         detection_source: source,
         explicit_changed_files_hash: sha256(source === 'explicit_changed_files' ? filePath : ''),
         include_untracked: false,
+        planned_source_visibility_sha256: '', // v10 fixture has no native task/planned-source entry.
         repo_root: process.platform === 'win32' ? normalizedRoot.toLowerCase() : normalizedRoot
     };
     const state = content === null ? 'missing' : `file|${Buffer.byteLength(content)}|${sha256(content)}`;
@@ -151,7 +152,7 @@ describe('Git path consumers', () => {
                 const files = source === 'explicit_changed_files' ? [filePath] : [];
                 const current = computeSnapshotFingerprint(root, source, false, files).fingerprint;
                 // Compare old path parsing within the current envelope version. Version 7
-                // is independently invalidated even for ordinary ASCII by the v9 migration.
+                // is independently invalidated even for ordinary ASCII by the v10 migration.
                 const legacy = legacyCacheFingerprint(root, filePath, content, source);
                 assert.notEqual(current, legacyCacheFingerprint(root, filePath, content, source, 'v7'));
                 if (filePath === 'ascii.txt') assert.equal(current, legacy);

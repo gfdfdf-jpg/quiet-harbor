@@ -508,7 +508,7 @@ test('handleSetup preserves project-specific compile gate command during contrac
         assert.equal(workflowConfig.compile_gate.command, '.\\gradlew.bat clean testClasses --console=plain');
         assert.ok(!/```bash\r?\nnpm run build\r?\n```/.test(compileSection));
         assert.ok(compileSection.includes('must be a compile/build/type-check command'));
-        assert.ok(compileSection.includes('Do not use full-suite test commands here'));
+        assert.ok(compileSection.includes('Do not use test commands here'));
     } finally {
         fs.rmSync(workspaceRoot, { recursive: true, force: true });
     }

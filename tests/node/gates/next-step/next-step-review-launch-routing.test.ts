@@ -70,28 +70,28 @@ function resolveLaunchWithoutUnusedIgnoreReads(repoRoot: string): ReturnType<typ
     const originalSpawnSync = childProcess.spawnSync;
     const originalExecFileSync = childProcess.execFileSync;
     let ignoreCalls = 0;
-    let trackedWorkspaceReadCalls = 0;
-    let untrackedWorkspaceReadCalls = 0;
+    let workspaceStatusCalls = 0;
+    let separateWorkspaceReadCalls = 0;
+    const countWorkspaceRead = (file: string, args: readonly string[]) => {
+        if (file !== 'git') return;
+        // Command scope reads the shared invocation snapshot: one status covers tracked and untracked files.
+        if (args.includes('status') && args.includes('--porcelain=v1')) workspaceStatusCalls++;
+        if (args.includes('--name-only') || args.includes('--others')) separateWorkspaceReadCalls++;
+    };
     childProcess.spawnSync = ((file: string, args: string[], options: unknown) => {
+        countWorkspaceRead(file, args);
         if (file === 'git' && args.includes('check-ignore')) ignoreCalls++;
         return originalSpawnSync(file, args, options as never);
     }) as typeof originalSpawnSync;
     childProcess.execFileSync = ((file: string, args: string[], options: unknown) => {
-        if (file === 'git' && args.includes('--name-only')) {
-            trackedWorkspaceReadCalls++;
-            return `${['src/app.ts', ...LATENCY_PLANNED_FILES].join('\n')}\n`;
-        }
-        if (file === 'git' && args.includes('--others')) {
-            untrackedWorkspaceReadCalls++;
-            return '';
-        }
+        countWorkspaceRead(file, args);
         return originalExecFileSync(file, args, options as never);
     }) as typeof originalExecFileSync;
     try {
         const result = resolveNextStep({ taskId: TASK_ID, repoRoot });
-        assert.equal(ignoreCalls, 2, 'full route retains only the two required ignored-file queries');
-        assert.equal(trackedWorkspaceReadCalls, 2, 'one shared tracked workspace observation plus the required A1 final freshness read');
-        assert.equal(untrackedWorkspaceReadCalls, 2, 'one shared untracked workspace observation plus the required A1 final freshness read');
+        assert.equal(ignoreCalls, 0, 'unchanged protected bytes and scope already observed by Git require no additional ignore queries');
+        assert.equal(workspaceStatusCalls, 2, 'one shared workspace observation plus the required A1 final freshness read');
+        assert.equal(separateWorkspaceReadCalls, 0, 'command scope must reuse the shared workspace observation');
         return result;
     } finally {
         childProcess.spawnSync = originalSpawnSync;

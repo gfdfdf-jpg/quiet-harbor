@@ -72,7 +72,7 @@ type WorkflowOptionalSkillSelectionPolicyView = WorkflowCommandResultBase['optio
 
 export function buildMandatoryFullSuiteLine(config: { full_suite_validation: WorkflowConfigData['full_suite_validation'] }): string {
     const guidance = buildFullSuitePerformanceGuidance(config.full_suite_validation.command);
-    return `Mandatory full-suite: ${config.full_suite_validation.enabled ? 'true' : 'false'} placement=${config.full_suite_validation.placement} mode=${guidance.mode}`;
+    return `Mandatory task test validation: ${config.full_suite_validation.enabled ? 'true' : 'false'} placement=${config.full_suite_validation.placement} mode=${guidance.mode}`;
 }
 
 export function isConfiguredCompileGateCommand(command: unknown): command is string {
@@ -445,8 +445,8 @@ export function formatWorkflowShowOutput(result: WorkflowCommandResultBase & { a
     lines.push('Hints');
     lines.push('Tip: compile-gate executes workflow-config compile_gate.command only; unconfigured workspaces fail closed and do not fall back to 40-commands.md.');
     lines.push(`Tip: run "workflow set --compile-gate-command \"<compile/build/type-check command>\" ${WORKFLOW_SET_CONFIRMATION_EXAMPLE}" after operator approval to set the compile gate command.`);
-    lines.push(`Tip: run "workflow set --full-suite on|off ${WORKFLOW_SET_CONFIRMATION_EXAMPLE}" to change the repo-local mode after operator approval.`);
-    lines.push(`Tip: run "workflow set --full-suite-timeout-blocker true|false --full-suite-timeout-retry-count 1 ${WORKFLOW_SET_CONFIRMATION_EXAMPLE}" to change timeout blocker behavior after operator approval.`);
+    lines.push(`Tip: run "workflow set --task-tests on|off ${WORKFLOW_SET_CONFIRMATION_EXAMPLE}" to change the repo-local mode after operator approval.`);
+    lines.push(`Tip: run "workflow set --task-test-timeout-blocker true|false --task-test-timeout-retry-count 1 ${WORKFLOW_SET_CONFIRMATION_EXAMPLE}" to change timeout blocker behavior after operator approval.`);
     lines.push(`Tip: run "workflow set --review-execution-policy <${REVIEW_EXECUTION_POLICY_MODES.join('|')}> ${WORKFLOW_SET_CONFIRMATION_EXAMPLE}" to change review launch ordering after operator approval.`);
     lines.push(`Tip: run "workflow set --no-delegate true|false ${WORKFLOW_SET_CONFIRMATION_EXAMPLE}" to toggle fail-closed delegated reviewer launch availability after operator approval.`);
     lines.push(`Tip: run "workflow set --scope-budget on|off --scope-budget-warn-changed-lines 2000 --scope-budget-block-changed-lines 5000 ${WORKFLOW_SET_CONFIRMATION_EXAMPLE}" to change the tiered scope budget guard after operator approval.`);

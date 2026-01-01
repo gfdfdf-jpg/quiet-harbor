@@ -192,7 +192,9 @@ describe('cli/commands/gates', () => {
         fs.rmSync(repoRoot, { recursive: true, force: true });
     });
 
-    test('completion-gate rollback preserves foreign aggregate and summary updates appended after the current task write', async () => {
+    for (const corruptSummary of [false, true]) test(
+        'completion-gate rollback preserves foreign updates' + (corruptSummary ? ' with a NUL-filled summary' : ' with a valid summary'),
+        async () => {
         const repoRoot = createTempRepo();
         const taskId = 'T-903-completion-pass-cross-task-rollback';
         const foreignTaskId = 'T-903-foreign-summary-preserved';
@@ -268,6 +270,7 @@ describe('cli/commands/gates', () => {
                         task_summary: 'Foreign task event must survive rollback'
                     }
                 );
+                if (corruptSummary) fs.writeFileSync(timelineSummaryPath, Buffer.alloc(11646));
                 throw new Error('Injected post-append failure after foreign task event');
             }
             return originalAppendTaskEventAsync(...args);
@@ -283,6 +286,7 @@ describe('cli/commands/gates', () => {
             });
             assert.match(error.message, /mandatory COMPLETION_GATE_PASSED append failed/i);
             assert.match(error.message, /Injected post-append failure after foreign task event/i);
+            assert.doesNotMatch(error.message, /Rollback failed/i);
         } finally {
             taskEventsIoModule.appendTaskEventAsync = originalAppendTaskEventAsync;
         }

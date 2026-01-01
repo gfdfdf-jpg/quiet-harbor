@@ -1,8 +1,15 @@
+import { NATIVE_RECOVERY_WALK_SCENARIOS } from './walk-native-recovery-scenarios';
+import { UNKNOWN_STACK_CONTRACT_SCENARIOS } from './walk-unknown-stack-contract';
+import { STACK_WALK_SCENARIOS, STACK_REVIEW_VARIANTS } from './walk-stack-scenarios';
 import type { WalkEdit, WalkScenario } from './navigator-walk';
 import { TEST_SELECTION_WALK_SCENARIOS } from './walk-test-selection-scenarios';
 import { OPAQUE_RUNNER_WALK_SCENARIOS } from './walk-opaque-runner-scenarios';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { isTaskQueueActiveStatus } from '../../../../src/core/active-task-state';
+import { readTaskQueueEntries } from '../../../../src/core/task-queue-read';
+import { parseCanonicalActiveTaskQueue, replaceTaskMdTableCell } from '../../../../src/core/task-md-table';
+import { readTaskQueueStatusToken } from '../../../../src/core/task-queue/task-queue-status';
 import { COVERAGE_WALK_SCENARIOS } from './walk-coverage-scenarios';
 import { RECOVERY_COVERAGE_WALK_SCENARIOS } from './walk-recovery-coverage-scenarios';
 import { PARENT_COVERAGE_WALK_SCENARIOS } from './walk-parent-coverage-scenarios';
@@ -15,6 +22,9 @@ import { BOUNDARY_COVERAGE_WALK_SCENARIOS } from './walk-boundary-coverage-scena
 import { OWNER_COVERAGE_WALK_SCENARIOS } from './walk-owner-coverage-scenarios';
 import { PUBLICATION_COVERAGE_WALK_SCENARIOS } from './walk-publication-coverage-scenarios';
 import { ROUTE_CLOSURE_WALK_SCENARIOS } from './walk-route-closure-scenarios';
+import { narrowLegacyFailure } from './walk-legacy-task-contract';
+import { STACK_COMPACT_REVIEW_SCENARIOS, STACK_DEEP_REVIEW_SCENARIOS } from './walk-stack-review-scenarios';
+import { FIELD_CASE_SCENARIOS } from './walk-field-cases';
 
 const SOURCE_EDIT: WalkEdit = { path: 'src/app.ts', append: 'export const changed = true;\n' };
 const TEST_EDIT: WalkEdit = { path: 'tests/app.test.ts', append: '// covered\n' };
@@ -38,6 +48,9 @@ const FOUR_LANE_EDITS: WalkEdit[] = [
 // a small fix without a protected signal repeats in DELTA, a larger one restarts from the first review in FULL,
 // reviews the fix did not reach stay accepted, and documents never trigger a review.
 export const WALK_SCENARIOS: readonly WalkScenario[] = [
+    ...FIELD_CASE_SCENARIOS,
+    ...STACK_COMPACT_REVIEW_SCENARIOS,
+    ...STACK_DEEP_REVIEW_SCENARIOS,
     ...TEST_SELECTION_WALK_SCENARIOS,
     ...OPAQUE_RUNNER_WALK_SCENARIOS,
     ...OWNER_COVERAGE_WALK_SCENARIOS,
@@ -52,6 +65,7 @@ export const WALK_SCENARIOS: readonly WalkScenario[] = [
     ...EVIDENCE_EDGE_WALK_SCENARIOS,
     ...REUSE_COVERAGE_WALK_SCENARIOS,
     ...ROUTE_CLOSURE_WALK_SCENARIOS,
+    ...NATIVE_RECOVERY_WALK_SCENARIOS,
     // These are invalid operator inputs, not fabricated gate-owned lifecycle evidence. The routing
     // contract requires an exact repair handoff before any lifecycle command may execute.
     ...[
@@ -60,13 +74,26 @@ export const WALK_SCENARIOS: readonly WalkScenario[] = [
         { id: 'invalid-required-review-declaration', gate: 'task-metadata-validation', guidance: /Correct the task notes/iu,
             change: (text: string) => text.replace('Synthetic navigator walk.', 'Required reviews: imaginary-lane.') },
         { id: 'split-required-without-owned-latch', gate: 'split-required-latch', guidance: /operator repairs or resets the task/iu,
-            change: (text: string) => text.replace('🟦 TODO', 'SPLIT_REQUIRED') }
+            change: (text: string) => {
+                const queue = parseCanonicalActiveTaskQueue(text);
+                const row = queue.rows.find(entry => entry.taskId === 'T-WALK');
+                if (!row || queue.diagnostics?.length || readTaskQueueStatusToken(row.status) !== 'TODO')
+                    throw new Error('split-required fixture needs one canonical TODO task before its invalid-input mutation');
+                const changed = replaceTaskMdTableCell(row.rawLine, 1, ' SPLIT_REQUIRED ');
+                if (!changed) throw new Error('split-required fixture could not replace the canonical status cell');
+                const lines = text.split(/\r?\n/u);
+                lines[row.lineIndex] = changed;
+                return lines.join(text.includes('\r\n') ? '\r\n' : '\n');
+            } }
     ].map((handoff): WalkScenario => ({
         id: handoff.id, edits: BASE_EDITS, expectedReviews: {}, expectedModes: [],
         expectedBlockedGate: handoff.gate, expectedGuidance: handoff.guidance,
         setup: root => {
             const file = path.join(root, 'TASK.md');
-            fs.writeFileSync(file, handoff.change(fs.readFileSync(file, 'utf8')));
+            const original = fs.readFileSync(file, 'utf8');
+            const changed = handoff.change(original);
+            if (changed === original) throw new Error(handoff.id + ' fixture mutation did not change its input');
+            fs.writeFileSync(file, changed);
         }
     })),
     { id: 'quality-checklist-rework', edits: BASE_EDITS, qualityRework: true,
@@ -92,7 +119,11 @@ export const WALK_SCENARIOS: readonly WalkScenario[] = [
         expectedBlockedGate: 'workflow-config-validation', expectedGuidance: /workflow validate/iu,
         expectedReviews: {}, expectedModes: [] },
     { id: 'foreign-active-task', edits: BASE_EDITS, foreignTask: true,
-        setup: root => fs.appendFileSync(path.join(root, 'TASK.md'), '| T-FOREIGN | 🟨 IN_PROGRESS | P1 | app | Other work | another-agent | 2026-10-30 | balanced | Preserve it. |\n'),
+        setup: root => {
+            fs.appendFileSync(path.join(root, 'TASK.md'), '| T-FOREIGN | IN_PROGRESS | P1 | app | Other work | another-agent | 2026-10-30 | balanced | Preserve it. |\n');
+            if (!isTaskQueueActiveStatus(readTaskQueueEntries(root).get('T-FOREIGN')?.status ?? null))
+                throw new Error('foreign-active-task fixture must establish a canonical active queue row before native entry');
+        },
         expectedBlockedGate: 'enter-task-mode', expectedGuidance: /Ask the operator to confirm/iu,
         expectedReviews: {}, expectedModes: [] },
     { id: 'dirty-workspace', edits: BASE_EDITS,
@@ -134,6 +165,14 @@ export const WALK_SCENARIOS: readonly WalkScenario[] = [
     },
     ...['db', 'security', 'refactor', 'api', 'performance', 'infra', 'dependency'].map((lane): WalkScenario => ({
         id: lane + '-failed-small-production-fix', edits: BASE_EDITS, requiredLanes: [lane],
+        // API was absent from the later task-selection calibration. Keep the original route budgets;
+        // name these two independently measured fixture input states instead of widening every task.
+        get counterState() {
+            if (lane !== 'api') return undefined;
+            const source = path.join(process.cwd(), SOURCE_FIX.path);
+            return fs.existsSync(source) && fs.readFileSync(source, 'utf8').includes(SOURCE_FIX.append!)
+                ? 'native-api-selected-remediation' : 'native-api-selected-initial';
+        },
         failures: { [lane]: 1 }, fix: [SOURCE_FIX],
         expectedReviews: { code: 2, [lane]: 2, test: 1 },
         expectedModes: ['code:FULL', lane + ':FULL', 'code:DELTA', lane + ':DELTA', 'test:FULL']
@@ -206,6 +245,14 @@ export const WALK_SCENARIOS: readonly WalkScenario[] = [
             { path: 'tests/helpers/render.ts', append: '// shared fixture change\n' }], requiredLanes: ['security', 'refactor'],
         expectedModes: ['code:FULL', 'security:FULL', 'refactor:FULL', 'test:FULL'],
         expectedReviews: { code: 1, security: 1, refactor: 1, test: 1 }
+    },
+    {
+        // This edited leaf is outside NODE_WALK_FIXTURE's auth-case matrix evidence.
+        // Keep already-passed security/refactor lanes while the failed test reviews its delta.
+        id: 'leaf-test-fix-keeps-security-refactor', counterState: 'leaf-test-review-reuse', edits: BASE_EDITS, requiredLanes: ['security', 'refactor'],
+        failures: { test: 1 }, fix: [TEST_FIX],
+        expectedModes: ['code:FULL', 'security:FULL', 'refactor:FULL', 'test:FULL', 'test:DELTA'],
+        expectedReviews: { code: 1, security: 1, refactor: 1, test: 2 }
     },
     {
         id: 'test-failed-fixed-in-test', edits: BASE_EDITS, failures: { test: 1 }, fix: [TEST_FIX],
@@ -291,10 +338,10 @@ export const WALK_SCENARIOS: readonly WalkScenario[] = [
         id: 'compile-fails-once', edits: BASE_EDITS, disturbances: [{ kind: 'fail-compile' }],
         expectedModes: ['code:FULL', 'test:FULL'], expectedReviews: { code: 1, test: 1 }, expectedFailingGates: ['compile-gate']
     },
-    {
+    narrowLegacyFailure({
         id: 'full-suite-fails-once', edits: BASE_EDITS, disturbances: [{ kind: 'fail-full-suite' }],
         expectedModes: ['code:FULL', 'test:FULL'], expectedReviews: { code: 1, test: 1 }, expectedFailingGates: ['full-suite-validation']
-    },
+    }),
     {
         id: 'finished-commands-repeat', edits: BASE_EDITS,
         disturbances: [{ kind: 'repeat-command', gate: 'compile-gate' }, { kind: 'repeat-command', gate: 'record-review-result' }],
@@ -331,5 +378,8 @@ export const WALK_SCENARIOS: readonly WalkScenario[] = [
     {
         id: 'reviewer-too-fast', edits: BASE_EDITS, disturbances: [{ kind: 'fast-reviewer', lane: 'test' }],
         expectedModes: ['code:FULL', 'test:FULL', 'test:FULL'], expectedReviews: { code: 1, test: 2 }, expectedFailingGates: ['record-review-result', 'complete-reviewer-launch']
-    }
+    },
+    ...UNKNOWN_STACK_CONTRACT_SCENARIOS,
+    ...STACK_WALK_SCENARIOS,
+    ...STACK_REVIEW_VARIANTS
 ];

@@ -731,12 +731,7 @@ function collectStatusSnapshot(
         : { enabled: null, command: null, performance: null };
     const latestUpdateNotice = bundlePresent ? readLatestUpdateNotice(bundlePath) : null;
 
-    let enforceNoAutoCommit: boolean | null = null;
-    if (liveVersionState.payload && typeof liveVersionState.payload.EnforceNoAutoCommit === 'boolean') {
-        enforceNoAutoCommit = liveVersionState.payload.EnforceNoAutoCommit;
-    } else if (answers && typeof answers.EnforceNoAutoCommit === 'boolean') {
-        enforceNoAutoCommit = answers.EnforceNoAutoCommit;
-    }
+    const enforceNoAutoCommit = resolveCommitGuard(liveVersionState.payload, answers);
 
     return {
         targetRoot: resolvedTargetRoot,
@@ -798,6 +793,18 @@ export function getStatusSnapshot(
         includeGlobalRuntimeMetrics: true,
         readOnly: options.readOnly
     });
+}
+
+function resolveCommitGuard(live: LiveVersionPayload | null, answers: InitAnswers | null): boolean | null {
+    if (live && typeof live.EnforceNoAutoCommit === 'boolean') return live.EnforceNoAutoCommit;
+    return answers && typeof answers.EnforceNoAutoCommit === 'boolean' ? answers.EnforceNoAutoCommit : null;
+}
+
+/** The commit presentation needs this setting, not provider compliance or runtime history. */
+export function readTaskCommitGuard(targetRoot: string, initAnswersPath?: string): boolean | null {
+    const root = path.resolve(targetRoot);
+    return resolveCommitGuard(readLiveVersionState(path.join(getBundlePath(root), 'live')).payload,
+        resolveInitAnswersState(root, initAnswersPath).answers);
 }
 
 export function getTaskCycleStatusSnapshot(

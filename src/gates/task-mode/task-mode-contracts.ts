@@ -25,6 +25,7 @@ export interface TaskModePlanMetadata {
     plan_path: string;
     plan_sha256: string;
     plan_summary: string;
+    scope_files?: string[];
 }
 
 export interface TaskModeMarkdownWorkingPlanMetadata {

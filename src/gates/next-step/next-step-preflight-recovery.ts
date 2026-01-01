@@ -1,4 +1,6 @@
-import { readRouteOrderedWitnesses } from './next-step-route-query-readers';
+import { readImmutableRouteOrderedWitnesses } from './next-step-route-query-readers';
+import { readTaskTimelineRouteQuery } from '../../gate-runtime/timeline/task-events-integrity';
+import { routeLatestNormalizedSequence } from '../../gate-runtime/timeline/task-route-query';
 import { countNextStepWork } from '../../core/next-step-measurement';
 import { formatInstalledBundleMaintenanceGuidance } from '../protected-control-plane/installed-bundle-guard';
 import * as fs from 'node:fs';
@@ -87,6 +89,7 @@ export interface CoherentCycleReadiness {
     ready: boolean;
     reason: string;
     command: string | null;
+    reviewRestartOrigin?: string;
     /**
      * Set on a ready result when the latest preflight was refreshed in the original task entry after the only
      * compile pass. That pass cannot anchor the refreshed preflight, so the compile route must run compile-gate again.
@@ -917,6 +920,34 @@ export function readCoherentCycleReadiness(
         };
     }
 
+    const restartOrigin = latestPreflight.details?.review_restart_origin;
+    if (taskModePath && latestPreflight.actor === 'gate' && latestPreflight.outcome === 'INFO'
+        && latestPreflight.task_id === taskId && latestPreflight.integrity
+        && isPlainRecord(restartOrigin) && typeof restartOrigin.review_type === 'string'
+        && /^[a-z][a-z0-9-]*$/u.test(restartOrigin.review_type)
+        && isSha256(restartOrigin.task_mode_sha256)
+        && isSha256(latestPreflight.details?.output_sha256)
+        && resolveEventPath(repoRoot, latestPreflight.details?.output_path) === path.resolve(preflightPath)
+        && !events.some(entry => entry.sequence > latestPreflight.sequence && (
+            RESTART_COMPLETED_EVENT_TYPES.has(entry.event_type)
+            || entry.event_type === 'TASK_MODE_ENTERED'
+            || entry.event_type === 'REVIEW_PHASE_STARTED'
+            || entry.event_type === 'REVIEW_GATE_PASSED'
+            || entry.event_type === 'REVIEW_GATE_PASSED_WITH_OVERRIDE'
+            || entry.event_type === 'COMPLETION_GATE_FAILED'
+            || entry.event_type === 'COMPLETION_GATE_PASSED'
+        ))
+        && fileSha256(preflightPath) === latestPreflight.details?.output_sha256
+        && fileSha256(taskModePath) === restartOrigin.task_mode_sha256) {
+        return {
+            ready: false,
+            reason: 'The current preflight belongs to an unfinished review remediation restart. '
+                + 'Retry that restart so it can verify the original review and finish publishing the current review decisions.',
+            command: null,
+            reviewRestartOrigin: restartOrigin.review_type
+        };
+    }
+
     const latestBoundary = findLatestTimelineEvent(
         events,
         (entry) => entry.sequence < latestPreflight.sequence && COHERENT_CYCLE_BOUNDARY_EVENTS.has(entry.event_type)
@@ -1206,6 +1237,8 @@ export function resolveActiveTaskModeArtifactPath(
 
 function getLatestTimelineSequence(eventsRoot: string, taskId: string, eventType: string): number | null {
     const timelinePath = path.join(eventsRoot, `${taskId}.jsonl`);
+    const query = readTaskTimelineRouteQuery(timelinePath, taskId);
+    if (query) return routeLatestNormalizedSequence(query, eventType);
     const errors: string[] = [];
     const events = readOrderedRouteEvents(timelinePath, errors);
     let latestSequence: number | null = null;
@@ -1233,5 +1266,5 @@ export function isLatestCompletionCurrent(eventsRoot: string, taskId: string): b
 }
 
 function readOrderedRouteEvents(timelinePath: string, errors: string[]): TimelineEventEntry[] {
-    return readRouteOrderedWitnesses(timelinePath, errors, 'preflight');
+    return readImmutableRouteOrderedWitnesses(timelinePath, errors, 'preflight');
 }

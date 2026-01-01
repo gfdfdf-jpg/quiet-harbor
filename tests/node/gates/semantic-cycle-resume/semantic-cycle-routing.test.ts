@@ -17,7 +17,7 @@ import {
     type SemanticCycleReboundArtifact
 } from '../../../../src/gates/semantic-cycle-resume/semantic-cycle-transaction-types';
 import * as fx from '../next-step/next-step-review-reuse-fixtures';
-import { recordFixturePreflightClassification, selectConfiguredTaskTests } from '../../task-test-selection-fixtures';
+import { FIXTURE_TASK_TEST_COMMAND, recordFixturePreflightClassification, selectConfiguredTaskTests } from '../../task-test-selection-fixtures';
 
 const {
     ALL_REVIEW_FLAGS,
@@ -71,7 +71,7 @@ function enableStrictResumeValidation(repoRoot: string): void {
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<string, unknown>;
     const fullSuite = config.full_suite_validation as Record<string, unknown>;
     fullSuite.enabled = true;
-    fullSuite.command = 'npm test';
+    fullSuite.command = FIXTURE_TASK_TEST_COMMAND;
     fullSuite.placement = 'after_compile_before_reviews';
     config.review_execution_policy = { mode: 'strict_sequential' };
     writeJson(configPath, config);

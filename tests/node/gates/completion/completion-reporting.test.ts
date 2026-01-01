@@ -66,6 +66,19 @@ describe('gates/completion-reporting', () => {
         }
     });
 
+    it('never pairs the protected re-entry confirmation with a restated task intent', () => {
+        const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'garda-completion-restart-protected-intent-'));
+        try {
+            const command = buildCoherentCycleRestartCommand(repoRoot, 'T-123', 'preflight.json', null, null, null,
+                { requiresOperatorConfirmation: true, taskIntent: 'Classified agent wording' });
+
+            assert.ok(command.includes('--operator-confirmed yes'), command);
+            assert.ok(!command.includes('--task-intent'), command);
+        } finally {
+            fs.rmSync(repoRoot, { recursive: true, force: true });
+        }
+    });
+
     it('carries attributed workflow-config scope in coherent-cycle restart guidance', () => {
         const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'garda-completion-restart-scope-'));
         try {
@@ -248,5 +261,44 @@ describe('gates/completion-reporting', () => {
         assert.match(command, /^AfterCommand: rerun node bin\/garda\.js next-step "T-645" --repo-root "\."/);
         assert.doesNotMatch(command, /task-audit-summary/);
         assert.match(command, /mandatory final report/);
+    });
+
+    it('every product caller of the coherent restart builder states whether the protected re-entry confirmation applies', () => {
+        // The builder drops --task-intent only when told the command carries the re-entry confirmation, so a caller
+        // that does not state it would restate an agent supplement as an operator criteria change.
+        let root = process.cwd();
+        while (!fs.existsSync(path.join(root, 'src', 'gates', 'completion', 'completion-reporting.ts'))) {
+            const parent = path.dirname(root);
+            assert.notEqual(parent, root, 'repository root not found');
+            root = parent;
+        }
+        const sources: string[] = [];
+        const walk = (dir: string): void => {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                const full = path.join(dir, entry.name);
+                if (entry.isDirectory()) walk(full);
+                else if (entry.name.endsWith('.ts')) sources.push(full);
+            }
+        };
+        walk(path.join(root, 'src'));
+        const callers: string[] = [];
+        for (const file of sources) {
+            const text = fs.readFileSync(file, 'utf8');
+            for (const match of text.matchAll(/(?<!function )buildCoherentCycleRestartCommand\(/gu)) {
+                let depth = 1;
+                let end = match.index + match[0].length;
+                while (depth > 0 && end < text.length) {
+                    if (text[end] === '(') depth += 1;
+                    else if (text[end] === ')') depth -= 1;
+                    end += 1;
+                }
+                const call = text.slice(match.index, end);
+                const line = text.slice(0, match.index).split(/\r?\n/u).length;
+                callers.push(`${path.relative(root, file)}@${line}`);
+                assert.match(call, /requiresOperatorConfirmation/u,
+                    `${path.relative(root, file)} builds a coherent restart without stating requiresOperatorConfirmation`);
+            }
+        }
+        assert.ok(callers.length >= 8, `expected the known callers, found ${callers.join(', ')}`);
     });
 });

@@ -1,4 +1,5 @@
 import { countNextStepWork } from '../../core/next-step-measurement';
+import { readInvocationTextFile } from '../../core/invocation-file-observation';
 import { fileSha256, isOrchestratorSourceCheckout } from '../shared/helpers';
 import { isSourceCheckoutGeneratedRuntimeArtifactPath, splitGeneratedRuntimeControlPlaneArtifacts } from '../shared/generated-runtime-artifacts';
 import { normalizeDirtyWorkspaceBaseline } from '../workspace/dirty-worktree-protection';
@@ -8,6 +9,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { splitNulRecords } from '../../core/git-path-output';
+import { resolveWorkspaceSnapshotRequest, type WorkspaceSnapshotRequest } from '../workspace/workspace-snapshot-cache';
 import { isPlainRecord } from '../../core/records';
 import { findUnapprovedActiveImplementationOwners } from '../workspace/active-implementation-ownership';
 import {
@@ -142,12 +144,13 @@ function readGitPaths(repoRoot: string, args: string[]): string[] | null {
 interface CommandWorkspaceReadSnapshot {
     active: boolean;
     repositories: Map<string, { changedFiles: string[]; reliable: boolean }>;
+    request?: WorkspaceSnapshotRequest;
 }
 
 const commandWorkspaceReadSnapshots = new AsyncLocalStorage<CommandWorkspaceReadSnapshot>();
 
-export function withNextStepCommandWorkspaceReadSnapshot<T>(callback: () => T): T {
-    const snapshot: CommandWorkspaceReadSnapshot = { active: true, repositories: new Map() };
+export function withNextStepCommandWorkspaceReadSnapshot<T>(callback: () => T, request?: WorkspaceSnapshotRequest): T {
+    const snapshot: CommandWorkspaceReadSnapshot = { active: true, repositories: new Map(), request };
     return commandWorkspaceReadSnapshots.run(snapshot, () => {
         try {
             return callback();
@@ -164,7 +167,13 @@ function readCurrentWorkspaceChangedFiles(repoRoot: string): { changedFiles: str
     const key = process.platform === 'win32' ? resolvedRoot.toLowerCase() : resolvedRoot;
     const cached = snapshot?.active ? snapshot.repositories.get(key) : null;
     if (cached) return { changedFiles: [...cached.changedFiles], reliable: cached.reliable };
-    const result = captureCurrentWorkspaceChangedFiles(repoRoot);
+    let result: { changedFiles: string[]; reliable: boolean };
+    try {
+        result = snapshot?.active && snapshot.request
+            ? { changedFiles: resolveWorkspaceSnapshotRequest(repoRoot, snapshot.request).read('git_auto', true, []).changed_files,
+                reliable: true }
+            : captureCurrentWorkspaceChangedFiles(repoRoot);
+    } catch { result = { changedFiles: [], reliable: false }; }
     if (snapshot?.active) snapshot.repositories.set(key, result);
     return { changedFiles: [...result.changedFiles], reliable: result.reliable };
 }
@@ -823,7 +832,7 @@ function buildReviewAuthorshipAttestationDefault(
 ): string | null {
     try {
         const preflightPath = path.resolve(repoRoot, preflightCommandPath);
-        const preflight = JSON.parse(fs.readFileSync(preflightPath, 'utf8')) as Record<string, unknown>;
+        const preflight = JSON.parse(readInvocationTextFile(preflightPath)) as Record<string, unknown>;
         const requiredReviews = isPlainRecord(preflight.required_reviews)
             ? preflight.required_reviews
             : {};

@@ -33,6 +33,7 @@ import {
 } from '../../../../src/gates/shared/focused-intermediate-command-grammar';
 import { hasTestFirstExpectedRedDeclaration } from '../../../../src/gates/test-first/test-first-declaration';
 import { buildDefaultWorkflowConfig } from '../../../../src/core/workflow-config';
+import { loadFullSuiteValidationConfig } from '../../../../src/core/full-suite-validation-config';
 import { handleWorkflow } from '../../../../src/cli/commands/workflow-command';
 import { runClassifyChangeCommand } from '../../../../src/cli/commands/gates';
 import { executeValidationRecipe } from '../../../../src/gates/project-validation/execution';
@@ -48,6 +49,7 @@ import { initializeGitRepo, loadTaskEntryRulePack, runEnterTaskMode, runHandshak
 import {
     createTempRepo,
     getOrchestratorRoot,
+    runCliWithCapturedOutput,
     readTaskTimelineEvents,
     seedInitAnswers,
     seedTaskQueue
@@ -138,6 +140,19 @@ function resolveRoute(fixture: Fixture) {
         workspaceReady: true,
         currentChangedFiles: fixture.preflight.changed_files as string[]
     });
+}
+
+/** Case validation binds the test lane; code is only the fallback without mandatory test review. */
+function semanticValidationLane(fixture: Fixture): string {
+    const preflight = JSON.parse(fs.readFileSync(fixture.preflightPath, 'utf8')) as Record<string, unknown>;
+    return resolveValidationSemanticReviewLanes(preflight.effective_review_snapshot as EffectiveReviewSnapshot)[0];
+}
+
+/** The validation obligations the semantic lane's review context must project for the current preflight. */
+function semanticValidationObligations(fixture: Fixture) {
+    const preflight = JSON.parse(fs.readFileSync(fixture.preflightPath, 'utf8')) as Record<string, unknown>;
+    return resolveAuthoritativeReviewValidationObligations({ ...fixture, preflight,
+        reviewType: semanticValidationLane(fixture) });
 }
 
 function buildRecipeFixture(mode = 'failed', testPath = 'specifications/case', options: {
@@ -355,7 +370,9 @@ describe('next-step test-first expected-red routing', () => {
         assert.match(blocked.reason, /with operator approval remove/u);
         assert.ok(!blocked.commands.some(command => command.command.includes('task-reset')));
         const review = () => runBuildReviewContextCommand({ ...fixture, reviewType: 'code', depth: 2 });
-        await assert.rejects(review, error => {
+        // Case validation, including retained RED, binds only the semantic validation lane; its review
+        // context projects these obligations after the strict upstream code lane.
+        assert.throws(() => semanticValidationObligations(fixture), error => {
             assert.ok(String(error).includes(testPath), String(error));
             assert.match(String(error), /fresh RED for the current test bytes/u);
             assert.match(String(error), /with operator approval remove/u);
@@ -403,6 +420,14 @@ describe('next-step test-first expected-red routing', () => {
         assert.equal(quality.exitCode, 0, quality.outputLines.join('\n'));
         const compile = await runCompileGateCommand({ ...fixture, taskId: TASK_ID, emitMetrics: false });
         assert.equal(compile.exitCode, 0, compile.outputLines.join('\n'));
+        const selected = await runCliWithCapturedOutput(['workflow', 'set', '--target-root', fixture.repoRoot, '--task-id', TASK_ID,
+            '--full-suite-command', loadFullSuiteValidationConfig(fixture.repoRoot).command,
+            '--focused-required-test-path', testPath,
+            '--reason', `${TASK_ID} verifies the declared source readiness behavior.`,
+            '--task-test-plan', JSON.stringify({ targets: [{ path: testPath, entrypoint: 'driver',
+                reason: `The driver reads ${testPath} and asserts source readiness in src/app.ts.` }] })],
+        { cwd: fixture.repoRoot });
+        assert.equal(selected.exitCode, 0, [...selected.logs, ...selected.errors].join('\n'));
         const suite = await runFullSuiteValidationCommand({ ...fixture, taskId: TASK_ID });
         assert.equal(suite.exitCode, 0, suite.outputText);
         const next = () => resolveNextStep({ repoRoot: fixture.repoRoot, taskId: TASK_ID });
@@ -418,7 +443,8 @@ describe('next-step test-first expected-red routing', () => {
         assertRecovery(blocked.reason);
         assert.ok(!blocked.commands.some(command => command.command.includes('task-reset')));
         const review = () => runBuildReviewContextCommand({ ...fixture, reviewType: 'code', depth: 2 });
-        await assert.rejects(review, error => { assertRecovery(String(error)); return true; });
+        // Case validation, including retained recipe RED, binds only the semantic validation lane.
+        assert.throws(() => semanticValidationObligations(fixture), error => { assertRecovery(String(error)); return true; });
         const entriesBefore = readTaskTimelineEvents(fixture.repoRoot, TASK_ID)
             .filter(event => event.event_type === 'TASK_MODE_ENTERED').length;
         const taskPath = path.join(fixture.repoRoot, 'TASK.md');
@@ -619,7 +645,7 @@ describe('next-step test-first expected-red routing', () => {
             .map(answer => ({ ...answer, status: 'PASS', answer: 'Checked actual recipe execution order and current source/output identities.' }));
         const quality = runQualityChecklistCommand({ ...fixture, taskId: TASK_ID, answersJson: JSON.stringify(answers), emitMetrics: false });
         assert.equal(quality.exitCode, 0, quality.outputLines.join('\n'));
-        const obligations = () => resolveAuthoritativeReviewValidationObligations({ ...fixture, reviewType: 'code' });
+        const obligations = () => resolveAuthoritativeReviewValidationObligations({ ...fixture, reviewType: semanticValidationLane(fixture) });
         if (cancelled) assert.throws(obligations, /RED|nonzero|cancelled|execution/i);
         else assert.equal(obligations()?.find(item => item.case_execution?.expected_failure)?.attempt_id, newer.attempt_id);
     });
@@ -643,7 +669,7 @@ describe('next-step test-first expected-red routing', () => {
             .map(answer => ({ ...answer, status: 'PASS', answer: 'Checked the actual isolated recipe execution and retained source/output identities.' }));
         const quality = runQualityChecklistCommand({ ...fixture, taskId: TASK_ID, answersJson: JSON.stringify(answers), emitMetrics: false });
         assert.equal(quality.exitCode, 0, quality.outputLines.join('\n'));
-        const paired = resolveAuthoritativeReviewValidationObligations({ ...fixture, reviewType: 'code' });
+        const paired = resolveAuthoritativeReviewValidationObligations({ ...fixture, reviewType: semanticValidationLane(fixture) });
         assert.equal(paired?.length, 2);
         assert.equal(paired!.filter(item => item.case_execution?.expected_failure).length, 1);
         assert.equal(paired!.filter(item => !item.case_execution?.expected_failure).length, 1);
@@ -807,7 +833,7 @@ describe('next-step test-first expected-red routing', () => {
         assert.equal(green.exitCode, 0, green.outputLines.join('\n'));
         assert.equal(resolveRoute(fixture)?.nextGate, 'test-first-expected-failure');
     });
-    it('requires every nested RED case to pass instead of accepting skipped or replaced children', async () => {
+    it('retains nested reporter contradictions for independent review without changing process outcomes', async () => {
         const fixture = buildRecipeFixture('failed', TEST_PATH, { withRecipe: false, fixtureReadiness: true, nestedReport: true });
         const command = `"${process.execPath}" opaque-checker "${TEST_PATH}"`;
         const red = await runIntermediateCommandCommand({ repoRoot: fixture.repoRoot, taskId: TASK_ID,
@@ -825,19 +851,29 @@ describe('next-step test-first expected-red routing', () => {
             const green = await runIntermediateCommandCommand({ repoRoot: fixture.repoRoot, taskId: TASK_ID,
                 commandSource: 'targeted-test', command, preflightPath: fixture.preflightPath });
             assert.equal(green.exitCode, 0, green.outputLines.join('\n'));
-            if (mode === 'normal') assert.equal(resolveRoute(fixture), null);
-            else assert.equal(resolveRoute(fixture)?.nextGate, 'test-first-expected-failure', mode);
+            assert.equal(resolveRoute(fixture), null, mode);
+            const paired = readExpectedRedReviewObligations({ ...fixture, taskId: TASK_ID,
+                preflightSha256: fileSha256(fixture.preflightPath) });
+            assert.ok(paired.every(binding => binding.result_status === 'UNRESOLVED'),
+                'Process evidence must not claim case semantics from nested TAP.');
         }
     });
     for (const failure of ['missing runner', 'assertless process'] as const) {
-        it(`does not mistake ${failure} failure for a reported failed test case`, async () => {
+        it(`retains ${failure} failure without claiming assertion RED`, async () => {
             const fixture = buildRecipeFixture('failed', TEST_PATH, { withRecipe: false });
             const program = failure === 'missing runner' ? 'missing-runner.cjs' : 'assertless-checker';
             const run = await runIntermediateCommandCommand({ repoRoot: fixture.repoRoot, taskId: TASK_ID,
                 commandSource: 'targeted-test', command: `"${process.execPath}" ${program} ${TEST_PATH}`,
                 preflightPath: fixture.preflightPath, expectFailure: true });
-            assert.notEqual(run.exitCode, 0, 'A failed process alone cannot establish a failed test case.');
-            assert.equal(resolveRoute(fixture)?.nextGate, 'test-first-expected-failure');
+            assert.equal(run.exitCode, 0, run.outputLines.join('\n'));
+            const red = readExpectedRedExecutionEvidence({ ...fixture, taskId: TASK_ID,
+                preflightSha256: fileSha256(fixture.preflightPath) });
+            assert.ok(red?.obligations.length);
+            assert.ok(red.obligations.every(binding => binding.result_status === 'UNRESOLVED'));
+            assert.equal(resolveRoute(fixture)?.nextGate, 'implementation');
+            assert.ok(getNativeCaseResolutionViolations({ repoRoot: fixture.repoRoot,
+                obligations: red.obligations, entries: [], requireExpectedRed: true }).length,
+            'A failed process alone cannot close independent assertion semantics.');
         });
     }
 
@@ -884,7 +920,8 @@ describe('next-step test-first expected-red routing', () => {
         fs.appendFileSync(path.join(fixture.repoRoot, 'driver'), '\n');
         const route = resolveRoute(fixture);
         assert.equal(route?.nextGate, 'test-first-expected-failure');
-        assert.deepEqual(route?.commands, []);
+        assert.match(route?.commands[0].command ?? '', /--command "<task-test-command>"/u);
+        assert.match(route?.reason ?? '', /Optional recipe cannot apply/u);
     });
     it('requires the exact case-sensitive expected-red Notes marker', () => {
         assert.equal(hasTestFirstExpectedRedDeclaration({ notes: 'Test-first: expected-red.' }), true);
@@ -941,13 +978,13 @@ describe('next-step test-first expected-red routing', () => {
         assert.deepEqual(evaluated, ['baseline', 'expected-red']);
     });
 
-    it('requires the actual reporter-capable project command instead of guessing a runner', () => {
+    it('offers a generic command declaration without guessing a runner or reporter', () => {
         const fixture = buildFixture();
 
         const route = resolveRoute(fixture);
 
         assert.equal(route?.nextGate, 'test-first-expected-failure');
-        assert.deepEqual(route?.commands, []);
+        assert.match(route?.commands[0].command ?? '', /--command "<task-test-command>"/u);
         assert.match(route?.reason || '', /actual project --command/u);
         assert.match(route?.reason || '', /--selected-case.*ordinary independent review/u);
         assert.match(route?.reason || '', /admitted recipe/u);
@@ -965,7 +1002,7 @@ describe('next-step test-first expected-red routing', () => {
         const route = resolveRoute(fixture);
 
         assert.equal(route?.nextGate, 'test-first-expected-failure');
-        assert.deepEqual(route?.commands, []);
+        assert.match(route?.commands[0].command ?? '', /--command "<task-test-command>"/u);
         assert.match(route?.reason || '', /--selected-case.*ordinary independent review/u);
         assert.match(route?.reason || '', /admitted recipe/u);
     });
@@ -1089,7 +1126,7 @@ describe('next-step test-first expected-red routing', () => {
         const route = resolveRoute(fixture);
 
         assert.equal(route?.nextGate, 'test-first-expected-failure');
-        assert.deepEqual(route?.commands, []);
+        assert.match(route?.commands[0].command ?? '', /--expect-failure/u);
     });
 
     it('keeps undeclared and non-test-only scopes on the ordinary fail-closed path', () => {

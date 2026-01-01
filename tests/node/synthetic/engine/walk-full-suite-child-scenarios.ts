@@ -4,8 +4,11 @@ import { splitCommandLine } from '../../../../src/core/command-line';
 import { handleSet } from '../../../../src/cli/commands/workflow/workflow-command-set';
 import { runHumanCommitCommand } from '../../../../src/cli/commands/gates';
 import { runGit } from '../../cli/commands/gate-test-helpers';
-import { COVERAGE_WALK_SCENARIOS } from './walk-coverage-scenarios';
+import { COVERAGE_WALK_SCENARIOS, configureSuiteTimeout } from './walk-coverage-scenarios';
 import type { WalkScenario } from './navigator-walk';
+import { legacyRepairFixture } from './walk-legacy-task-contract';
+import { NODE_WALK_FIXTURE } from './walk-fixture';
+import { assertRestoredParentPhaseGuards } from './walk-restored-parent-controls';
 
 const TASK = 'T-WALK', BUNDLE = 'garda-agent-orchestrator';
 const LANES = ['code', 'security', 'performance', 'test'];
@@ -16,12 +19,13 @@ function repairScenario(escapeChildScope = false, failParentValidation = false):
     // A timeout repair needs one linked child; fault variants retain two independent scopes.
     const childFiles = CHILD_FILES.slice(0, escapeChildScope || failParentValidation ? 2 : 1);
     const timeout = COVERAGE_WALK_SCENARIOS.find(scenario => scenario.id === 'coverage-full-suite-timeout')!;
+    const childFixture = legacyRepairFixture(CHILD_FILES[0], CHILD_FILES[1], 'timeout repair terminates');
     let currentTask = TASK, materialized = false, restored = false;
     const implemented = new Set<string>(), committed = new Set<string>();
     return {
-        ...timeout, id: 'coverage-full-suite-' + (escapeChildScope ? 'child-scope-escape' : 'wip-restoration'), counterState: 'full-suite-child-tree',
+        ...timeout, id: 'coverage-full-suite-' + (escapeChildScope ? 'child-scope-escape' : 'wip-restoration'), counterState: 'task-local-full-suite-child-tree',
         expectedBlockedGate: undefined, expectedGuidance: undefined,
-        expectedGates: ['restore-full-suite-repair-wip', 'parent-audit'],
+        expectedGates: ['child-task', 'restore-full-suite-repair-wip', 'parent-audit'],
         expectedReviews: { code: childFiles.length + 1, security: childFiles.length, performance: childFiles.length, test: childFiles.length + 1 },
         expectedModes: [...childFiles.flatMap(() => LANES.map(lane => lane + ':FULL')), 'code:FULL', 'test:FULL'],
         ...(escapeChildScope ? {
@@ -35,7 +39,22 @@ function repairScenario(escapeChildScope = false, failParentValidation = false):
             expectedBlockedGate: null, expectedGuidance: /failed original validations require a correction before completion/u,
             expectedFailingGates: ['full-suite-validation', 'parent-audit']
         } : {}),
+        // The parent selects the seeded broad command, which must actually time out. The timeout family's own configure
+        // only lowers the limit for its own blocking test; inheriting it here left a passing command and no repair tree.
+        configure: configureSuiteTimeout,
         inspectTask: () => currentTask,
+
+        get fixture() { return currentTask === TASK ? NODE_WALK_FIXTURE : childFixture; },
+        get taskTitle() { return currentTask === TASK ? 'Change the status renderer' : 'tests/timeout-repair.test.cjs verifies the terminating command in scripts/full-suite-check.cjs'; },
+        get selectionTargets() { return currentTask === TASK ? ['tests/app.test.ts'] : ['tests/timeout-repair.test.cjs']; },
+        get testSelectionCommand() { return currentTask === TASK ? 'node scripts/full-suite-check.cjs' : childFixture.taskTestCommand; },
+        setup: root => {
+            fs.writeFileSync(path.join(root, 'tests/timeout-repair.test.cjs'),
+                'const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs");\n'
+                + 'test("timeout repair terminates", () => assert.doesNotMatch(fs.readFileSync("scripts/full-suite-check.cjs", "utf8"), /setTimeout/));\n');
+            runGit(root, ['add', 'tests/timeout-repair.test.cjs']);
+            runGit(root, ['commit', '-qm', 'Seed the repair child regression target']);
+        },
         prepare: async (root, steps, run) => {
             if (!steps.length) {
                 currentTask = TASK; materialized = false; restored = false; implemented.clear(); committed.clear();
@@ -68,7 +87,7 @@ function repairScenario(escapeChildScope = false, failParentValidation = false):
                     if (fs.readFileSync(path.join(root, 'src/app.ts'), 'utf8').includes('// coverage family')) {
                         throw new Error('Native timeout materialization did not suspend parent WIP.');
                     }
-                    materialized = true; currentTask = TASK + '-F1';
+                    materialized = true; // Observe the native parent handoff before following the child.
                 } else if (!restored && last?.gate === 'restore-full-suite-repair-wip' && last.exitCode === 0) {
                     const args = splitCommandLine(last.command!).filter(arg => arg !== '--dry-run');
                     await run(args.slice(args.indexOf('gate') + 1));
@@ -77,6 +96,7 @@ function repairScenario(escapeChildScope = false, failParentValidation = false):
                             throw new Error('Native restore lost the suspended parent edit: ' + edit.path);
                         }
                     }
+                    if (failParentValidation) assertRestoredParentPhaseGuards(root, TASK);
                     restored = true;
                 }
             } else {
@@ -99,13 +119,17 @@ function repairScenario(escapeChildScope = false, failParentValidation = false):
             }
         },
         act: async (root, gate) => {
+            if (gate === 'child-task' && currentTask === TASK && materialized && !restored) {
+                currentTask = TASK + '-F1';
+                return true;
+            }
             if (gate !== 'implementation' || currentTask === TASK || implemented.has(currentTask)) return false;
             const childIndex = currentTask.endsWith('F1') ? 0 : 1;
             fs.writeFileSync(path.join(root, CHILD_FILES[childIndex]), childIndex === 0
                 ? (failParentValidation ? 'if (require("node:fs").existsSync(".git/walk-fail-parent-validation")) process.exit(1);\n' : '')
                     + 'console.log("Full suite timeout repaired.");\n'
                 : 'const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs");\n'
-                    + 'test("timeout repair terminates", () => assert.doesNotMatch(fs.readFileSync("scripts/full-suite-check.cjs", "utf8"), /setTimeout/));\n');
+                    + 'test("timeout repair terminates", () => { const source = fs.readFileSync("scripts/full-suite-check.cjs", "utf8"); assert.doesNotMatch(source, /setTimeout/); assert.match(source, /Full suite timeout repaired/); });\n');
             implemented.add(currentTask); return true;
         }
     };

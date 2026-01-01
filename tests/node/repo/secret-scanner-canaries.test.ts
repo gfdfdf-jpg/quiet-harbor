@@ -27,23 +27,29 @@ const excludedFiles = [
     dependencyCanaryFile, 'testResults.xml'
 ];
 
-function writeCanaries(fixtureRoot: string): void {
+function canaryFiles(): Record<string, string> {
+    const files: Record<string, string> = {};
     for (const file of [...positiveFiles, ...excludedFiles]) {
-        const target = path.join(fixtureRoot, file);
-        fs.mkdirSync(path.dirname(target), { recursive: true });
         const marker = file === 'src/marked-canary.ts' ? ' // dummy fixture label'
             : file === 'scripts/marked-canary.ts' ? ' // EXAMPLE_TOKEN label' : '';
-        fs.writeFileSync(target, `const token = "${canary}";${marker}\n`);
+        files[file] = `const token = "${canary}";${marker}\n`;
     }
+    return files;
 }
 
-function scanCanaries(config: string, mode: 'dir' | 'git'): Set<string> {
+interface ScanFinding { file: string; rule: string; startLine: number; endLine: number; }
+
+function scanFiles(config: string, mode: 'dir' | 'git', files: Record<string, string>): ScanFinding[] {
     assert.ok(scannerPath, 'An explicitly selected scanner is required');
     const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gao-secret-scan-'));
     const fixtureRoot = path.join(tempRoot, 'fixtures');
     try {
         fs.mkdirSync(fixtureRoot);
-        writeCanaries(fixtureRoot);
+        for (const [file, text] of Object.entries(files)) {
+            const target = path.join(fixtureRoot, file);
+            fs.mkdirSync(path.dirname(target), { recursive: true });
+            fs.writeFileSync(target, text);
+        }
         const configPath = path.join(tempRoot, 'scanner.toml');
         const reportPath = path.join(tempRoot, 'report.json');
         const emptyConfig = path.join(tempRoot, 'empty-git-config');
@@ -63,7 +69,7 @@ function scanCanaries(config: string, mode: 'dir' | 'git'): Set<string> {
             git(['add', '--', '.']);
             assert.deepEqual(
                 git(['ls-files', '-z']).split('\0').filter(Boolean).sort(),
-                [...positiveFiles, ...excludedFiles].sort(),
+                Object.keys(files).sort(),
                 'Git fixtures must include even the dependency canary'
             );
             git(['-c', 'user.name=Garda Canary', '-c', 'user.email=canary@example.invalid',
@@ -80,15 +86,24 @@ function scanCanaries(config: string, mode: 'dir' | 'git'): Set<string> {
         assert.ok(![report, result.stdout, result.stderr].some(text => text.includes(canary)), 'Scanner output must be redacted');
         const findings: unknown = JSON.parse(report);
         assert.ok(Array.isArray(findings));
-        return new Set(findings.map((finding: { File: string; RuleID: string }) => {
-            assert.equal(finding.RuleID, 'github-pat', 'The built-in PAT rule must be active');
+        return findings.map((finding: { File: string; RuleID: string; StartLine: number; EndLine: number }) => {
             assert.equal(typeof finding.File, 'string');
             const file = path.isAbsolute(finding.File) ? path.relative(fixtureRoot, finding.File) : finding.File;
-            return file.replace(/\\/gu, '/').replace(/^\.\//u, '');
-        }));
+            assert.ok(Number.isSafeInteger(finding.StartLine) && finding.StartLine > 0);
+            assert.ok(Number.isSafeInteger(finding.EndLine) && finding.EndLine >= finding.StartLine);
+            return { file: file.replace(/\\/gu, '/').replace(/^\.\//u, ''), rule: finding.RuleID,
+                startLine: finding.StartLine, endLine: finding.EndLine };
+        });
     } finally {
         fs.rmSync(tempRoot, { recursive: true, force: true });
     }
+}
+
+function scanCanaries(config: string, mode: 'dir' | 'git'): Set<string> {
+    return new Set(scanFiles(config, mode, canaryFiles()).map(finding => {
+        assert.equal(finding.rule, 'github-pat', 'The built-in PAT rule must be active');
+        return finding.file;
+    }));
 }
 
 test('pinned scanner detects source and nested runtime canaries with narrow exceptions', scannerOptions, () => {
@@ -107,4 +122,61 @@ test('default-rule Git control detects project-excluded fixtures and retains its
     const detected = scanCanaries('[extend]\nuseDefault = true\n', 'git');
     const defaultDetectableFiles = [...positiveFiles, ...excludedFiles.filter(file => file !== dependencyCanaryFile)];
     assert.deepEqual([...detected].sort(), defaultDetectableFiles.sort());
+});
+
+
+test('digest and public-fixture exceptions retain other secrets and exact path boundaries', scannerOptions, () => {
+    const examples = {
+        'config/release-package-surface-baseline.json':
+            '"dist/src/review-verdict-tokens.js": "' + createHash('sha256').update('public file digest').digest('hex') + '"',
+        'tests/node/gates/review-context/build-review-context-routing.test.ts':
+            "const rawAwsKey = '" + ['AKIA', '1234567890ABCDEF'].join('') + "';",
+        'tests/node/gates/review/review-output-correction.test.ts': "reviewer_identity: '" + ['a', 'pi', ':', 'conversation-1'].join('') + "',",
+        'tests/node/gates/split-required/split-required-wip-runtime-handoff.test.ts': [
+            "'-----BEGIN " + "PRIVATE KEY-----',",
+            "...Array.from({ length: 25 }, () => 'fixture-private-key-material'),",
+            "'-----END " + "PRIVATE KEY-----'"
+        ].join('\n')
+    };
+    const genericCanary = createHash('sha256').update('public synthetic generic scanner canary').digest('hex');
+    const unrelatedSecrets = [
+        'const token = "' + canary + '";',
+        'api_token = "' + genericCanary + '"',
+        '-----BEGIN ' + 'PRIVATE KEY-----',
+        'publicSyntheticPrivateKeyCanaryMaterial0123456789',
+        '-----END ' + 'PRIVATE KEY-----'
+    ].join('\n');
+    const files: Record<string, string> = {};
+    for (const [file, example] of Object.entries(examples)) {
+        files[file] = example + '\n' + unrelatedSecrets + '\n';
+        files['backup/' + file] = example + '\n';
+        files[file + '.backup'] = example + '\n';
+    }
+    const config = fs.readFileSync(path.join(repoRoot, '.gitleaks.toml'), 'utf8');
+    for (const mode of ['dir', 'git'] as const) {
+        const actual = scanFiles(config, mode, files);
+        const control = scanFiles('[extend]\nuseDefault = true\n', mode, files);
+        for (const file of Object.keys(examples)) {
+            const rule = file.includes('split-required') ? 'private-key' : 'generic-api-key';
+            const benignLines = examples[file as keyof typeof examples].split('\n').length;
+            const expected = [
+                { file, rule: 'github-pat', startLine: benignLines + 1, endLine: benignLines + 1 },
+                { file, rule: 'generic-api-key', startLine: benignLines + 2, endLine: benignLines + 2 },
+                { file, rule: 'private-key', startLine: benignLines + 3, endLine: benignLines + 5 }
+            ];
+            const byLine = (left: ScanFinding, right: ScanFinding) => left.startLine - right.startLine;
+            assert.deepEqual(actual.filter(finding => finding.file === file).sort(byLine), expected,
+                file + ': detect each unrelated secret at its exact location and omit the benign match');
+            assert.deepEqual(control.filter(finding => finding.file === file).sort(byLine), [
+                { file, rule, startLine: 1, endLine: benignLines }, ...expected
+            ], file + ': default scanner proves the exact benign match');
+            for (const lookalike of ['backup/' + file, file + '.backup']) {
+                assert.deepEqual(actual.filter(finding => finding.file === lookalike), [
+                    { file: lookalike, rule, startLine: 1, endLine: benignLines }
+                ], lookalike);
+            }
+        }
+        assert.equal(actual.length, Object.keys(examples).length * 5);
+        assert.equal(control.length, Object.keys(examples).length * 6);
+    }
 });

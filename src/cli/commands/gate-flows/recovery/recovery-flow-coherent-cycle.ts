@@ -1,4 +1,5 @@
 import { resolveRestartTaskIntent } from '../../../../gates/review-context/review-context-task-criteria-binding';
+import { prepareOperatorTaskIntentUpdate, recordOperatorTaskIntentUpdate } from '../../../../gates/review-context/review-context-task-intent';
 import { EXIT_GATE_FAILURE } from '../../../exit-codes';
 import { getPreflightContext } from '../../../../gates/compile/compile-gate';
 import {
@@ -44,6 +45,7 @@ import { runRecoveryFlowPreflightPipeline } from './recovery-flow-preflight-pipe
 import { readInterruptedCoherentCycleReadiness } from './recovery-flow-interrupted-coherent-cycle';
 import { resolveReviewRestartApproval } from './recovery-flow-review-restart-approval';
 import { readUnrequiredCoherentRestart } from './recovery-flow-restart-requirement';
+import { readRestartPreflightIntentViolation } from './recovery-flow-restart-intent-binding';
 
 export async function runRestartCoherentCycleCommand(
     options: RestartCoherentCycleCommandOptions
@@ -80,7 +82,25 @@ export async function runRestartCoherentCycleCommand(
     }
     // Refuse before any state change when the navigator does not route here: an agent that runs this gate
     // by mistake must not roll the task back and pay for a new review cycle.
-    const unrequiredRestart = readUnrequiredCoherentRestart(repoRoot, resolvedTaskId);
+    const staleIntentViolation = readRestartPreflightIntentViolation({
+        repoRoot, taskId: resolvedTaskId, preflight: previousPreflight.preflight as unknown as Record<string, unknown>
+    });
+    if (staleIntentViolation) {
+        return {
+            outputLines: ['COHERENT_CYCLE_RESTART_REFUSED', `TaskId: ${resolvedTaskId}`, staleIntentViolation],
+            exitCode: EXIT_GATE_FAILURE
+        };
+    }
+    const previousTaskIntent = resolveRestartTaskIntent({
+        repoRoot, taskId: resolvedTaskId, preflight: previousPreflight.preflight, taskMode: previousTaskMode
+    });
+    const taskSummary = String(options.taskIntent || previousTaskIntent || '').trim();
+    if (!taskSummary) throw new Error('Task intent could not be resolved for coherent-cycle restart.');
+    const operatorIntentUpdate = options.taskIntent ? prepareOperatorTaskIntentUpdate({
+        repoRoot, taskId: resolvedTaskId, previousIntent: previousTaskIntent, taskIntent: taskSummary,
+        operatorConfirmed: options.operatorConfirmed, operatorConfirmedAtUtc: options.operatorConfirmedAtUtc
+    }) : null;
+    const unrequiredRestart = operatorIntentUpdate ? null : readUnrequiredCoherentRestart(repoRoot, resolvedTaskId);
     if (unrequiredRestart) {
         return {
             outputLines: [
@@ -105,15 +125,7 @@ export async function runRestartCoherentCycleCommand(
             review_restart_changed_files: reviewRestartApproval.changedFilesAfterReviewGate
         }
         : {};
-    const replayScope = resolveReplayScope(options, previousPreflight);
-    // Reclassify with the current preflight's intent unless the agent names a new one: a
-    // restart for lost evidence then keeps the task-criteria binding of every passed review.
-    const taskSummary = String(options.taskIntent || resolveRestartTaskIntent({
-        repoRoot, taskId: resolvedTaskId, preflight: previousPreflight.preflight, taskMode: previousTaskMode
-    }) || '').trim();
-    if (!taskSummary) {
-        throw new Error('Task intent could not be resolved for coherent-cycle restart.');
-    }
+    const replayScope = resolveReplayScope(options, previousPreflight, previousTaskMode);
     const allowedDirtyWorkflowConfigFiles = previousTaskMode.orchestrator_work === true
         && previousTaskMode.workflow_config_work === true
         ? resolveRestartAllowedDirtyWorkflowConfigFiles(repoRoot, previousPreflight, replayScope.plannedChangedFiles)
@@ -127,7 +139,7 @@ export async function runRestartCoherentCycleCommand(
         preflightPath: resolvedPreflightPath,
         compileEvidencePath
     });
-    if (interruptedCycle.ready) {
+    if (interruptedCycle.ready && !operatorIntentUpdate) {
         const refreshedRequiredReviews = previousPreflight.preflight.required_reviews as Record<string, boolean>;
         const nextStepSummary = 'continue from current compile evidence after finalizing the interrupted coherent-cycle restart.';
         const restartArtifactPath = appendRestartCompletedEvidence({
@@ -207,6 +219,9 @@ export async function runRestartCoherentCycleCommand(
             planPath: previousTaskMode.plan?.plan_path || undefined,
             emitMetrics: options.emitMetrics
         }));
+
+        // Persist before classification so failed/interrupted compilation cannot revive old PASS criteria.
+        if (operatorIntentUpdate) recordOperatorTaskIntentUpdate(repoRoot, operatorIntentUpdate);
 
         ensureRestartStepPassed('load-rule-pack (TASK_ENTRY)', runLoadRulePackCommand({
             repoRoot,
@@ -307,6 +322,7 @@ export async function runRestartCoherentCycleCommand(
             restartReason: 'coherent_cycle_restart_after_downstream_boundary_or_invalid_preflight_order',
             nextStepSummary,
             extraDetails: {
+                ...(operatorIntentUpdate ? { task_intent_update: operatorIntentUpdate } : {}),
                 ...buildOptionalSkillRebindDetails(optionalSkillActivationRebind, optionalSkillDeclineRebind),
                 ...reviewRestartApprovalDetails,
                 ...(lostReviewEvidenceTypes.length ? { lost_review_evidence_types: lostReviewEvidenceTypes } : {})

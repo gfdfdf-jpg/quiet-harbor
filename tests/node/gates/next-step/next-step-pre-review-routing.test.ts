@@ -219,6 +219,35 @@ test('resolveNextStepCompileGateRoute returns null only when compile gate passed
     }), null);
 });
 
+test('an unconfigured compile failure offers task-local command and N/A without a retry loop', () => {
+    const route = resolveNextStepCompileGateRoute({ compileGatePassed: false, ready: false,
+        reason: 'Compile gate command is unconfigured in workflow-config.json.',
+        restartTaskModeCommand: 'restart', refreshPreflightCommand: 'refresh', compileCommand: 'garda gate compile-gate --task-id "T-1"' });
+    assert.ok(route);
+    assert.match(route.commands[0].command, /--compile-command/u);
+    assert.match(route.commands[1].command, /--compile-not-applicable-reason/u);
+    assert.doesNotMatch(route.commands.map(command => command.command).join('\n'), /workflow set|operator/u);
+});
+
+test('a failed required task compile has an executable rerun rather than an N/A loop', () => {
+    const route = resolveNextStepCompileGateRoute({ compileGatePassed: false, ready: false,
+        reason: 'Not-applicable cannot close a failed required compile. Fix and rerun the task compile command.',
+        restartTaskModeCommand: 'restart', refreshPreflightCommand: 'refresh', compileCommand: 'garda gate compile-gate --task-id "T-1"' });
+    assert.ok(route);
+    assert.equal(route.commands.length, 1);
+    assert.match(route.commands[0].command, /--compile-command/u);
+    assert.doesNotMatch(route.commands[0].command, /--compile-not-applicable/u);
+});
+
+test('an unset project compile offers the declaration before any failed artifact exists', () => {
+    const route = resolveNextStepCompileGateRoute({ compileGatePassed: false, ready: false,
+        compileCommandUnconfigured: true, reason: 'Compile gate evidence missing: T-1-compile-gate.json.',
+        restartTaskModeCommand: 'restart', refreshPreflightCommand: 'refresh', compileCommand: 'garda gate compile-gate' });
+    assert.ok(route);
+    assert.match(route.commands[0].command, /--compile-command "<task-compile-command>"/u);
+    assert.match(route.commands[1].command, /--compile-not-applicable-reason/u);
+});
+
 test('resolveNextStepCompileGateRoute offers the plan-drift override after a plan drift failure', () => {
     const options = {
         compileGatePassed: false,

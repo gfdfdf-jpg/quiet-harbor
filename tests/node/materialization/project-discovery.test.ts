@@ -349,7 +349,7 @@ describe('buildProjectDiscoveryLines', () => {
         assert.ok(text.includes('## Suggested Compile Gate Commands'));
         assert.ok(text.includes('pnpm run build'));
         assert.ok(text.includes('## Suggested Local Commands'));
-        assert.ok(text.includes('## Suggested Full-Suite Validation Command'));
+        assert.ok(text.includes('## Suggested Task Test Validation Command'));
         assert.ok(text.includes('pnpm test'));
         assert.ok(text.includes('## Sample Files Used'));
     });
@@ -393,7 +393,7 @@ describe('buildDiscoveryOverlaySection', () => {
             suggestedFullSuiteValidationCommand: './gradlew test'
         };
         const result = buildDiscoveryOverlaySection(discovery as unknown as ProjectDiscovery);
-        assert.ok(result.includes('Suggested full-suite validation command: `./gradlew test`'));
+        assert.ok(result.includes('Suggested task test validation command: `./gradlew test`'));
     });
 
     it('keeps unknown stack full-suite guidance unconfigured in the compact snapshot', () => {

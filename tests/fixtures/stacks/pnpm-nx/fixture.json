@@ -1,0 +1,74 @@
+{
+  "schema": 1,
+  "id": "pnpm-nx",
+  "title": "pnpm / Nx / Jest",
+  "adapter": null,
+  "technologies": [
+    {
+      "id": "nx",
+      "executable": "tools/pnpm",
+      "compileArgv": [
+        "exec",
+        "nx",
+        "run-many",
+        "--projects=ui,domain",
+        "--target=build"
+      ],
+      "firstArgv": [
+        "exec",
+        "nx",
+        "run-many",
+        "--projects=ui",
+        "--target=test",
+        "--runTestsByPath",
+        "packages/ui/src/Order.spec.tsx"
+      ],
+      "allArgv": [
+        "exec",
+        "nx",
+        "run-many",
+        "--projects=ui,domain",
+        "--target=test",
+        "--runTestsByPath",
+        "packages/ui/src/Order.spec.tsx",
+        "packages/domain/src/partners.spec.ts"
+      ],
+      "broadArgv": [
+        "exec",
+        "nx",
+        "run-many",
+        "--all",
+        "--target=test"
+      ],
+      "report": "junit",
+      "secondArgv": [
+        "exec",
+        "nx",
+        "run-many",
+        "--projects=domain",
+        "--target=test",
+        "--runTestsByPath",
+        "packages/domain/src/partners.spec.ts"
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "orders",
+      "technology": "nx",
+      "source": "packages/ui/src/Order.tsx",
+      "target": "packages/ui/src/Order.spec.tsx",
+      "case": "task-contract",
+      "comment": "//"
+    },
+    {
+      "id": "partners",
+      "technology": "nx",
+      "source": "packages/domain/src/partners.ts",
+      "target": "packages/domain/src/partners.spec.ts",
+      "case": "task-contract",
+      "comment": "//"
+    }
+  ],
+  "helpers": []
+}

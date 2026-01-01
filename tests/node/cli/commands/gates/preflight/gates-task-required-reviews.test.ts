@@ -5,10 +5,14 @@ import * as path from 'node:path';
 
 import { runClassifyChangeCommand, runRequiredReviewsCheckCommand } from '../../../../../../src/cli/commands/gates';
 import { serializeTaskPlan } from '../../../../../../src/schemas/task-plan';
+import { resolveNextStep } from '../../../../../../src/gates/next-step';
+import { splitCommandLine } from '../../../../../../src/core/command-line';
+import { runCliWithCapturedOutput } from '../../gate-test-helpers';
 import {
     captureExpectedError,
     createTempRepo,
     getReviewsRoot,
+    initializeGitRepo,
     loadTaskEntryRulePack,
     runEnterTaskMode,
     runHandshakeForTask,
@@ -112,6 +116,127 @@ function prepareTask(
 }
 
 describe('classify-change task required-review metadata', () => {
+    for (const hasPreflight of [false, true]) {
+        it(`navigator adopts an enabled task-required lane with existing preflight=${hasPreflight}`, async () => {
+            const repoRoot = createTempRepo(), taskId = 'T-enable-required-api';
+            try {
+                prepareTask(repoRoot, taskId, hasPreflight ? 'Required reviews: code, test.'
+                    : 'Required reviews: code, api, test.', false);
+                initializeGitRepo(repoRoot);
+                if (hasPreflight) {
+                    classify(repoRoot, taskId);
+                    const taskPath = path.join(repoRoot, 'TASK.md');
+                    fs.writeFileSync(taskPath, fs.readFileSync(taskPath, 'utf8')
+                        .replace('Required reviews: code, test.', 'Required reviews: code, api, test.'));
+                }
+                const refusal = resolveNextStep({ repoRoot, taskId });
+                assert.equal(refusal.next_gate, 'task-metadata-validation');
+                assert.match(refusal.reason, /review-capabilities enable/u);
+                assert.deepEqual(refusal.commands, []);
+                const skillDir = path.join(repoRoot, 'garda-agent-orchestrator/live/skills/api-review');
+                fs.mkdirSync(skillDir, { recursive: true });
+                fs.writeFileSync(path.join(skillDir, 'SKILL.md'), '# API review\n');
+                const enabled = await runCliWithCapturedOutput(
+                    ['review-capabilities', 'enable', 'api', '--target-root', repoRoot, '--json'], { cwd: repoRoot });
+                assert.equal(enabled.exitCode, 0, [...enabled.logs, ...enabled.errors].join('\n'));
+                const offered = resolveNextStep({ repoRoot, taskId });
+                assert.equal(offered.next_gate, 'enter-task-mode', offered.reason);
+                assert.equal(offered.commands.length, 1);
+                const command = offered.commands[0].command;
+                assert.match(command, /--adopt-changed-review-policy "[a-f0-9]{64}"/u);
+                assert.match(command, /--operator-confirmed-at-utc "<ISO-8601 timestamp>"/u);
+                const unapproved = await runCliWithCapturedOutput(splitCommandLine(command
+                    .replace('--operator-confirmed yes', '--operator-confirmed no')
+                    .replace('<ISO-8601 timestamp>', new Date().toISOString())).slice(2), { cwd: repoRoot });
+                assert.notEqual(unapproved.exitCode, 0, 'the policy still needs fresh operator approval');
+                const adopted = await runCliWithCapturedOutput(splitCommandLine(command
+                    .replace('<ISO-8601 timestamp>', new Date().toISOString())).slice(2), { cwd: repoRoot });
+                assert.equal(adopted.exitCode, 0, [...adopted.logs, ...adopted.errors].join('\n'));
+                const next = resolveNextStep({ repoRoot, taskId });
+                assert.notEqual(next.next_gate, 'enter-task-mode', next.reason);
+                assert.notEqual(next.next_gate, 'task-metadata-validation', next.reason);
+                const progress = await runCliWithCapturedOutput(splitCommandLine(next.commands[0].command).slice(2), { cwd: repoRoot });
+                assert.equal(progress.exitCode, 0, [...progress.logs, ...progress.errors].join('\n'));
+            } finally { fs.rmSync(repoRoot, { recursive: true, force: true }); }
+        });
+    }
+
+    it('navigator progresses when the operator changes the unavailable task requirement', async () => {
+        const repoRoot = createTempRepo(), taskId = 'T-change-required-api';
+        try {
+            prepareTask(repoRoot, taskId, 'Required reviews: code, test.', false);
+            initializeGitRepo(repoRoot);
+            classify(repoRoot, taskId);
+            const taskPath = path.join(repoRoot, 'TASK.md');
+            const original = fs.readFileSync(taskPath, 'utf8');
+            fs.writeFileSync(taskPath, original.replace('Required reviews: code, test.', 'Required reviews: code, api, test.'));
+            const refusal = resolveNextStep({ repoRoot, taskId });
+            assert.match(refusal.reason, /operator.*change.*task's required reviews/u);
+            assert.deepEqual(refusal.commands, []);
+            fs.writeFileSync(taskPath, original);
+            const next = resolveNextStep({ repoRoot, taskId });
+            assert.notEqual(next.next_gate, 'task-metadata-validation', next.reason);
+            const progress = await runCliWithCapturedOutput(splitCommandLine(next.commands[0].command).slice(2), { cwd: repoRoot });
+            assert.equal(progress.exitCode, 0, [...progress.logs, ...progress.errors].join('\n'));
+            assert.notEqual(resolveNextStep({ repoRoot, taskId }).next_gate, 'task-metadata-validation');
+        } finally { fs.rmSync(repoRoot, { recursive: true, force: true }); }
+    });
+
+    for (const previouslySelected of [false, true]) {
+        it(`navigator refuses an unavailable required lane with retained preflight selection=${previouslySelected}`, () => {
+            const repoRoot = createTempRepo(), taskId = 'T-navigate-api-disabled';
+            try {
+                prepareTask(repoRoot, taskId, previouslySelected
+                    ? 'Reviews: api; Required reviews: code, test.' : 'Required reviews: code, test.', true);
+                initializeGitRepo(repoRoot);
+                const preflight = classify(repoRoot, taskId);
+                assert.equal(preflight.required_reviews.api, previouslySelected);
+                seedBalancedProfileConfig(repoRoot, false);
+                const taskPath = path.join(repoRoot, 'TASK.md');
+                if (!previouslySelected) fs.writeFileSync(taskPath, fs.readFileSync(taskPath, 'utf8')
+                    .replace('Required reviews: code, test.', 'Reviews: api; Required reviews: code, test.'));
+                const preflightPath = path.join(getReviewsRoot(repoRoot), `${taskId}-preflight.json`);
+                const retained = fs.readFileSync(preflightPath, 'utf8');
+                const notes = fs.readFileSync(taskPath, 'utf8');
+                for (let call = 0; call < 2; call++) {
+                    const result = resolveNextStep({ repoRoot, taskId });
+                    assert.equal(result.status, 'BLOCKED');
+                    assert.equal(result.next_gate, 'task-metadata-validation');
+                    assert.match(result.title, /unavailable required review capability/u);
+                    assert.match(result.reason, /review lane 'api' is unavailable/u);
+                    assert.match(result.reason, /review-capabilities enable/u);
+                    assert.match(result.reason, /operator.*change.*task's required reviews/u);
+                    assert.deepEqual(result.commands, [], 'do not offer a classify-change that must fail');
+                }
+                assert.equal(fs.readFileSync(preflightPath, 'utf8'), retained);
+                assert.equal(fs.readFileSync(taskPath, 'utf8'), notes);
+            } finally { fs.rmSync(repoRoot, { recursive: true, force: true }); }
+        });
+    }
+
+    it('navigator refreshes omitted task review lanes and progresses on the next call', async () => {
+        const repoRoot = createTempRepo(), taskId = 'T-navigate-api';
+        try {
+            prepareTask(repoRoot, taskId, 'Required reviews: code, test.', true);
+            initializeGitRepo(repoRoot);
+            classify(repoRoot, taskId);
+            const taskPath = path.join(repoRoot, 'TASK.md');
+            fs.writeFileSync(taskPath, fs.readFileSync(taskPath, 'utf8').replace('Required reviews: code, test.',
+                'Reviews: api; Required reviews: code, test.'));
+            const first = resolveNextStep({ repoRoot, taskId });
+            assert.equal(first.next_gate, 'task-metadata-validation');
+            assert.equal(first.commands.length, 1);
+            assert.match(first.commands[0].command, /gate classify-change/u);
+            const recovery = await runCliWithCapturedOutput(splitCommandLine(first.commands[0].command).slice(2), { cwd: repoRoot });
+            assert.equal(recovery.exitCode, 0, [...recovery.logs, ...recovery.errors].join('\n'));
+            const refreshed = JSON.parse(fs.readFileSync(path.join(getReviewsRoot(repoRoot), `${taskId}-preflight.json`), 'utf8'));
+            assert.equal(refreshed.required_reviews.api, true);
+            const second = resolveNextStep({ repoRoot, taskId });
+            assert.notEqual(second.next_gate, 'task-metadata-validation', second.reason);
+            assert.ok(second.review.required_reviews.includes('api'));
+        } finally { fs.rmSync(repoRoot, { recursive: true, force: true }); }
+    });
+
     it('native required-reviews gate refuses an old preflight that omitted a current legacy requirement', { concurrency: false }, () => {
         const repoRoot = createTempRepo(), taskId = 'T-old-preflight-api';
         try {

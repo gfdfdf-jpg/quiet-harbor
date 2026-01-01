@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { isPlainRecord } from '../../core/records';
 import { inspectTaskEventFile } from '../../gate-runtime/task-events';
 import { fileSha256 } from '../shared/helpers';
+import { readLostPreflightSnapshot } from '../preflight/preflight-restoration';
 import { findLatestTimelineEvent, readTimelineEvents } from './handshake-diagnostics-timeline';
 import { getHandshakeEvidence } from './handshake-diagnostics-evidence';
 import type { HandshakeEvidenceResult } from './handshake-diagnostics-types';
@@ -76,7 +77,10 @@ function toStartupEvent(event: Readonly<Record<string, unknown>>, position: numb
     };
 }
 
-/** The classified preflight is gone when its file is missing or no longer a JSON object of this task. */
+/**
+ * The classified preflight is gone when its file is missing, no longer a JSON object of this task, or replaced by other
+ * bytes (an older copy) while an authenticated retained snapshot of the classified bytes exists to restore from.
+ */
 function classifiedPreflightLost(repoRoot: string, taskId: string, outputPath: string): boolean {
     if (!outputPath) return false;
     const root = path.resolve(repoRoot);
@@ -85,7 +89,8 @@ function classifiedPreflightLost(repoRoot: string, taskId: string, outputPath: s
     if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return false;
     try {
         const payload: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
-        return !isPlainRecord(payload) || payload.task_id !== taskId;
+        return !isPlainRecord(payload) || payload.task_id !== taskId
+            || readLostPreflightSnapshot(root, taskId, file) !== null;
     } catch (error) {
         // Only a missing or unparseable file is lost; an unreadable path keeps its ordinary refusal.
         return (error as NodeJS.ErrnoException).code === 'ENOENT' || error instanceof SyntaxError;

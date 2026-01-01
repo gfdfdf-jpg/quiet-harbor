@@ -1,4 +1,6 @@
-import { countNextStepWork, countNextStepArrayCopy } from '../../core/next-step-measurement';
+import { countNextStepWork } from '../../core/next-step-measurement';
+import { readInvocationVerifiedEventIndex } from '../../gate-runtime/timeline/task-events-integrity';
+import { verifiedEventPosition } from '../../gate-runtime/timeline/task-verified-event-index';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -33,14 +35,25 @@ function formatFailureReason(value: unknown): string {
     return String(value || 'unavailable').replace(/[\u0000-\u001f\u007f]+/gu, ' ').replace(/\s+/gu, ' ').trim().slice(0, 1000) || 'unavailable';
 }
 
+function lastMatchingEvent(events: readonly (Readonly<Record<string, unknown>> | null)[], type: string, outcome: string): Readonly<Record<string, unknown>> | null {
+    for (let index = events.length - 1; index >= 0; index--) {
+        countNextStepWork('visit:next-step-startup-routing:candidate');
+        const event = events[index];
+        if (event?.event_type === type && event.outcome === outcome) return event;
+    }
+    return null;
+}
+
 function latestEventDetails(eventsRoot: string, taskId: string, eventType: string, outcome: string): Record<string, unknown> | null {
     const timelinePath = path.join(eventsRoot, `${taskId}.jsonl`);
     const inspection = inspectTaskEventFile(timelinePath, taskId);
     if (inspection.status !== 'PASS' && inspection.status !== 'PASS_WITH_LEGACY_PREFIX') return null;
-    const entries = readTaskTimelineJsonlEntries(timelinePath);
+    const indexed = readInvocationVerifiedEventIndex(timelinePath, taskId);
+    const entries = indexed ? indexed.byType[eventType] ?? [] : readTaskTimelineJsonlEntries(timelinePath);
     for (let index = entries.length - 1; index >= 0; index -= 1) {
         countNextStepWork('visit:next-step-startup-routing:event:39');
-        const event = entries[index].record;
+        const item = entries[index];
+        const event = indexed ? item as Readonly<Record<string, unknown>> : (item as { record: Readonly<Record<string, unknown>> | null }).record;
         if (event?.event_type === eventType && event.outcome === outcome) {
             return event.details && typeof event.details === 'object' && !Array.isArray(event.details)
                 ? event.details as Record<string, unknown> : null;
@@ -167,13 +180,16 @@ export function readFailedTaskModePublicationRecoveryRoute(
     const timelinePath = path.join(eventsRoot, `${taskId}.jsonl`);
     const inspection = inspectTaskEventFile(timelinePath, taskId);
     if (inspection.status !== 'PASS' && inspection.status !== 'PASS_WITH_LEGACY_PREFIX') return null;
-    const events = countNextStepArrayCopy('visit:next-step-startup-routing:copy:167', readTaskTimelineJsonlEntries(timelinePath).map(entry => (countNextStepWork('visit:next-step-startup-routing:event:167'), entry.record)).reverse());
-    const entryIndex = events.findIndex(event => (countNextStepWork('visit:next-step-startup-routing:event:168'), event?.event_type === 'TASK_MODE_ENTERED' && event.outcome === 'PASS'));
-    const entryDetails = events[entryIndex]?.details;
-    if (entryIndex < 0 || !isPlainRecord(events[entryIndex]?.integrity) || !isPlainRecord(entryDetails)
+    const indexed = readInvocationVerifiedEventIndex(timelinePath, taskId);
+    const events = indexed?.byType.TASK_MODE_ENTERED ?? (indexed ? [] : readTaskTimelineJsonlEntries(timelinePath).map(entry => entry.record));
+    const entry = lastMatchingEvent(events, 'TASK_MODE_ENTERED', 'PASS');
+    const entryDetails = entry?.details;
+    if (!entry || !isPlainRecord(entry.integrity) || !isPlainRecord(entryDetails)
         || path.resolve(String(entryDetails.artifact_path || '')) !== path.resolve(taskModePath)) return null;
-    const failure = countNextStepArrayCopy('visit:next-step-startup-routing:copy:172', events.slice(0, entryIndex)).find(event => (countNextStepWork('visit:next-step-startup-routing:event:172'), event?.event_type === 'TASK_MODE_ENTRY_FAILED' && event.outcome === 'FAIL'));
-    if (!failure || !isPlainRecord(failure.integrity)) return null;
+    const failures = indexed?.byType.TASK_MODE_ENTRY_FAILED ?? (indexed ? [] : events);
+    const failure = lastMatchingEvent(failures, 'TASK_MODE_ENTRY_FAILED', 'FAIL');
+    if (!failure || (indexed ? verifiedEventPosition(failure)! <= verifiedEventPosition(entry)! : events.indexOf(failure) <= events.indexOf(entry))) return null;
+    if (!isPlainRecord(failure.integrity)) return null;
     const failureDetails = isPlainRecord(failure.details) ? failure.details : null;
     return {
         reason: 'Task-mode publication failed after TASK_MODE_ENTERED and invalidated its artifact. '

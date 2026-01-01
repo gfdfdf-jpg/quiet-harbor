@@ -182,6 +182,8 @@ export interface FullSuiteValidationResult {
     failure_evidence?: FullSuiteFailureEvidence | null;
     report_attempts?: FullSuiteReportAttempt[];
     task_test_execution_proof?: import('../../core/validation-report-contract').ValidationReportCapture[];
+    task_test_process_evidence?: import('../../core/task-validation-plan').TaskValidationProcessEvidence;
+    task_test_validation_plan?: import('../../core/task-validation-plan').TaskValidationPlan;
 }
 
 export interface FullSuiteFailureEvidenceCopiedLog {

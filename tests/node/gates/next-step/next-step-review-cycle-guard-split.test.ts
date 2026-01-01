@@ -336,7 +336,7 @@ describe('gates/next-step review cycle guard split', () => {
         assert.equal(result.next_gate, 'split-required-latch');
         assert.equal(result.commands.length, 0);
         assert.ok(result.reason.includes(`TASK.md marks "${TASK_ID}" as SPLIT_REQUIRED`));
-        assert.ok(result.reason.includes('cannot continue through classify, compile, review, full-suite, completion, or final closeout gates'));
+        assert.ok(result.reason.includes('cannot continue through classify, compile, review, task test validation, completion, or final closeout gates'));
         assert.ok(taskMd.includes(`| ${TASK_ID} | 🟫 SPLIT_REQUIRED |`));
         assert.ok(events.includes('"event_type":"REVIEW_CYCLE_SPLIT_DECISION_RECORDED"'));
         assert.ok(events.includes('"event_type":"SPLIT_REQUIRED_LATCHED"'));

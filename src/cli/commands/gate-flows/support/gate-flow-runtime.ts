@@ -14,6 +14,7 @@ import {
     type StartupEvidenceRecovery
 } from '../../../../gates/diagnostics/startup-evidence-recovery';
 import { buildCoherentCycleRestartCommand } from '../../../../gates/completion/completion-reporting';
+import { getTaskModeEvidence } from '../../../../gates/task-mode/task-mode';
 import { resolveRestartTaskIntentFromPreflightPath } from '../../../../gates/review-context/review-context-task-criteria-binding';
 import { buildGateCommandPrefix } from '../task-mode/task-mode-command-format';
 import { buildNextStepRecoveryCommand } from '../compile/compile-flow-shared-evidence';
@@ -173,11 +174,21 @@ function formatStartupEvidenceRecoveryCommands(
         return ` Commands: ${gateCommand('shell-smoke-preflight')} ; ${buildNextStepRecoveryCommand(params.repoRoot, params.taskId)}`;
     }
     const preflightPath = String(params.preflightPath || '').trim();
-    return preflightPath
-        ? ` Command: ${buildCoherentCycleRestartCommand(params.repoRoot, params.taskId, gateHelpers.normalizePath(preflightPath),
-            String(params.taskModePath || '').trim() || null, null, null,
-            { taskIntent: resolveRestartTaskIntentFromPreflightPath(params.repoRoot, params.taskId, preflightPath) })}`
-        : ` Run ${buildNextStepRecoveryCommand(params.repoRoot, params.taskId)} for the exact restart-coherent-cycle command.`;
+    const navigatorHint = ` Run ${buildNextStepRecoveryCommand(params.repoRoot, params.taskId)} for the exact restart-coherent-cycle command.`;
+    if (!preflightPath) return navigatorHint;
+    // The same rule as the navigator: a protected task re-enters with the operator confirmation and no restated intent.
+    let taskMode: ReturnType<typeof getTaskModeEvidence>;
+    try {
+        taskMode = getTaskModeEvidence(params.repoRoot, params.taskId, String(params.taskModePath || ''));
+    } catch {
+        return navigatorHint;
+    }
+    return ` Command: ${buildCoherentCycleRestartCommand(params.repoRoot, params.taskId, gateHelpers.normalizePath(preflightPath),
+        String(params.taskModePath || '').trim() || null, null, null,
+        {
+            requiresOperatorConfirmation: taskMode.orchestrator_work === true || taskMode.workflow_config_work === true,
+            taskIntent: resolveRestartTaskIntentFromPreflightPath(params.repoRoot, params.taskId, preflightPath)
+        })}`;
 }
 
 export function evaluateGateFlowOptionalSkillSelection(params: {

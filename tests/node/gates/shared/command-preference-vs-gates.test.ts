@@ -184,7 +184,7 @@ describe('command-preference-vs-mandatory-gates rule clarity', () => {
                 '40-commands.md must include PowerShell and POSIX bounded-tail examples'
             );
             assert.ok(
-                content.includes('does not replace `compile-gate`, `full-suite-validation`, or') &&
+                content.includes('does not replace `compile-gate`, `task-test-validation`, or') &&
                 content.includes('preserve the original exit code'),
                 '40-commands.md must keep manual validation separate from gate-owned evidence'
             );
@@ -200,7 +200,7 @@ describe('command-preference-vs-mandatory-gates rule clarity', () => {
             );
             assert.ok(
                 content.includes('do not wrap a redundant full suite') &&
-                content.includes('never replaces `compile-gate`, `full-suite-validation`') &&
+                content.includes('never replaces `compile-gate`, `task-test-validation`') &&
                 content.includes('reviews, or completion evidence'),
                 '40-commands.md must keep intermediate commands scoped and separate from mandatory gates'
             );
@@ -256,7 +256,7 @@ describe('command-preference-vs-mandatory-gates rule clarity', () => {
                 'template 40-commands.md must include PowerShell and POSIX bounded-tail examples'
             );
             assert.ok(
-                content.includes('does not replace `compile-gate`, `full-suite-validation`, or') &&
+                content.includes('does not replace `compile-gate`, `task-test-validation`, or') &&
                 content.includes('preserve the original exit code'),
                 'template 40-commands.md must keep manual validation separate from gate-owned evidence'
             );
@@ -271,7 +271,7 @@ describe('command-preference-vs-mandatory-gates rule clarity', () => {
             );
             assert.ok(
                 content.includes('do not wrap a redundant full suite') &&
-                content.includes('never replaces `compile-gate`, `full-suite-validation`') &&
+                content.includes('never replaces `compile-gate`, `task-test-validation`') &&
                 content.includes('reviews, or completion evidence'),
                 'template 40-commands.md must keep intermediate commands scoped and separate from mandatory gates'
             );
@@ -290,7 +290,7 @@ describe('command-preference-vs-mandatory-gates rule clarity', () => {
         it('explicitly exempts mandatory gates from ad-hoc preference', () => {
             const content = readMaterializedBundleFile('live/docs/agent-rules/00-core.md');
             assert.ok(
-                content.includes('compile-gate') && content.includes('full-suite-validation') && content.includes('required lifecycle gate'),
+                content.includes('compile-gate') && content.includes('task-test-validation') && content.includes('required lifecycle gate'),
                 '00-core.md must state the ad-hoc restraint does not apply to required lifecycle gates'
             );
         });
@@ -318,7 +318,7 @@ describe('command-preference-vs-mandatory-gates rule clarity', () => {
 
         it('explicitly exempts mandatory gates from ad-hoc preference', () => {
             assert.ok(
-                content.includes('compile-gate') && content.includes('full-suite-validation') && content.includes('required lifecycle gate'),
+                content.includes('compile-gate') && content.includes('task-test-validation') && content.includes('required lifecycle gate'),
                 'template 00-core.md must state the ad-hoc restraint does not apply to required lifecycle gates'
             );
         });

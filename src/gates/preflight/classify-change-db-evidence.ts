@@ -1,4 +1,6 @@
-import { readInvocationTextFile } from '../../core/invocation-file-observation';
+import { readInvocationPathObservation, readInvocationTextFile } from '../../core/invocation-file-observation';
+import { createInvocationReadMemoKey, isInvocationReadObservationActive, memoizeInvocationRead,
+    registerInvocationDependency } from '../../core/invocation-read-observation';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -114,10 +116,11 @@ const DB_MANIFEST_FILES = Object.freeze([
 ]);
 
 const DB_MANIFEST_MAX_BYTES = 512 * 1024;
+const DATABASE_ROOT_EVIDENCE = createInvocationReadMemoKey<readonly string[]>('database-project-evidence-root');
 
-function readPackageJsonDatabaseEvidence(repoRoot: string): string[] {
+function readPackageJsonDatabaseEvidence(repoRoot: string, exists: (file: string) => boolean): string[] {
     const packageJsonPath = path.join(repoRoot, 'package.json');
-    if (!fs.existsSync(packageJsonPath)) {
+    if (!exists(packageJsonPath)) {
         return [];
     }
 
@@ -142,18 +145,21 @@ function readPackageJsonDatabaseEvidence(repoRoot: string): string[] {
     }
 }
 
-function readManifestDatabaseEvidence(rootPath: string, relativeRoot: string, manifestFile: string): string[] {
+function readManifestDatabaseEvidence(rootPath: string, relativeRoot: string, manifestFile: string,
+    exists: (file: string) => boolean): string[] {
     const manifestPath = path.join(rootPath, manifestFile);
-    if (!fs.existsSync(manifestPath)) {
+    if (!exists(manifestPath)) {
         return [];
     }
 
     try {
+        // Retain size/kind observations even for manifests too large to read.
+        readInvocationPathObservation(manifestPath);
         const stat = fs.statSync(manifestPath);
         if (!stat.isFile() || stat.size > DB_MANIFEST_MAX_BYTES) {
             return [];
         }
-        const content = fs.readFileSync(manifestPath, 'utf8').toLowerCase();
+        const content = readInvocationTextFile(manifestPath).toLowerCase();
         const matchedMarkers = DB_MANIFEST_MARKERS.filter((marker) => content.includes(marker));
         if (matchedMarkers.length === 0) {
             return [];
@@ -186,23 +192,42 @@ export function collectDatabaseProjectEvidence(repoRoot?: string, normalizedFile
     const evidence = new Set<string>();
     for (const relativeRoot of collectCandidateDatabaseEvidenceRoots(normalizedFiles)) {
         const rootPath = path.join(repoRoot, relativeRoot);
-        if (!fs.existsSync(rootPath)) {
-            continue;
-        }
-        for (const relativePath of DB_PROJECT_EVIDENCE_PATHS) {
-            const evidencePath = relativeRoot ? `${relativeRoot}/${relativePath}` : relativePath;
-            if (fs.existsSync(path.join(rootPath, relativePath))) {
-                evidence.add(normalizePath(evidencePath));
+        const found = memoizeInvocationRead(DATABASE_ROOT_EVIDENCE, JSON.stringify([path.resolve(rootPath), relativeRoot]), () => {
+            const checks: Array<{ file: string; present: boolean }> = [];
+            const active = isInvocationReadObservationActive();
+            const exists = (file: string): boolean => {
+                const observedFile = active ? path.resolve(file) : file;
+                const present = fs.existsSync(observedFile);
+                if (active) checks.push({ file: observedFile, present });
+                return present;
+            };
+            if (active) {
+                readInvocationPathObservation(rootPath);
+                // A cached negative probe must not hide a newly created marker (or vice versa).
+                registerInvocationDependency(checks, () => {
+                    for (const check of checks) {
+                        if (fs.existsSync(check.file) !== check.present) {
+                            throw new Error('Invocation database evidence changed: ' + check.file);
+                        }
+                    }
+                });
             }
-        }
-        for (const dependencyEvidence of readPackageJsonDatabaseEvidence(rootPath)) {
-            evidence.add(relativeRoot ? `${relativeRoot}/${dependencyEvidence}` : dependencyEvidence);
-        }
-        for (const manifestFile of DB_MANIFEST_FILES) {
-            for (const manifestEvidence of readManifestDatabaseEvidence(rootPath, relativeRoot, manifestFile)) {
-                evidence.add(manifestEvidence);
+            const rootEvidence: string[] = [];
+            if (exists(rootPath)) {
+                for (const relativePath of DB_PROJECT_EVIDENCE_PATHS) {
+                    const evidencePath = relativeRoot ? `${relativeRoot}/${relativePath}` : relativePath;
+                    if (exists(path.join(rootPath, relativePath))) rootEvidence.push(normalizePath(evidencePath));
+                }
+                for (const dependencyEvidence of readPackageJsonDatabaseEvidence(rootPath, exists)) {
+                    rootEvidence.push(relativeRoot ? `${relativeRoot}/${dependencyEvidence}` : dependencyEvidence);
+                }
+                for (const manifestFile of DB_MANIFEST_FILES) {
+                    rootEvidence.push(...readManifestDatabaseEvidence(rootPath, relativeRoot, manifestFile, exists));
+                }
             }
-        }
+            return Object.freeze(rootEvidence);
+        }).value;
+        for (const item of found) evidence.add(item);
     }
     return [...evidence].sort();
 }

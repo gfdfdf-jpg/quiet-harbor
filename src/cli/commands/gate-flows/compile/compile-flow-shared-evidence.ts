@@ -78,7 +78,7 @@ export function readConfiguredCompileGateCommandForCompileGate(repoRoot: string)
     return { command, configPath: workflowConfigPath };
 }
 
-export function buildUnconfiguredCompileGateCommandMessage(repoRoot: string, configPath: string): string {
+export function buildUnconfiguredCompileGateCommandMessage(repoRoot: string, configPath: string, taskId = '<task-id>'): string {
     const cliPrefix = gateHelpers.isOrchestratorSourceCheckout(repoRoot)
         ? getSourceCliCommand()
         : getBundleCliCommand(resolveBundleNameForTarget(repoRoot));
@@ -86,8 +86,9 @@ export function buildUnconfiguredCompileGateCommandMessage(repoRoot: string, con
     return [
         `Compile gate command is unconfigured in ${normalizedConfigPath}.`,
         'Compile-gate is fail-closed and will not read 40-commands.md as a fallback because compile/build/type-check commands are project-specific.',
-        `Set a real compile/build/type-check command with: ${cliPrefix} workflow set --compile-gate-command "<command>" --operator-confirmed yes --operator-confirmed-at-utc "<ISO-8601 timestamp>" --target-root ".".`,
-        'If this workspace has not been initialized, rerun agent-init/project discovery so it can record the project-specific compile-gate command.'
+        `Declare this task's command with: ${cliPrefix} gate compile-gate --task-id "${taskId}" --compile-command "<task-compile-command>" --repo-root ".".`,
+        `For a stack without a separate compile phase: ${cliPrefix} gate compile-gate --task-id "${taskId}" --compile-not-applicable-reason "<why this stack has no separate compile phase>" --repo-root ".".`,
+        'These declarations apply only to this task and do not change the shared workflow.'
     ].join(' ');
 }
 

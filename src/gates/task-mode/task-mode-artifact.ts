@@ -120,7 +120,8 @@ export function buildTaskModeArtifact(options: BuildTaskModeArtifactOptions): Ta
         ? {
             plan_path: options.plan.plan_path,
             plan_sha256: options.plan.plan_sha256,
-            plan_summary: options.plan.plan_summary
+            plan_summary: options.plan.plan_summary,
+            ...(options.plan.scope_files ? { scope_files: [...options.plan.scope_files] } : {})
         }
         : null;
     const markdownWorkingPlan = options.markdownWorkingPlan

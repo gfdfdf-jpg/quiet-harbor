@@ -62,10 +62,6 @@ function readBoundedSkillInput(filePath: string, owningRoot: string, maximumByte
         readInvocationPathObservation(owningRoot);
         readInvocationPathObservation(filePath);
         const input = readBoundedSkillInputNative(filePath, owningRoot, maximumBytes, label);
-        const content = readInvocationFileContent(filePath, maximumBytes)!;
-        if (content.sha256 !== input.sha256 || content.size !== input.bytes.length) {
-            throw new Error(`${label} identity or contents changed after bounded reading.`);
-        }
         // The checked bytes stay private; each parser receives an isolated copy.
         return Object.freeze(input);
     }).value;
@@ -93,9 +89,13 @@ function readBoundedSkillInputNative(filePath: string, owningRoot: string, maxim
         assertContainedDestination(binding);
         const opened = fs.fstatSync(descriptor, { bigint: true });
         if (inputVersion(opened) !== inputVersion(before)) throw new Error(`${label} identity changed before reading.`);
-        const buffer = Buffer.alloc(Number(before.size) + 1);
-        let bytesRead = 0;
-        while (bytesRead < buffer.length) {
+        const content = readInvocationFileContent(filePath, maximumBytes);
+        if (content && inputVersion(content.identity) !== inputVersion(before)) {
+            throw new Error(`${label} identity changed before reading.`);
+        }
+        const buffer = content ? content.copyBytes() : Buffer.alloc(Number(before.size) + 1);
+        let bytesRead = content ? buffer.length : 0;
+        while (!content && bytesRead < buffer.length) {
             const count = fs.readSync(descriptor, buffer, bytesRead, buffer.length - bytesRead, null);
             if (count === 0) break;
             bytesRead += count;
@@ -107,7 +107,7 @@ function readBoundedSkillInputNative(filePath: string, owningRoot: string, maxim
             throw new Error(`${label} identity or contents changed during bounded reading.`);
         }
         const bytes = buffer.subarray(0, bytesRead);
-        return { bytes, sha256: createHash('sha256').update(bytes).digest('hex') };
+        return { bytes, sha256: content?.sha256 ?? createHash('sha256').update(bytes).digest('hex') };
     } finally {
         fs.closeSync(descriptor);
     }

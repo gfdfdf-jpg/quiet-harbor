@@ -1,0 +1,80 @@
+{
+  "schema": 1,
+  "id": "unknown-quartz",
+  "title": "Invented Quartz / opaque",
+  "adapter": null,
+  "technologies": [
+    {
+      "id": "opaque",
+      "executable": "tools/quartz",
+      "compileArgv": [
+        "assemble",
+        "--realm",
+        "orders"
+      ],
+      "firstArgv": [
+        "verify",
+        "--suite",
+        "purchase",
+        "--input",
+        "qa/orders/purchase.case",
+        "--data",
+        "qa/support/membership.fixture",
+        "--implementation",
+        "components/orders/behavior.qz"
+      ],
+      "allArgv": [
+        "verify",
+        "--suite",
+        "purchase,isolation",
+        "--input",
+        "qa/orders/purchase.case",
+        "qa/partners/isolation.case",
+        "--data",
+        "qa/support/membership.fixture",
+        "--implementation",
+        "components/orders/behavior.qz",
+        "--implementation",
+        "components/partners/behavior.qz"
+      ],
+      "broadArgv": [
+        "verify",
+        "--realm",
+        "all"
+      ],
+      "report": "text",
+      "secondArgv": [
+        "verify",
+        "--suite",
+        "isolation",
+        "--input",
+        "qa/partners/isolation.case",
+        "--data",
+        "qa/support/membership.fixture",
+        "--implementation",
+        "components/partners/behavior.qz"
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "orders",
+      "technology": "opaque",
+      "source": "components/orders/behavior.qz",
+      "target": "qa/orders/purchase.case",
+      "case": "task-contract",
+      "comment": "#"
+    },
+    {
+      "id": "partners",
+      "technology": "opaque",
+      "source": "components/partners/behavior.qz",
+      "target": "qa/partners/isolation.case",
+      "case": "task-contract",
+      "comment": "#"
+    }
+  ],
+  "helpers": [
+    "qa/support/membership.fixture"
+  ]
+}

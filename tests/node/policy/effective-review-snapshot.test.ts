@@ -289,7 +289,8 @@ function buildProfileActivityFixture(
 
 test('declared validation rejects missing or incapable mandatory semantic review lanes', () => {
     const resolve = resolveValidationSemanticReviewLanes;
-    assert.deepEqual(resolve(buildSnapshot(false, { legacyRequiredReviews: { code: true, test: true } })), ['code', 'test']);
+    assert.deepEqual(resolve(buildSnapshot(false, { legacyRequiredReviews: { code: true, test: true } })), ['test']);
+    assert.deepEqual(resolve(buildSnapshot(false, { legacyRequiredReviews: { code: true } })), ['code']);
     assert.deepEqual(resolve(buildProfileActivityFixture('test', true, true).snapshot), ['test']);
     assert.throws(() => resolve(buildProfileActivityFixture('test', true, false).snapshot), /capable.*mandatory/u);
     assert.throws(() => resolve(buildSnapshot(false, { legacyRequiredReviews: {} })), /capable.*mandatory/u);
@@ -300,6 +301,24 @@ test('declared validation rejects missing or incapable mandatory semantic review
     const forged = JSON.parse(JSON.stringify(explicit.snapshot));
     forged.required_reviews.test = true;
     assert.throws(() => resolve(forged), /snapshot/u);
+});
+
+test('semantic validation ownership follows frozen mandatory lanes without bypassing test capability', () => {
+    const resolve = resolveValidationSemanticReviewLanes;
+    const both = buildSnapshot(false, { legacyRequiredReviews: { code: true, test: true } });
+    const catalog = buildCatalog();
+    const profilePolicy = resolveProfileReviewCatalogPolicy('balanced', { test: true },
+        Object.fromEntries(catalog.review_types.map(lane => [lane.id, lane.id !== 'test'])) as ReviewCapabilitiesConfigMap,
+        catalog);
+    const incapableTest = buildEffectiveReviewSnapshot({
+        catalog, profilePolicy, profileSnapshotSha256: PROFILE_HASH,
+        legacyRequiredReviews: { code: true, test: true }, scopeCategory: 'code',
+        taskIntent: 'Review validation semantics', changedFiles: ['src/handler.ts'], taskTriggers: {}
+    });
+    assert.deepEqual(resolve(both), ['test']);
+    assert.throws(() => resolve(incapableTest), /capability disabled: test/u);
+    const optionalTest = buildSnapshot(false, { legacyRequiredReviews: { code: true, test: false } });
+    assert.deepEqual(resolve(optionalTest), ['code']);
 });
 
 test('validates required built-in lanes with disabled capabilities through frozen reconstruction', () => {

@@ -112,3 +112,22 @@ test('shared evidence handles accept only their live native task and cannot be r
         assert.throws(() => readValidationEvents(fixture.repoRoot, fixture.taskId, 'active', handle), /inactive/iu);
     } finally { fixture.cleanup(); }
 });
+
+test('docs-only work does not inherit unrelated recipe case obligations', () => {
+    const fixture = activationFixture({ prefix: '', packageCwd: false });
+    try {
+        fs.writeFileSync(path.join(fixture.repoRoot, fixture.source), JSON.stringify({ value: 40 }));
+        const docs = 'README.md';
+        fs.appendFileSync(path.join(fixture.repoRoot, docs), '\nDocumentation clarification.\n');
+        runClassifyChangeCommand({ repoRoot: fixture.repoRoot, taskId: fixture.taskId, taskIntent: 'Clarify documentation',
+            changedFiles: [docs], outputPath: fixture.preflightPath, emitMetrics: false });
+        const preflight = JSON.parse(fs.readFileSync(fixture.preflightPath, 'utf8'));
+        assert.equal(preflight.scope_category, 'docs-only');
+        const phases = inspectQualityValidationPhases({ repoRoot: fixture.repoRoot, taskId: fixture.taskId, preflight,
+            preflightSha256: createHash('sha256').update(fs.readFileSync(fixture.preflightPath)).digest('hex'),
+            matrixRequired: false, matrix: [] });
+        assert.deepEqual(phases?.phases.obligations, []);
+        assert.deepEqual(phases?.phases.executions, []);
+        assert.equal(phases?.phases.execution, 'OBSERVED');
+    } finally { fixture.cleanup(); }
+});

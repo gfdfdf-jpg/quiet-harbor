@@ -6,6 +6,7 @@ import {
     normalizeNonEmptyString,
     normalizeStringArray
 } from './shared';
+import { normalizeTaskValidationConfigNames } from '../core/task-validation-names';
 import { compactSettingsFromConfig, compactSettingsToConfig } from '../core/compact/setting-definitions';
 import { normalizeReviewExecutionPolicyMode } from '../core/review-execution-policy';
 import { parseApprovedValidationContract } from '../core/project-validation-identity';
@@ -43,8 +44,8 @@ const VALID_WORKFLOW_FULL_SUITE_FAILURE_POLICIES = new Set(['AUDIT_AND_BLOCK', '
 
 
 export function validateWorkflowConfig(input: unknown): Record<string, unknown> {
-    const raw = ensurePlainObject(input, 'workflow-config');
-    const knownKeyList = ['compact', 'compile_gate', 'full_suite_validation', 'review_execution_policy', 'review_delegation', 'scope_budget_guard', 'review_cycle_guard', 'project_memory_maintenance', 'task_reset', 'local_commit', 'task_test_selection', 'auto_backup', 'optional_quality_checks', 'orchestrator_work_policy', 'project_validation', 'parent_audit'] as const;
+    const raw = normalizeTaskValidationConfigNames(ensurePlainObject(input, 'workflow-config'));
+    const knownKeyList = ['compact', 'compile_gate', 'full_suite_validation', 'task_test_validation', 'review_execution_policy', 'review_delegation', 'scope_budget_guard', 'review_cycle_guard', 'project_memory_maintenance', 'task_reset', 'local_commit', 'task_test_selection', 'auto_backup', 'optional_quality_checks', 'orchestrator_work_policy', 'project_validation', 'parent_audit'] as const;
     const knownKeys = new Set(knownKeyList);
     assertNoCaseMismatchedKnownKeys(
         raw,

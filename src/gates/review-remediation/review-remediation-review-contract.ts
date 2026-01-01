@@ -64,7 +64,9 @@ function getScopeBindingViolations(classification: ReviewRemediationDecisionClas
         changedFilesCount: classification.delta.changed_files.length, changedLinesTotal: classification.delta.changed_lines_total
     }), ...getReviewRemediationScopeReviewTypesViolations({
         repoRoot,
-        delta: classification.delta, profilePolicySnapshot: classification.profilePolicySnapshot
+        delta: classification.delta, profilePolicySnapshot: classification.profilePolicySnapshot,
+        authenticatedPreflightSha256: decision && 'preflight_sha256' in decision
+            && typeof decision.preflight_sha256 === 'string' ? decision.preflight_sha256 : undefined
     })];
 }
 
@@ -88,7 +90,7 @@ function getLaneDelta(classification: Extract<ReviewRemediationDecisionClassific
     const baseline = readAuthenticatedBaseline(candidate);
     if (baseline.fix_now_items.length !== 0) throw new Error(`Carried DELTA for '${reviewType}' does not start from a passed review.`);
     const childClassification = { ...classification, delta: candidate };
-    const scopeViolations = getScopeBindingViolations(childClassification);
+    const scopeViolations = getScopeBindingViolations(childClassification, decision);
     const historyViolations = getReviewRemediationDeltaHistoryViolations({
         repoRoot: resolveRemediationRepositoryRoot(candidate.baseline.artifact_path), delta: candidate, reviewType,
         profilePolicySnapshot: classification.profilePolicySnapshot,
@@ -166,6 +168,12 @@ export interface ReviewRemediationReviewContractValidationAuthority {
     authoritativeDecision: ReviewRemediationAuthoritativeDecisionBinding | null;
     authoritativeClassification: ReviewRemediationDecisionClassification | null;
     acceptedCurrentPassReplacement?: boolean;
+    /** Native preservation authority for unchanged reviewed work. The execution contract keeps its original preflight. */
+    preserved_current_scope?: {
+        current_preflight_sha256: string;
+        preserving_decision_sha256: string;
+        preserving_classification_sha256: string;
+    };
 }
 
 /**

@@ -14,6 +14,7 @@ interface ReviewerFocusedCommandHints {
     commands: {
         command: string;
         target: string;
+        targets?: string[];
         source_event_sequence: number;
         source_artifact_sha256: string;
     }[];
@@ -126,6 +127,7 @@ function buildReviewerFocusedCommandHints(
             commands.push({
                 command: entry.command,
                 target: inspection.target,
+                ...(inspection.targets ? { targets: inspection.targets } : {}),
                 source_event_sequence: entry.event_task_sequence,
                 source_artifact_sha256: entry.artifact_sha256
             });
@@ -180,7 +182,7 @@ export function buildFocusedIntermediateValidationEvidenceMarkdown(
         for (const hint of hints.commands) {
             lines.push(
                 `- Validator-compatible command: ${hint.command}`,
-                `  - Exact target: ${hint.target}; source event: ${hint.source_event_sequence}; source artifact sha256: ${hint.source_artifact_sha256}`
+                `  - Exact target: ${(hint.targets ?? [hint.target]).join(', ')}; source event: ${hint.source_event_sequence}; source artifact sha256: ${hint.source_artifact_sha256}`
             );
         }
         if (hints.commands.length === 0) {

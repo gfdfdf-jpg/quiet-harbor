@@ -100,13 +100,12 @@ describe('installed rule refresh through real lifecycle entrypoints', () => {
         for (const [file, bytes] of old) assert.deepEqual(fs.readFileSync(path.join(w.live, file)), bytes, file);
     });
 
-    it('keeps unrecognized structures intact and reports warnings in update and doctor', (t) => {
+    it('stops update on an unrecognized insertion point and still reports it in doctor', (t) => {
         const w = workspace(); t.after(() => fs.rmSync(w.targetRoot, { recursive: true, force: true }));
         const custom = Buffer.from('# Bespoke commands\r\n\r\nDo not replace my application procedures.\r\n');
         fs.writeFileSync(path.join(w.live, '40-commands.md'), custom);
-        const result = update(w);
+        assert.throws(() => update(w), /40-commands\.md.*Manual Validation Evidence Selector.*Project Commands \(Required\)/u);
         assert.deepEqual(fs.readFileSync(path.join(w.live, '40-commands.md')), custom);
-        assert.match(fs.readFileSync(path.join(w.targetRoot, result.updateReportPath), 'utf8'), /40-commands.md.*preserved.*unrecognized/iu);
         const doctor = runDoctor({ targetRoot: w.targetRoot, sourceOfTruth: 'Codex' });
         assert.match(formatDoctorResultCompact(doctor), /40-commands.md.*preserved.*unrecognized/iu);
     });

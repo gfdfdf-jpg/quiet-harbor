@@ -1,4 +1,5 @@
 import { countNextStepWork } from '../../core/next-step-measurement';
+import { verifiedIndexForEvents, selectVerifiedEvents } from '../../gate-runtime/timeline/task-verified-event-index';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { toPosix } from '../shared/helpers';
@@ -315,6 +316,8 @@ export function readReviewExecutionPolicyModeFromCurrentCycleTimeline(
     currentCycle: TaskCycleBindingSnapshot | null,
     repoRoot: string
 ): EffectiveReviewExecutionPolicyMode | null {
+    const indexed = verifiedIndexForEvents(events);
+    const candidates = indexed ? selectVerifiedEvents(indexed, ['PREFLIGHT_CLASSIFIED'], { normalized: true, ordered: true }) : events;
     const expectedPreflightPath = currentCycle?.preflight_path
         ? toPosix(currentCycle.preflight_path)
         : null;
@@ -322,9 +325,9 @@ export function readReviewExecutionPolicyModeFromCurrentCycleTimeline(
         ? parseTimestamp(currentCycle.compile_gate_timestamp).getTime()
         : 0;
 
-    for (let index = events.length - 1; index >= 0; index -= 1) {
+    for (let index = candidates.length - 1; index >= 0; index -= 1) {
         countNextStepWork('visit:task-audit-summary-review-timing-audit:event:321');
-        const event = events[index];
+        const event = candidates[index];
         const eventType = String(event.event_type || '').trim().toUpperCase();
         if (eventType !== 'PREFLIGHT_CLASSIFIED') {
             continue;

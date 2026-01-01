@@ -1,3 +1,4 @@
+import './engine/walk-route-observer';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
@@ -6,15 +7,20 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+import { stackMatrixIdentity } from './engine/walk-stack-fixtures';
+import { walkFixtureTemplateKey } from './engine/walk-fixture';
 import type { StandFinding } from '../../../scripts/node-foundation/synthetic/model';
 import { compareWalk, createWalkTemplate, walkTaskFamily, WALK_PROVIDER, type WalkResult, type WalkScenario } from './engine/navigator-walk';
 import { buildWalkReport, renderWalkReport } from './engine/walk-report';
-import { anomalyFindings } from './engine/walk-metrics';
 import { buildSweepScenarios, replaySweepScenarios, sweepApplicability, type SweepInjection } from './engine/walk-sweep';
 import { WALK_SCENARIOS } from './engine/walk-scenarios';
 import { matchesDisturbanceSelection, walkRunPlan } from './engine/walk-plan';
-import { atomicWalkJson, assertWalkResumeIdentity, WalkRunStore, walkHash, walkProgress, type FinishedWalk } from './engine/walk-run-store';
+import { atomicWalkJson, atomicWalkText, assertWalkResumeIdentity, walkResultIndex, WalkRunStore, walkHash, walkProgress, type FinishedWalk } from './engine/walk-run-store';
+import { configureTimingSession, finishTimingSession } from './engine/step-timing-session';
 import { getProviderEntryById, getProviderEnvironmentDetectionMarkers, normalizeProviderId } from '../../../src/core/provider/provider-registry';
+import { parseStandShard, partitionWalkWork, shardPlan, SWEEP_BASELINES, workIds, type WalkWork } from './engine/walk-sharding';
+import { judgeWalk } from './engine/walk-verdict';
+import { nativeWalkPathFindings, replayNativeWalkFamily } from './engine/walk-native';
 
 // Walks name their provider explicitly. The operator's own agent shell (for example CLAUDECODE inside Claude Code)
 // must not change runtime identity resolution, or the verdict would depend on where the stand was started.
@@ -29,7 +35,10 @@ const REPORT_ROOT = path.resolve(process.env.GARDA_SYNTHETIC_WALK_REPORT || proc
 // A discovery run sets none of the walk variables and therefore walks the sample only.
 const PLAN = walkRunPlan(process.env, WALK_SCENARIOS.map(entry => entry.id));
 const LEVEL = PLAN.level;
-interface WorkItem { baseline: string; variants?: Array<{ id: string; injection: SweepInjection }> }
+type WorkItem = WalkWork;
+const SHARD = parseStandShard(process.env.GARDA_SYNTHETIC_WALK_SHARD);
+if (SHARD && (PLAN.disturbance || process.env.GARDA_SYNTHETIC_WALK_REPLAY_MANIFEST))
+    throw new Error('Sharding requires an ordinary level/selection, without disturbance filtering or a replay manifest');
 
 function runInputs(): { manifest: unknown; files: string[] } {
     // Hash all tracked inputs (including fixtures/templates) and untracked source inputs. Deleted files
@@ -37,7 +46,7 @@ function runInputs(): { manifest: unknown; files: string[] } {
     const git = (...args: string[]) => execFileSync('git', ['-c', 'safe.directory=' + path.resolve('.'), ...args],
         { encoding: 'utf8', windowsHide: true });
     const files = [...new Set(git('ls-files', '--cached', '--others', '--exclude-standard', '-z', '--',
-        'src', 'template', 'scripts', 'tests', 'bin', 'package.json', 'package-lock.json', 'tsconfig*.json', 'eslint*')
+        'src', 'template', 'scripts', 'tests', 'docs/stand', 'bin', 'package.json', 'package-lock.json', 'tsconfig*.json', 'eslint*')
         .split('\0').filter(Boolean))].sort();
     const digests = Object.fromEntries(files.map(file => [file, fs.existsSync(file)
         ? createHash('sha256').update(fs.readFileSync(file)).digest('hex') : null]));
@@ -83,15 +92,14 @@ function observe(value: FinishedWalk, reuse = false): void {
 }
 
 function itemIds(item: WorkItem): string[] {
-    return item.variants ? ['checkpoint-control-' + item.baseline + '-s' + item.variants[0].injection.step,
-        ...item.variants.map(value => value.id)] : [item.baseline];
+    return workIds(item);
 }
 
 function writeReport(results: readonly WalkResult[], findings: StandFinding[]): ReturnType<typeof buildWalkReport> {
     const report = buildWalkReport(results, findings);
     fs.mkdirSync(REPORT_ROOT, { recursive: true });
-    fs.writeFileSync(path.join(REPORT_ROOT, 'navigator-walk.json'), JSON.stringify(report, null, 2) + '\n');
-    fs.writeFileSync(path.join(REPORT_ROOT, 'navigator-walk.md'), renderWalkReport(report));
+    atomicWalkJson(path.join(REPORT_ROOT, 'navigator-walk.json'), report);
+    atomicWalkText(path.join(REPORT_ROOT, 'navigator-walk.md'), renderWalkReport(report));
     return report;
 }
 
@@ -160,33 +168,62 @@ async function execute(items: WorkItem[], jobs: number, stage: string): Promise<
 }
 
 async function executeWorker(items: WorkItem[]): Promise<void> {
-    const template = await createWalkTemplate(path.resolve('.'));
+    const templates = new Map<string, string>();
     try {
         for (const item of items) {
             const scenario = scenarioFor(item);
+            const key = scenario.fixture ? walkFixtureTemplateKey(scenario.fixture) : 'legacy-node';
+            let template = templates.get(key);
+            if (!template) { template = await createWalkTemplate(path.resolve('.'), scenario.fixture); templates.set(key, template); }
             const variants = item.variants?.map(value => ({ ...scenario, id: value.id, injection: value.injection, expectedReviews: {}, expectedModes: [] }));
             const accepted = new Set<string>();
-            const accept = (result: WalkResult) => {
+            const accept = (result: WalkResult, extra: StandFinding[] = []) => {
                 const expected = variants?.find(entry => entry.id === result.scenarioId) ?? { ...scenario, id: result.scenarioId };
-                const value = { result, findings: compareWalk(expected, result) };
+                const value = { result, findings: [...compareWalk(process.env.GARDA_SYNTHETIC_WALK_DIAGNOSTICS
+                    ? { ...expected, expectedRoutes: undefined } : expected, result), ...extra,
+                    ...process.env.GARDA_SYNTHETIC_WALK_DIAGNOSTICS ? nativeWalkPathFindings(result) : []] };
                 store.save(value);
                 accepted.add(result.scenarioId);
                 if (!process.env.GARDA_SYNTHETIC_WALK_WORK) observe(value);
             };
             const started = performance.now();
+            const coverage: WalkResult[] = [];
             try {
-                await walkTaskFamily(template, scenario, variants, accept);
+                await walkTaskFamily(template, scenario, variants, result => { coverage.push(result); });
+                // A fresh process reconstructs scenario closures and fixture state; never replay a mutated closure.
+                // Diagnostics explicitly selects native-only exploration. Ordinary budget runs pair both paths.
+                if (!process.env.GARDA_SYNTHETIC_WALK_DIAGNOSTICS && process.env.GARDA_SYNTHETIC_STEP_TIMING !== '1') {
+                    const directory = path.join(REPORT_ROOT, 'native-' + item.baseline);
+                    const native = await replayNativeWalkFamily(item, directory);
+                    assert.deepEqual(native.results.map(value => value.scenarioId).sort(), coverage.map(value => value.scenarioId).sort(),
+                        'Native and coverage replays must contain the same scenarios');
+                    for (const result of coverage) {
+                        result.nativeBudget = native.results.find(value => value.scenarioId === result.scenarioId)!;
+                        result.pairedElapsedMs = performance.now() - started;
+                    }
+                    for (const result of coverage) {
+                        accept(result, native.findings[result.scenarioId].map(finding => ({ ...finding, id: 'native:' + finding.id })));
+                    }
+                } else for (const result of coverage) accept(result);
                 if (variants) store.finishFamily(itemIds(item));
             } catch (error) {
+                // Retain completed coverage even if the native replay crashes. Empty native work cannot
+                // become an in-process budget fallback or a successful native acceptance claim.
+                for (const result of coverage.filter(value => !accepted.has(value.scenarioId))) {
+                    result.nativeBudget ??= { scenarioId: result.scenarioId, outcome: 'exception', detail: String(error),
+                        steps: [], reviewsByLane: {}, reviews: [], events: [] };
+                    accept(result, [{ layer: 'walk', kind: 'contract', id: 'walk:native-replay:' + result.scenarioId,
+                        summary: 'Native budget replay failed: ' + String(error), detail: { scenario: result.scenarioId } }]);
+                }
                 for (const id of itemIds(item).filter(id => !accepted.has(id))) accept({ scenarioId: id,
                     outcome: 'exception', detail: String(error), elapsedMs: performance.now() - started,
                     steps: [], reviewsByLane: {}, reviews: [], events: [] });
             }
         }
-    } finally { fs.rmSync(template, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
+    } finally { for (const template of templates.values()) fs.rmSync(template, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
 }
 
-test('synthetic navigator coverage, disturbance and measurement stand', { timeout: PLAN.timeoutMs, concurrency: false }, async () => {
+test('synthetic navigator coverage, disturbance and measurement stand', { timeout: PLAN.timeoutMs, concurrency: false }, async t => {
     const jobs = PLAN.jobs;
     fs.mkdirSync(REPORT_ROOT, { recursive: true });
     if (process.env.GARDA_SYNTHETIC_WALK_WORK) {
@@ -201,10 +238,12 @@ test('synthetic navigator coverage, disturbance and measurement stand', { timeou
     const seed = Number(process.env.GARDA_SYNTHETIC_SEED ?? 0x6a726461);
     assert.ok(Number.isSafeInteger(seed) && seed >= 0 && seed <= 0xffffffff, 'Seed must be an unsigned 32-bit integer');
     const replay = process.env.GARDA_SYNTHETIC_WALK_REPLAY_MANIFEST;
-    const identity = { version: 1, seed, level: LEVEL, provider: WALK_PROVIDER, scenarioManifest: PLAN.scenarioIds,
-        only: PLAN.only, disturbance: PLAN.disturbance, runSweep: PLAN.runSweep,
+    const identity = { version: 2, budgetPath: 'paired-native-v1', stackMatrix: stackMatrixIdentity(), seed, level: LEVEL, provider: WALK_PROVIDER, scenarioManifest: PLAN.scenarioIds,
+        reviewRotation: PLAN.reviewRotation,
+        only: PLAN.only, disturbance: PLAN.disturbance, runSweep: PLAN.runSweep, shard: SHARD ?? null,
         quiet: process.env.GARDA_SYNTHETIC_WALK_QUIET === '1',
         diagnostics: !!process.env.GARDA_SYNTHETIC_WALK_DIAGNOSTICS, cpu: process.env.GARDA_SYNTHETIC_WALK_DIAGNOSTICS_CPU === '1',
+        counterAttribution: process.env.GARDA_STAND_COUNTER_ATTRIBUTION === '1',
         replay: replay ? walkHash(JSON.parse(fs.readFileSync(replay, 'utf8'))) : null, runInputsHash: walkHash(inputs.manifest) };
     const resume = process.env.GARDA_SYNTHETIC_WALK_RESUME;
     if (resume) {
@@ -221,14 +260,43 @@ test('synthetic navigator coverage, disturbance and measurement stand', { timeou
     store = new WalkRunStore(REPORT_ROOT, walkHash(identity));
     retainRunInputs(inputs);
     atomicWalkJson(path.join(REPORT_ROOT, 'run-manifest.json'), identity);
+    atomicWalkJson(path.join(REPORT_ROOT, 'review-rotation.json'), { ...PLAN.reviewRotation,
+        selected: PLAN.scenarioIds.filter(id => id.startsWith('deep-stack-')) });
+    if (process.env.GARDA_SYNTHETIC_STEP_TIMING_CONFIG) {
+        assert.equal(jobs, 1, 'Step timing requires JOBS=1');
+        assert.equal(process.env.GARDA_NEXT_STEP_TIMING, undefined, 'Detailed timing wrappers must be disabled');
+        configureTimingSession(JSON.parse(fs.readFileSync(process.env.GARDA_SYNTHETIC_STEP_TIMING_CONFIG, 'utf8')) as Parameters<typeof configureTimingSession>[0]);
+        t.after(finishTimingSession);
+    }
+    // A long parent/child walk may finish no scenario for several minutes. Keep the outer idle watchdog informed.
+    const heartbeat = setInterval(() => {
+        snapshot();
+        const progress = walkProgress([...observed.values()], planned.size, performance.now() - started, fresh);
+        console.log('Walk heartbeat ' + progress.finished + '/' + progress.total + ' ' + JSON.stringify(progress.counts)
+            + ' elapsed=' + Math.round(progress.elapsedMs / 1000) + 's');
+    }, 30_000);
+    heartbeat.unref();
+    t.after(() => clearInterval(heartbeat));
     let sweepPlanned = 0, sweepCompleted = 0;
     const only = PLAN.only ?? undefined;
     const scenarios = WALK_SCENARIOS.filter(entry => PLAN.scenarioIds.includes(entry.id));
-    const initial = await execute(scenarios.map(entry => ({ baseline: entry.id })), jobs, 'full');
+    const ordinary: WorkItem[] = scenarios.map(entry => ({ baseline: entry.id }));
+    let assigned: Set<string> | undefined;
+    if (SHARD && !PLAN.runSweep) {
+        const plan = shardPlan(ordinary, SHARD); assigned = new Set(plan.assigned);
+        atomicWalkJson(path.join(REPORT_ROOT, 'shard-plan.json'), plan);
+    }
+    // Sweep IDs are source-derived from native baseline checkpoints. Each shard builds the same six planning
+    // prefixes, then owns disjoint records. Planning copies are excluded from the merged scenario union.
+    const initialItems = SHARD ? PLAN.runSweep ? SWEEP_BASELINES.map(baseline => ({ baseline }))
+        : ordinary.filter(item => assigned!.has(item.baseline)) : ordinary;
+    const initial = await execute(initialItems, jobs, 'full');
     const results = initial.results, findings = initial.findings;
     writeReport(results, findings);
     if (PLAN.runSweep) {
-        const baselineIds = ['clean-pass', 'document-only', 'security-refactor-pass'];
+        const stackSweep = LEVEL === 'sweep' && !only || only?.some(id => id.startsWith('sweep-stack-'));
+        const baselineIds = ['clean-pass', 'document-only', 'security-refactor-pass', ...(stackSweep
+            ? ['stack-unknown-quartz-a1-generic', 'stack-spring-maven-a1-generic', 'stack-polyglot-maven-ts-a1-generic'] : [])];
         const missing = baselineIds.filter(id => !results.some(result => result.scenarioId === id));
         const extra = await execute(missing.map(baseline => ({ baseline })), jobs, 'baselines');
         results.push(...extra.results); findings.push(...extra.findings);
@@ -239,7 +307,9 @@ test('synthetic navigator coverage, disturbance and measurement stand', { timeou
             'A retained manifest requires an explicit selection of sweep IDs');
         const sweep = retained ? replaySweepScenarios(baselines,
             JSON.parse(fs.readFileSync(path.resolve(retained), 'utf8')) as Array<SweepInjection & { id: string }>, only!, seed)
-            : buildSweepScenarios(baselines, seed);
+            : buildSweepScenarios(baselines, seed).filter(scenario => !scenario.injection!.baseline.startsWith('stack-')
+                || scenario.injection!.disturbances.every(disturbance => ['delete-artifact', 'corrupt-artifact', 'stale-artifact',
+                    'repeat-last', 'wrong-gate', 'change-criteria', 'change-policy', 'reset-task'].includes(disturbance.kind)));
         fs.writeFileSync(path.join(REPORT_ROOT, 'sweep-applicability.json'), JSON.stringify(baselines.map(entry => ({ baseline: entry.scenario.id, steps: sweepApplicability(entry.result) })), null, 2));
         const sweepManifest = sweep.map(entry => ({ id: entry.id, ...entry.injection }));
         if (resume && fs.existsSync(path.join(resume, 'sweep-manifest.json'))) {
@@ -259,29 +329,42 @@ test('synthetic navigator coverage, disturbance and measurement stand', { timeou
             const item = families.get(key) ?? { baseline: injection.baseline, variants: [] };
             item.variants!.push({ id: entry.id, injection }); families.set(key, item);
         }
-        const disturbed = await execute([...families.values()], jobs, 'sweep');
+        let work = [...families.values()];
+        if (SHARD) {
+            const allItems = [...ordinary, ...baselineIds.filter(id => !PLAN.scenarioIds.includes(id)).map(baseline => ({ baseline })), ...work];
+            const plan = shardPlan(allItems, SHARD); assigned = new Set(plan.assigned);
+            atomicWalkJson(path.join(REPORT_ROOT, 'shard-plan.json'), plan);
+            const remaining = await execute(ordinary.filter(item => assigned!.has(item.baseline)
+                && !results.some(result => result.scenarioId === item.baseline)), jobs, 'ordinary');
+            results.push(...remaining.results); findings.push(...remaining.findings);
+            work = partitionWalkWork(allItems, SHARD.total)[SHARD.index - 1].filter(item => item.variants);
+            sweepPlanned = work.reduce((sum, item) => sum + item.variants!.length, 0);
+        }
+        const disturbed = await execute(work, jobs, 'sweep');
         results.push(...disturbed.results); findings.push(...disturbed.findings);
         sweepCompleted = disturbed.results.filter(result => !result.checkpointControl).length;
-        assert.equal(sweepCompleted, selected.length, 'Every sweep variant must report its outcome');
+        assert.equal(sweepCompleted, sweepPlanned, 'Every sweep variant must report its outcome');
     }
-    const report = writeReport(results, findings);
-    const allFindings = [...findings, ...anomalyFindings(report.anomalies)];
-    if (LEVEL !== 'sample' && !only && !PLAN.disturbance) {
-        allFindings.push(...report.coverage.unaccounted.map(id => ({ layer: 'walk' as const, kind: 'contract' as const,
-            id: 'walk:uncovered:' + id, summary: 'Source route neither reached nor explained: ' + id,
-            detail: { route: id, step: null, replay: 'GARDA_SYNTHETIC_WALK_LEVEL=' + LEVEL } })));
-        assert.deepEqual(report.coverage.invalidExemptions, [], 'Invalid coverage exemptions');
+    if (assigned) {
+        results.splice(0, results.length, ...results.filter(result => assigned.has(result.scenarioId)));
+        const workerFindings = findings.filter(finding => finding.id.startsWith('walk:worker:'));
+        findings.splice(0, findings.length, ...results.flatMap(result => store.read(result.scenarioId)!.findings), ...workerFindings);
+        assert.deepEqual(results.map(result => result.scenarioId).sort(), [...assigned].sort(), 'Every assigned scenario must finish');
     }
-    writeReport(results, allFindings);
+    const report = SHARD ? buildWalkReport(results, findings) : judgeWalk(results, findings, LEVEL, !!only || !!PLAN.disturbance);
+    const allFindings = report.findings;
+    atomicWalkJson(path.join(REPORT_ROOT, 'navigator-walk.json'), report);
+    fs.writeFileSync(path.join(REPORT_ROOT, 'navigator-walk.md'), renderWalkReport(report));
     fs.writeFileSync(path.join(REPORT_ROOT, 'run.json'), JSON.stringify({ level: LEVEL, jobs, elapsedMs: performance.now() - started,
         quiet: process.env.GARDA_SYNTHETIC_WALK_QUIET === '1',
         scenarios: results.length, steps: report.executedSteps, findings: allFindings.length, warnings: report.anomalies.filter(entry => entry.severity === 'warning').length,
         partialSelection: !!only || !!PLAN.disturbance, disturbance: PLAN.disturbance, sweepPlanned, sweepCompleted }, null, 2));
-    atomicWalkJson(path.join(REPORT_ROOT, 'results.json'), { results, findings: allFindings });
+    // Records stay in scenarios/; results.json indexes their digests instead of repeating every result in one text.
+    atomicWalkJson(path.join(REPORT_ROOT, 'results.json'), walkResultIndex(store, results.map(result => result.scenarioId), allFindings, findings));
     atomicWalkJson(path.join(REPORT_ROOT, 'progress.json'), { ...walkProgress([...observed.values()], planned.size, performance.now() - sessionStarted, fresh), status: observed.size === planned.size ? 'complete' : 'incomplete', reused });
     console.log('Navigator walk report: ' + REPORT_ROOT);
-    const known = JSON.parse(fs.readFileSync(path.resolve('tests/node/synthetic/known-walk-findings.json'), 'utf8')) as Array<{ id: string }>;
-    const unexplained = allFindings.filter(entry => !known.some(item => item.id === entry.id));
+    // A known defect remains an acceptance failure. The catalogue is diagnostic history, never a waiver.
+    const unexplained = allFindings;
     assert.equal(unexplained.length, 0, unexplained.length + ' findings; full evidence: ' + REPORT_ROOT + '\n'
         + unexplained.slice(0, 20).map(entry => entry.id + ': ' + entry.summary).join('\n'));
 });

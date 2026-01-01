@@ -117,7 +117,11 @@ describe('cli/commands/gates command help and syntax remediation', () => {
             },
             {
                 argv: ['gate', 'full-suite-validation', '--help'],
-                expectedSnippets: ['gate full-suite-validation', '--task-id "<task-id>"', '--preflight-path']
+                expectedSnippets: ['gate task-test-validation', '--task-id "<task-id>"', '--preflight-path']
+            },
+            {
+                argv: ['gate', 'task-test-validation', '--help'],
+                expectedSnippets: ['gate task-test-validation', '--task-id "<task-id>"', '--preflight-path']
             },
             {
                 argv: ['gate', 'restart-coherent-cycle', '--help'],
@@ -171,7 +175,7 @@ describe('cli/commands/gates command help and syntax remediation', () => {
             assert.equal(result.exitCode, 0, gateName);
             assert.equal(result.errors.length, 0, gateName);
             const combinedOutput = result.logs.join('\n');
-            assert.ok(combinedOutput.includes(`gate ${gateName}`), gateName);
+            assert.ok(combinedOutput.includes(`gate ${gateName === 'full-suite-validation' ? 'task-test-validation' : gateName}`), gateName);
             assert.ok(combinedOutput.includes('Usage'), gateName);
             assert.ok(!combinedOutput.includes('TaskId must not be empty'), gateName);
             assert.ok(!combinedOutput.includes('ReviewType must not be empty'), gateName);
@@ -189,7 +193,7 @@ describe('cli/commands/gates command help and syntax remediation', () => {
             .map(match => match[1]);
         assert.deepEqual(
             documentedGates.sort(),
-            getAllShimmedGateNames().sort(),
+            getAllShimmedGateNames().map(name => name === 'full-suite-validation' ? 'task-test-validation' : name).sort(),
             'the reference inventory must contain every dispatched gate exactly once and no unknown gates'
         );
         assert.ok(inventory[1].includes('`garda gate --help`'));
@@ -255,7 +259,7 @@ describe('cli/commands/gates command help and syntax remediation', () => {
             assert.ok(errorOutput.includes(`Canonical task-id syntax for '${gateName}'`), gateName);
             const expectedSuggestedCommand = gateName === 'next-step'
                 ? 'Suggested command: node bin/garda.js next-step "T-008" --repo-root "."'
-                : `Suggested command: node bin/garda.js gate ${gateName} --task-id "T-008"`;
+                : `Suggested command: node bin/garda.js gate ${gateName === 'full-suite-validation' ? 'task-test-validation' : gateName} --task-id "T-008"`;
             assert.ok(errorOutput.includes(expectedSuggestedCommand), gateName);
             const suggestedLine = errorOutput
                 .split('\n')

@@ -687,6 +687,11 @@ describe('runUpdate', () => {
                 compileGateCommand: 'npm run build',
                 agentInitComplete: true
             });
+            const commandsPath = path.join(bundleRoot, 'live/docs/agent-rules/40-commands.md');
+            const commands = fs.readFileSync(commandsPath, 'utf8').replace(
+                '# Commands\n\n', '# Commands\n\n### Manual Validation Logs\n\nLog checks here.\n\n## Project Commands (Required)\n\n'
+            );
+            fs.writeFileSync(commandsPath, commands);
             const sourceBundleRoot = path.join(projectRoot, 'update-source');
             copyDirRecursive(bundleRoot, sourceBundleRoot);
             fs.writeFileSync(path.join(sourceBundleRoot, 'README.md'), 'configured workspace update\n', 'utf8');

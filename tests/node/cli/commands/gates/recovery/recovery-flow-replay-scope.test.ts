@@ -13,6 +13,38 @@ import {
 } from '../../../../../../src/cli/commands/gate-flows/recovery/recovery-flow-replay-scope';
 
 describe('cli/commands/gate-flows/recovery replay scope', () => {
+    it('retains declared audit targets independently of coherent restart classification scope', () => {
+        const targets = ['tests/PartnerCrmDraftPostgresIntegrationTest.java', 'tests/PartnerIsolationPostgresIntegrationTest.java'];
+        const previousMode = { planned_changed_files: targets };
+        const previousPreflight = { detection_source: 'explicit_changed_files', changed_files: [] };
+        const replay = resolveReplayScope({}, previousPreflight as never, previousMode);
+
+        assert.deepEqual(replay.plannedChangedFiles, targets);
+        assert.deepEqual(replay.changedFiles, []);
+        assert.equal(replay.detectionSource, 'explicit_changed_files');
+
+        const emptyExplicit = resolveReplayScope({ changedFiles: [] }, previousPreflight as never, previousMode);
+        assert.deepEqual(emptyExplicit.plannedChangedFiles, targets);
+        assert.deepEqual(emptyExplicit.changedFiles, []);
+        const emptyAuto = resolveReplayScope({}, { detection_source: 'git_auto_current_workspace', changed_files: [] } as never, previousMode);
+        assert.deepEqual(emptyAuto.plannedChangedFiles, targets);
+        assert.equal(emptyAuto.changedFiles, undefined);
+    });
+
+    it('retains declarations with explicit or staged changed files without classifying declarations as edits', () => {
+        const previousMode = { planned_changed_files: ['tests/unchanged.test.ts'] };
+        const previousPreflight = {
+            detection_source: 'git_auto_current_workspace', changed_files: ['src/previous.ts'], include_untracked: false
+        };
+        const explicit = resolveReplayScope({ changedFiles: ['src/new.ts'] }, previousPreflight as never, previousMode);
+        assert.deepEqual(explicit.plannedChangedFiles, ['src/new.ts', 'tests/unchanged.test.ts']);
+        assert.deepEqual(explicit.changedFiles, ['src/new.ts']);
+        const staged = resolveReplayScope({ useStaged: true }, previousPreflight as never, previousMode);
+        assert.deepEqual(staged.plannedChangedFiles, ['src/previous.ts', 'tests/unchanged.test.ts']);
+        assert.equal(staged.changedFiles, undefined);
+        assert.equal(staged.useStaged, true);
+    });
+
     it('honors explicit empty scope and staged options before previous detection source', () => {
         const previousPreflight = {
             detection_source: 'git_staged_plus_untracked',

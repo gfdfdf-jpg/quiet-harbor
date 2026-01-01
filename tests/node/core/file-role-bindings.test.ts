@@ -1,6 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { declaredFileRole, isTestScopePath, mergeFileRoleBindings, normalizeFileRoleBindings } from '../../../src/core/file-role-bindings';
+import { bindTaskTestFileRoles, createTaskTestScopeMatcher, declaredFileRole, isTestScopePath, mergeFileRoleBindings, normalizeFileRoleBindings } from '../../../src/core/file-role-bindings';
+
+test('captured task test roles reach review consumers without the global configuration limit', () => {
+    const base = normalizeFileRoleBindings({ 'product/source.unfamiliar': 'source' });
+    const targets = Array.from({ length: 5000 }, (_, index) => `qa/${index}.case`);
+    const roles = bindTaskTestFileRoles(base, targets);
+    assert.equal(Object.keys(roles).length, 5001);
+    assert.ok(targets.every(target => isTestScopePath(target, [], roles)));
+    assert.deepEqual(Object.keys(base), ['product/source.unfamiliar']);
+    assert.throws(() => bindTaskTestFileRoles(base, ['product/source.unfamiliar']), /Conflicting/u);
+    assert.throws(() => bindTaskTestFileRoles(base, ['../escape.case']), /relative|traversal|path/iu);
+});
+
+test('task-local tests and support roles need no global extension or directory rule', () => {
+    const matches = createTaskTestScopeMatcher(['(^|/)tests/'], {}, ['qa/purchase.assert'], ['tests/helper.case', 'tests/data.bin']);
+    assert.equal(matches('qa/purchase.assert'), true);
+    assert.equal(matches('tests/helper.case'), false);
+    assert.equal(matches('tests/data.bin'), false);
+    assert.equal(matches('tests/ordinary.case'), true);
+    assert.equal(matches('qa/not-declared.assert'), false);
+});
 
 test('explicit source and test roles take precedence over name guesses using exact literal paths', () => {
     const roles = normalizeFileRoleBindings({ 'docs/view.mdx': 'source', 'tests/rules.yaml': 'source',

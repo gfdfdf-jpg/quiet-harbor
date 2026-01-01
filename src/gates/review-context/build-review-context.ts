@@ -614,6 +614,8 @@ export function buildReviewContext(options: BuildReviewContextOptions) {
         },
         ...(customReviewLaneBinding ? { review_lane: customReviewLaneBinding } : {}),
         review_execution: reviewExecutionContract,
+        ...(reviewExecutionValidationAuthority?.preserved_current_scope
+            ? { review_execution_preserved_by: reviewExecutionValidationAuthority.preserved_current_scope } : {}),
         coverage_contract: coverageContract,
         coverage_scope: {
             changed_files: coverageChangedFiles,
@@ -723,6 +725,16 @@ export function buildReviewContext(options: BuildReviewContextOptions) {
     }
 
     withReviewArtifactLock(outputPath, () => {
+        // Routing/launch binding may have refined the generated context before its receipt was recorded.
+        // Keep those exact old bytes before a wording update replaces the canonical context. Cached bytes
+        // carry no authority by themselves; historical receipts and timeline hashes still authenticate them.
+        if (taskId) {
+            try {
+                preserveReviewContextCopy({ repoRoot, taskId, reviewType, contextPath: outputPath }, fs.readFileSync(outputPath, 'utf8'));
+            } catch (error) {
+                if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') throw error;
+            }
+        }
         writeReviewContextArtifactFiles({
             paths: handoffArtifactPaths,
             promptArtifactText: handoffArtifacts.promptArtifactText,

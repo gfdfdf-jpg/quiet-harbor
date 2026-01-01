@@ -1,3 +1,4 @@
+import { readTaskCriteriaBinding } from '../../../../gates/review-context/review-context-task-criteria-binding';
 import { publishClosedReviewAfterGate, type ClosedReviewGateCapture } from '../../../../gates/review-attempts/review-closed-cycle-gate-hooks';
 import { admitNativeReviewCadence } from '../../../../gates/review-attempts/review-cadence-admission';
 import { createHash } from 'node:crypto';
@@ -2565,6 +2566,7 @@ async function recordReviewReceiptFromArtifacts(options: {
         reviewExecutionFindingReconciliationSha256:
             reviewExecutionBindings.review_execution_finding_reconciliation_sha256,
         reviewContextReuseSha256: computeReviewContextReuseHash(parsedReviewContext),
+        taskCriteriaBindingSha256: readTaskCriteriaBinding(parsedReviewContext.task_criteria_binding)?.sha256,
         reviewCoverageContractSha256: reviewContextContractBindings.coverageContractSha256,
         reviewRuleContextSha256: reviewContextContractBindings.ruleContextSha256,
         reviewArtifactSha256: artifactSha256,
@@ -2748,6 +2750,19 @@ function validateFindingsOnlyReviewOutput(options: {
     return validation;
 }
 
+/**
+ * A history kept from before task-event integrity (PASS_WITH_LEGACY_PREFIX) is authenticated from its first signed
+ * event on: the chain binds the prefix length, not its content. Any other non-PASS status is refused.
+ */
+function isAuthenticatedTaskHistoryStatus(status: string): boolean {
+    return status === 'PASS' || status === 'PASS_WITH_LEGACY_PREFIX';
+}
+
+/** Launch, invocation and completion evidence comes only from signed events; an unsigned legacy prefix never counts. */
+function signedTaskHistoryEvents(events: ReturnType<typeof readDependencyTimelineEvents>): ReturnType<typeof readDependencyTimelineEvents> {
+    return events.filter(event => event.integrity !== null);
+}
+
 /** The launch artifact is authenticated by the completed event, not by the disposable copy. */
 function restoreCompletedReviewerOutput(options: {
     repoRoot: string; taskId: string; reviewType: string; contextPath: string;
@@ -2756,7 +2771,10 @@ function restoreCompletedReviewerOutput(options: {
     const timelinePath = gateHelpers.joinOrchestratorPath(options.repoRoot,
         path.join('runtime', 'task-events', `${options.taskId}.jsonl`));
     return withTaskTimelineFileReadSnapshot(timelinePath, () => {
-    const events = readDependencyTimelineEvents(timelinePath, { fromSnapshot: true });
+    const authenticatedHistory = isAuthenticatedTaskHistoryStatus(inspectTaskEventFile(timelinePath, options.taskId).status);
+    // An unauthenticated history is refused below; reading all its events keeps that refusal for a digest-bound launch.
+    const allEvents = readDependencyTimelineEvents(timelinePath, { fromSnapshot: true });
+    const events = authenticatedHistory ? signedTaskHistoryEvents(allEvents) : allEvents;
     const contextSha256 = fileSha256(options.contextPath) || '';
     const invocation = [...events].reverse().find(event => event.event_type === 'REVIEWER_INVOCATION_ATTESTED'
         && getArtifactStringField(event.details || {}, 'task_id') === options.taskId
@@ -2776,7 +2794,7 @@ function restoreCompletedReviewerOutput(options: {
     if (!completion || completion.task_id !== options.taskId || completion.actor !== 'orchestrator' || completion.outcome !== 'INFO'
         || getArtifactStringField(invocation?.details || {}, 'reviewer_launch_artifact_sha256').toLowerCase() !== launchHash
         || isCompletedReviewerLaunchAttemptConsumed(events, launch)
-        || inspectTaskEventFile(timelinePath, options.taskId).status !== 'PASS') {
+        || !authenticatedHistory) {
         if (hasOutputDigest) throw new Error('Cannot authenticate the completed reviewer output binding. Run next-step for recovery.');
         return null;
     }
@@ -3786,10 +3804,10 @@ async function handleRecordReviewResultWithDependencies(
                 reviewContext: context, preflightPath: paths.preflightPath, preflightSha256: fileSha256(paths.preflightPath),
                 preflightPayload: preflight, requireStrictBindingMetadata: !!options.reviewContextPath, repoRoot });
             const timelinePath = gateHelpers.joinOrchestratorPath(repoRoot, path.join('runtime', 'task-events', `${taskId}.jsonl`));
-            if (inspectTaskEventFile(timelinePath, taskId).status !== 'PASS') {
+            if (!isAuthenticatedTaskHistoryStatus(inspectTaskEventFile(timelinePath, taskId).status)) {
                 throw new Error('Reviewer self-check requires an intact task event history.');
             }
-            const events = readDependencyTimelineEvents(timelinePath);
+            const events = signedTaskHistoryEvents(readDependencyTimelineEvents(timelinePath));
             const prepared = [...events].reverse().find(event => event.event_type === 'REVIEWER_LAUNCH_PREPARED'
                 && getArtifactStringField(event.details || {}, 'task_id') === taskId
                 && getArtifactStringField(event.details || {}, 'review_type').toLowerCase() === reviewType

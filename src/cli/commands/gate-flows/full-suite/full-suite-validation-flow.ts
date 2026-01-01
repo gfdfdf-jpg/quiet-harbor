@@ -1,5 +1,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { validationDigest } from '../../../../core/project-validation-identity';
+import { type TaskValidationProcess } from '../../../../core/task-validation-plan';
+import { inspectValidationCommand } from '../../../../core/validation-command-contract';
+import { readTaskTimelineJsonlEntries } from '../../../../gate-runtime/task-events';
+import { isPlainRecord } from '../../../../core/records';
 import { UNCONFIGURED_FULL_SUITE_VALIDATION_COMMAND } from '../../../../core/constants';
 import { VALIDATION_REPO_ROOT_ENV, VALIDATION_TASK_ID_ENV } from '../../../../core/validation-output-retention';
 import * as gateHelpers from '../../../../gates/shared/helpers';
@@ -52,7 +58,7 @@ import {
 } from './full-suite-validation-lock-cleanup';
 import { getFullSuiteTestSelectionViolations } from '../../../../gates/full-suite/full-suite-test-selection';
 import { loadTaskFullSuiteConfig, MISSING_TASK_TEST_SELECTION, STALE_TASK_TEST_SELECTION } from '../../../../gates/full-suite/task-full-suite-config';
-import { startTaskTestExecutionProof, completeTaskTestExecutionProof, taskTestExecutionProofSatisfied } from '../../../../gates/full-suite/task-test-execution-proof';
+import { startTaskTestExecutionProof, completeTaskTestExecutionProof, taskTestProcessEvidenceViolations } from '../../../../gates/full-suite/task-test-execution-proof';
 import { validateFullSuiteCommandContract } from './full-suite-command-contract';
 import { buildWorkflowConfigWorkBlockedResult } from './full-suite-validation-workflow-config';
 import {
@@ -151,12 +157,21 @@ export async function runFullSuiteValidationCommand(
     } = runFullSuiteValidationPreflightPipeline(options);
 
     const taskConfig = loadTaskFullSuiteConfig(repoRoot, taskId);
+    const executionPlan = taskConfig.selection.plan ?? taskConfig.selection.legacyPlan;
     const config = taskConfig.config;
     const reviewsRoot = gateHelpers.joinOrchestratorPath(repoRoot, path.join('runtime', 'reviews'));
     const eventsRoot = gateHelpers.joinOrchestratorPath(repoRoot, path.join('runtime', 'task-events'));
     fs.mkdirSync(reviewsRoot, { recursive: true });
     const artifactPath = path.join(reviewsRoot, `${taskId}-full-suite-validation.json`);
-    const outputArtifactPath = path.join(reviewsRoot, `${taskId}-full-suite-output.log`);
+    const timelineEntries = readTaskTimelineJsonlEntries(path.join(eventsRoot, `${taskId}.jsonl`));
+    const defaultOutputPath = path.join(reviewsRoot, `${taskId}-full-suite-output.log`);
+    const retainedFailureOutput = timelineEntries.some(entry => entry.record?.event_type === 'FULL_SUITE_VALIDATION_FAILED'
+        && entry.record.outcome === 'FAIL' && entry.record.actor === 'gate' && isPlainRecord(entry.record.details)
+        && typeof entry.record.details.output_artifact_path === 'string'
+        && path.resolve(repoRoot, entry.record.details.output_artifact_path) === defaultOutputPath);
+    // A retained failure still owns its raw bytes. Neither execution nor PASS cleanup may overwrite them.
+    const outputArtifactPath = retainedFailureOutput
+        ? path.join(reviewsRoot, `${taskId}-full-suite-output-${randomUUID()}.log`) : defaultOutputPath;
     const changedFiles = Array.isArray(preflight.changed_files)
         ? preflight.changed_files.map((entry) => String(entry || '').trim()).filter(Boolean)
         : [];
@@ -264,9 +279,9 @@ export async function runFullSuiteValidationCommand(
         commandContract.provenance.source = 'task_scoped_test_selection';
     }
     if (commandContract?.supported) {
-        const selectionViolations = taskConfig.selection.status === 'stale' ? [STALE_TASK_TEST_SELECTION]
+        const selectionViolations = taskConfig.selection.status === 'stale' ? [taskConfig.selection.reason || STALE_TASK_TEST_SELECTION]
             : taskConfig.selection.status === 'missing' ? [MISSING_TASK_TEST_SELECTION]
-            : getFullSuiteTestSelectionViolations(repoRoot, config.command, changedFiles);
+            : executionPlan ? [] : getFullSuiteTestSelectionViolations(repoRoot, config.command, changedFiles);
         if (selectionViolations.length) {
             commandContract.supported = false;
             commandContract.violation = selectionViolations.join(' ');
@@ -284,8 +299,14 @@ export async function runFullSuiteValidationCommand(
             cycleBinding
         })
         : null;
-    if (reboundResult && commandContract
-        && taskTestExecutionProofSatisfied(config.command, taskConfig.selection.targets, reboundResult.task_test_execution_proof)) {
+    // A mutable old artifact cannot promote itself into new authenticated execution authority.
+    const retainedNative = reboundResult ? [...timelineEntries].reverse()
+        .find(entry => /^FULL_SUITE_VALIDATION_(?:PASSED|WARNED|FAILED|SKIPPED)$/u.test(String(entry.record?.event_type)))?.record : null;
+    const retainedDetails = isPlainRecord(retainedNative?.details) ? retainedNative.details : null;
+    if (reboundResult && commandContract && retainedNative?.actor === 'gate'
+        && retainedDetails?.artifact_sha256 === gateHelpers.fileSha256(artifactPath)
+        && retainedDetails?.command === config.command
+        && !taskTestProcessEvidenceViolations(taskConfig.selection.plan, reboundResult, taskConfig.selection.legacyPlan).length) {
         const retainedReboundResult = normalizeSuccessfulFullSuiteOutputRetention(repoRoot, outputArtifactPath, reboundResult);
         retainedReboundResult.command_provenance = commandContract.provenance;
         await writeArtifactThenEmitMandatoryFullSuiteEvent(repoRoot, eventsRoot, taskId, artifactPath, retainedReboundResult.status, retainedReboundResult, {
@@ -448,7 +469,9 @@ export async function runFullSuiteValidationCommand(
     const timeoutCleanupObservations: string[] = [];
     const timeoutAttempts: FullSuiteTimeoutAttemptEvidence[] = [];
     const reportAttempts: FullSuiteReportAttempt[] = [];
+    const adapterFindings: string[] = [];
     let taskProof: ReturnType<typeof completeTaskTestExecutionProof> = { reports: [], violations: [] };
+    let processEvidence: TaskValidationProcess[] = [];
     // Failed admission must never enter another run's terminal cleanup.
     const runMarkerOwner = writeFullSuiteValidationRunMarker({
         repoRoot,
@@ -463,18 +486,42 @@ export async function runFullSuiteValidationCommand(
             let reportStart: Awaited<ReturnType<typeof startFullSuiteReports>> = null;
             try {
                 const proofStart = startTaskTestExecutionProof(repoRoot, config.command, taskConfig.selection.targets);
-                reportStart = await startFullSuiteReports({ repoRoot, taskId, reviewsRoot, eventsRoot, command: config.command,
-                    declarations: config.report_files, attempt, changedFiles });
-                const execution = await executeCommandAsync(config.command, {
-                    cwd: repoRoot,
-                    env: {
-                        ...buildFullSuiteValidationCommandEnv(executionConfig.timeout_ms),
-                        [VALIDATION_REPO_ROOT_ENV]: path.resolve(repoRoot),
-                        [VALIDATION_TASK_ID_ENV]: taskId
-                    },
-                    timeoutMs: executionConfig.timeout_ms,
-                    onSpawn: (child) => updateFullSuiteValidationRunMarkerChildProcess(repoRoot, taskId, child, runMarkerOwner)
-                });
+                try { reportStart = await startFullSuiteReports({ repoRoot, taskId, reviewsRoot, eventsRoot, command: config.command,
+                    declarations: config.report_files, attempt, changedFiles }); }
+                catch (error) {
+                    if (!executionPlan) throw error;
+                    adapterFindings.push(`Optional report adapter finding: capture unavailable (${String(error)}).`);
+                }
+                const invocations = inspectValidationCommand(config.command, 'test', { allowConjunction: true }).descriptor!.invocations;
+                // A timeout in a later invocation does not repeat successful task commands.
+                processEvidence = processEvidence.filter(process => process.exit_code === 0 && !process.timed_out && !process.cancelled);
+                const execution = { exitCode: 0, timedOut: false, cancelled: false, outputLines: [] as string[] };
+                for (const [index, invocation] of invocations.entries()) {
+                    if (index < processEvidence.length) continue;
+                    const executionId = randomUUID();
+                    const startedAt = new Date().toISOString();
+                    const outcome = await executeCommandAsync([invocation.executable, ...invocation.argv].map(token => JSON.stringify(token)).join(' '), {
+                        cwd: executionPlan?.binding?.workspace_root ?? repoRoot,
+                        env: {
+                            ...buildFullSuiteValidationCommandEnv(executionConfig.timeout_ms),
+                            [VALIDATION_REPO_ROOT_ENV]: path.resolve(repoRoot),
+                            [VALIDATION_TASK_ID_ENV]: taskId
+                        },
+                        timeoutMs: executionConfig.timeout_ms,
+                        onSpawn: (child) => updateFullSuiteValidationRunMarkerChildProcess(repoRoot, taskId, child, runMarkerOwner)
+                    });
+                    const completedAt = new Date().toISOString();
+                    const scope = validationDigest([cycleBinding.scope_binding, executionPlan]);
+                    processEvidence.push({ execution_id: executionId, invocation: index, ...invocation,
+                        cwd: executionPlan?.binding?.workspace_root ?? repoRoot,
+                        started_at: startedAt, completed_at: completedAt, exit_code: outcome.exitCode,
+                        timed_out: outcome.timedOut, cancelled: outcome.cancelled,
+                        output_sha256: gateHelpers.stringSha256(serializeCapturedOutputLines(outcome.outputLines.map(line => redactSecretText(line))))!,
+                        scope_before: scope, scope_after: scope });
+                    execution.outputLines.push(...outcome.outputLines);
+                    execution.exitCode = outcome.exitCode; execution.timedOut = outcome.timedOut; execution.cancelled = outcome.cancelled;
+                    if (outcome.exitCode !== 0 || outcome.timedOut || outcome.cancelled) break;
+                }
                 commandExitCode = execution.exitCode;
                 timedOut = execution.timedOut;
                 cancelled = execution.cancelled;
@@ -501,7 +548,12 @@ export async function runFullSuiteValidationCommand(
                     message
                 ];
             }
-            const reportAttempt = completeFullSuiteReports(reportStart);
+            let reportAttempt: FullSuiteReportAttempt | null = null;
+            try { reportAttempt = completeFullSuiteReports(reportStart); }
+            catch (error) {
+                if (!executionPlan) throw error;
+                adapterFindings.push(`Optional report adapter finding: capture incomplete (${String(error)}).`);
+            }
             if (reportAttempt) reportAttempts.push(reportAttempt);
             timeoutAttempts.push({
                 attempt,
@@ -545,21 +597,31 @@ export async function runFullSuiteValidationCommand(
             repoRoot
         );
         result.command_provenance = commandContract.provenance;
+        if (executionPlan && (commandExitCode !== 0 || timedOut || cancelled)) {
+            result.status = 'FAILED';
+            if (!result.violations.length) result.violations.push('The selected task test process failed, timed out or was cancelled. Fix the task tests or retain a broad failure through audited narrowing.');
+        }
+        result.warnings.push(...adapterFindings);
+        if (executionPlan) result.warnings.push(...getFullSuiteTestSelectionViolations(repoRoot, config.command, changedFiles)
+            .map(reason => `Selection adapter finding for independent review: ${reason}`));
+        if (executionPlan) result.task_test_validation_plan = executionPlan;
+        if (executionPlan) result.task_test_process_evidence = { schema_version: 1,
+            selection_sha256: validationDigest(executionPlan), invocations: processEvidence };
         if (taskProof.reports.length) result.task_test_execution_proof = taskProof.reports;
         if (taskProof.violations.length) {
-            result.status = 'FAILED';
-            result.violations.push(...taskProof.violations);
-            result.failure_chunks.push(taskProof.violations);
-            result.compact_summary = taskProof.violations.slice(0, executionConfig.green_summary_max_lines);
+            result.warnings.push(...taskProof.violations);
         }
         if (config.report_files?.length) {
             result.report_attempts = reportAttempts;
             const reportViolations = reportAttempts.at(-1)?.violations ?? ['Declared full-suite report observation did not complete.'];
             if (reportViolations.length) {
+                if (executionPlan) result.warnings.push(...reportViolations.map(reason => `Optional report adapter finding: ${reason}`));
+                else {
                 result.status = 'FAILED';
                 result.violations.push(...reportViolations);
                 result.failure_chunks.push(reportViolations);
                 result.compact_summary = reportViolations.slice(0, executionConfig.green_summary_max_lines);
+                }
             }
         }
         const timeoutAttemptsExhausted = timedOut && timeoutAttempts.length >= maxAttempts;
@@ -621,8 +683,12 @@ export async function runFullSuiteValidationCommand(
         });
         if (taskConfig.selection.status === 'current') {
             const after = loadTaskFullSuiteConfig(repoRoot, taskId);
+            if (result.task_test_process_evidence) {
+                const scopeAfter = validationDigest([cycleBinding.scope_binding, after.selection.plan ?? after.selection.legacyPlan]);
+                for (const process of result.task_test_process_evidence.invocations) process.scope_after = scopeAfter;
+            }
             if (after.selection.status !== 'current' || after.config.command !== config.command) {
-                postWorkflowConfigViolations.push(STALE_TASK_TEST_SELECTION);
+                postWorkflowConfigViolations.push(after.selection.reason || STALE_TASK_TEST_SELECTION);
             }
         }
         if (postWorkflowConfigViolations.length > 0) {
@@ -633,6 +699,7 @@ export async function runFullSuiteValidationCommand(
                 postWorkflowConfigChanges.scan_error
             );
             blockedResult.command_provenance = commandContract.provenance;
+            if (result.task_test_process_evidence) blockedResult.task_test_process_evidence = result.task_test_process_evidence;
             if (result.report_attempts) blockedResult.report_attempts = result.report_attempts;
             blockedResult.output_artifact_path = gateHelpers.normalizePath(outputArtifactPath);
             blockedResult.output_retention = buildRawOutputRetentionEvidence(rawOutputText, true);

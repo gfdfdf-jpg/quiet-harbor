@@ -143,6 +143,8 @@ export interface ReviewRemediationModePolicyValidationInputs {
     scopeReviewTypes?: readonly string[] | null;
     /** Other reviews that passed on the tree the failed review saw, within the DELTA chain limit. */
     deltaReadyReviewTypes?: readonly string[];
+    /** Lanes with any earlier review in the authenticated timeline; diagnostic only, never DELTA authority. */
+    reviewedReviewTypes?: readonly string[];
     /**
      * The baseline review itself passed (authenticated receipt, baseline without fix-now items). It then repeats
      * only when the fix reaches its scope, like every other passed review.
@@ -791,6 +793,17 @@ export function resolveAuthoritativeReviewRemediationDecision(
                         : `Runtime remediation classification '${category}' invalidated '${reviewType}': `
                             + `${fullFallbackReason || 'authenticated DELTA authority is unavailable'}; `
                             + 'FULL review is required.';
+            if (!deltaEligible && !fullFallbackFromDelta && options.classification.source === 'delta'
+                && reviewType !== currentReviewType
+                && options.classification.delta.mode_policy_assessment?.delta_eligible_review_types.includes(reviewType)
+                && !options.modePolicyValidationInputs?.deltaReadyReviewTypes?.includes(reviewType)) {
+                const firstReview = options.modePolicyValidationInputs?.reviewedReviewTypes !== undefined
+                    && !options.modePolicyValidationInputs.reviewedReviewTypes.includes(reviewType);
+                reasonCode = firstReview ? 'first_review_requires_full' : 'lane_requires_authenticated_previous_review';
+                reason = firstReview
+                    ? `Lane '${reviewType}' has no earlier review; its first review must be FULL even though the frozen policy permits DELTA.`
+                    : `Lane '${reviewType}' has no eligible earlier authenticated complete-scope coverage; FULL review is required before DELTA can be used.`;
+            }
             if (evidenceOnlyOwnReviewTypes && !evidenceOnlyOwnReviewTypes.includes(reviewType)
                 && carriedReviewTypes.includes(reviewType)) {
                 reasonCode = EVIDENCE_ONLY_CARRIED_LANE_REASON_CODE;

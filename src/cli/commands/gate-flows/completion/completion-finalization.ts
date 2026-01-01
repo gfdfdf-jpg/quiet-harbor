@@ -916,7 +916,7 @@ function rollbackTaskEventArtifacts(options: TaskEventRollbackOptions): TaskEven
                 }, transactionEventIdentities);
             });
             rollbackResult.aggregate_reconciled = true;
-            reconcileTimelineSummaryForTask(options.taskEventsRoot, options.taskId);
+            reconcileTimelineSummaryForTask(options.taskEventsRoot, options.taskId, undefined, { recoverMalformedIndex: true });
             rollbackResult.summary_reconciled = true;
         });
     } catch (rollbackError: unknown) {

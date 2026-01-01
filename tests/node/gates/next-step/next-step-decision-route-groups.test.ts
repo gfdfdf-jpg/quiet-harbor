@@ -1008,7 +1008,7 @@ test('resolveFullSuiteDecisionRoute preserves after-compile full-suite routing',
 
     assert.ok(route);
     assert.equal(route.nextGate, 'full-suite-validation');
-    assert.equal(route.commands[0]?.label, 'Run full-suite validation');
+    assert.equal(route.commands[0]?.label, 'Run task test validation');
     assert.match(route.reason, /before launching independent reviewers/);
 });
 

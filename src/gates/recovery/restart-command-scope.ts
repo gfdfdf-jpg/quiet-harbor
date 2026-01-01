@@ -1,4 +1,4 @@
-import * as fs from 'node:fs';
+import { readInvocationTextFile } from '../../core/invocation-file-observation';
 
 import {
     joinOrchestratorPath,
@@ -17,7 +17,7 @@ export interface RestartCommandChangedFilesOptions {
 
 function readJsonRecord(filePath: string): Record<string, unknown> | null {
     try {
-        const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        const parsed = JSON.parse(readInvocationTextFile(filePath));
         return toPlainRecord(parsed);
     } catch {
         return null;

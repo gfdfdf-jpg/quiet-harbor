@@ -58,14 +58,14 @@ describe('gates/workspace/dirty-worktree-protection', () => {
     it('passes the shared finite Git timeout to mandatory baseline classification', () => {
         const repoRoot = createBaselineRepo();
         const observedTimeouts: Array<number | undefined> = [];
-        const originalClassifyGitChanges = gitChangeClassification.classifyGitChanges;
+        const originalCollectGitSnapshot = gitChangeClassification.collectGitChangeClassificationSnapshot;
         const classifyMock = mock.method(
             gitChangeClassification,
-            'classifyGitChanges',
-            ((...args: Parameters<typeof originalClassifyGitChanges>) => {
+            'collectGitChangeClassificationSnapshot',
+            ((...args: Parameters<typeof originalCollectGitSnapshot>) => {
                 observedTimeouts.push(args[1]?.timeoutMs);
-                return originalClassifyGitChanges(...args);
-            }) as typeof originalClassifyGitChanges
+                return originalCollectGitSnapshot(...args);
+            }) as typeof originalCollectGitSnapshot
         );
         try {
             captureDirtyWorkspaceBaseline(repoRoot);

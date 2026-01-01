@@ -188,6 +188,7 @@ export function runReinit(options: ReinitOptions) {
             const content = applyAssistantDefaults(refreshed.content, ruleFile, resolvedLanguage, resolvedBrevity);
             const entry = writeRefreshedRule({ targetRoot: normalizedTarget, bundleRoot, livePath, ruleFile,
                 content, refreshId, dryRun: false, warning: refreshed.warning });
+            if ('notice' in refreshed && typeof refreshed.notice === 'string') entry.warning = refreshed.notice;
             ruleRefresh.push(entry);
             if (ruleFile === '00-core.md') coreRuleUpdated = existing !== content;
         }

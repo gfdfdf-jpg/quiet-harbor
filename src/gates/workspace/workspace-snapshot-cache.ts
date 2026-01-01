@@ -1,3 +1,5 @@
+import { captureWorkspacePlannedFiles, assertWorkspacePlannedFilesCurrent } from '../../core/workspace-planned-files';
+import { RetryableInvocationError } from '../../core/retryable-invocation-error';
 import { observedInvocationValue, readInvocationFileContent, readInvocationPathObservation } from '../../core/invocation-file-observation';
 import { createInvocationReadMemoKey, isInvocationReadObservationActive, memoizeInvocationRead, registerInvocationDependency } from '../../core/invocation-read-observation';
 import * as fs from 'node:fs';
@@ -16,9 +18,10 @@ import { normalizeGitRepoRelativePath } from '../../core/git-change-classificati
 import { getSafeWorktreePathState } from './worktree-path-state';
 import { normalizeGitChangeClassificationEvidence } from '../../core/git-change-classification';
 import { canonicalPathList, pathListSha256 } from '../shared/canonical-path-list';
+import { readUntrackedBuildOutputRegexes } from '../../core/build-output-paths';
 
 // Bind excluded build outputs separately. Version 8 is reserved by feature/2.0.
-const CACHE_VERSION = 9;
+const CACHE_VERSION = 10;
 const CACHE_INTEGRITY_SCHEMA_VERSION = 3;
 const CACHE_RELATIVE_PATH = path.join('runtime', 'cache', 'workspace-snapshot.json');
 const CACHE_AUTH_KEY_RELATIVE_PATH = path.join('garda-agent-orchestrator', 'workspace-snapshot-cache.key');
@@ -48,6 +51,8 @@ export interface WorkspaceSnapshotCacheEntry {
         detection_source: string;
         include_untracked: boolean;
         explicit_changed_files_hash: string | null;
+        planned_source_visibility_sha256: string;
+        untracked_build_output_regexes_sha256: string;
     };
     git_state: {
         head_sha: string | null;
@@ -115,7 +120,7 @@ function normalizeExplicitChangedFiles(explicitChangedFiles: string[]): string[]
     );
 }
 
-function normalizeExplicitRequestFiles(repoRoot: string, explicitChangedFiles: string[]): string[] {
+function normalizeExplicitRequestFiles(repoRoot: string, explicitChangedFiles: string[], cacheRelativePath?: () => string): string[] {
     return [...new Set(
         (explicitChangedFiles || [])
             .map((filePath) => normalizePath(filePath))
@@ -123,7 +128,7 @@ function normalizeExplicitRequestFiles(repoRoot: string, explicitChangedFiles: s
             .filter((filePath) => (
                 !!filePath
                 && filePath !== '.'
-                && !isInternalSnapshotCachePath(repoRoot, filePath)
+                && filePath !== (cacheRelativePath ? cacheRelativePath() : resolveSnapshotCacheRepoRelativePath(repoRoot))
             ))
     )].sort();
 }
@@ -254,9 +259,16 @@ function normalizeCacheParams(
     return {
         repo_root: normalizeRepoCacheKey(repoRoot),
         detection_source: normalizedSource,
+        planned_source_visibility_sha256: captureWorkspacePlannedFiles(repoRoot).digest,
+        untracked_build_output_regexes_sha256: buildOutputFilterSha256(repoRoot),
         include_untracked: normalizedSource === 'git_staged_only' ? false : !!includeUntracked,
         explicit_changed_files_hash: stringSha256(normalizedExplicit.join('\n')) || ''
     };
+}
+
+function buildOutputFilterSha256(repoRoot: string): string {
+    // Matching is an OR over the validated patterns; order and duplicates do not change the filter.
+    return hashCanonicalJson([...new Set(readUntrackedBuildOutputRegexes(repoRoot))].sort());
 }
 
 function buildWorkspaceIdentitySha256(
@@ -378,14 +390,16 @@ function normalizeSnapshotRequestKey(
     repoRoot: string,
     detectionSource: string,
     includeUntracked: boolean,
-    explicitChangedFiles: string[]
+    explicitChangedFiles: string[],
+    cacheRelativePath: () => string
 ): string {
     const normalizedSource = String(detectionSource || 'git_auto').trim().toLowerCase() || 'git_auto';
     const effectiveIncludeUntracked = normalizedSource === 'git_staged_only' ? false : includeUntracked;
     return JSON.stringify([
         normalizedSource,
         effectiveIncludeUntracked,
-        normalizeExplicitRequestFiles(repoRoot, explicitChangedFiles)
+        normalizeExplicitRequestFiles(repoRoot, explicitChangedFiles, cacheRelativePath),
+        captureWorkspacePlannedFiles(repoRoot).digest
     ]);
 }
 
@@ -530,13 +544,38 @@ export function createWorkspaceSnapshotRequest(repoRoot: string): WorkspaceSnaps
         () => createWorkspaceSnapshotRequestUncached(repoRoot)).value;
 }
 
+/** Bind a native workspace generation only if a route actually consumes workspace facts.
+ * Once acquired, the ordinary immutable generation and every freshness check apply. */
+export function createDeferredWorkspaceSnapshotRequest(repoRoot: string, beforeRead: () => void): WorkspaceSnapshotRequest {
+    const resolvedRoot = path.resolve(repoRoot);
+    let retained: { request: WorkspaceSnapshotRequest } | { error: unknown } | undefined;
+    const current = (): WorkspaceSnapshotRequest => {
+        if (!retained) {
+            try { beforeRead(); retained = { request: createWorkspaceSnapshotRequest(resolvedRoot) }; }
+            catch (error) { retained = { error }; }
+        }
+        if ('error' in retained) throw retained.error;
+        return retained.request;
+    };
+    const request: WorkspaceSnapshotRequest = Object.freeze({ repo_root: normalizePath(resolvedRoot),
+        hasHeadChanges: (files: readonly string[]) => current().hasHeadChanges(files),
+        hasUnstagedChanges: (files: readonly string[]) => current().hasUnstagedChanges(files),
+        read: (source: string, untracked: boolean, files: string[]) => current().read(source, untracked, files) });
+    workspaceSnapshotRequestRoots.set(request, normalizeRepoCacheKey(resolvedRoot));
+    return request;
+}
+
 function createWorkspaceSnapshotRequestUncached(repoRoot: string): WorkspaceSnapshotRequest {
     const resolvedRepoRoot = path.resolve(repoRoot);
+    const plannedFiles = captureWorkspacePlannedFiles(resolvedRepoRoot);
+    // The cache location belongs to this read generation, just like the Git observation.
+    let cacheRelativePath: string | undefined;
     const entries = new Map<string, WorkspaceSnapshotRequestEntry>();
     const gitGeneration = createWorkspaceSnapshotGitGeneration(resolvedRepoRoot);
     const request = Object.freeze({
         repo_root: normalizePath(resolvedRepoRoot),
         hasHeadChanges(relativePaths: readonly string[]): boolean {
+            assertWorkspacePlannedFilesCurrent(resolvedRepoRoot, plannedFiles);
             const keys = new Set(relativePaths.map(normalizePath));
             // Reuse the fingerprint's invocation-memoized status read. A clean
             // scope needs no separate diff; dirty index/worktree layers can
@@ -549,6 +588,7 @@ function createWorkspaceSnapshotRequestUncached(repoRoot: string): WorkspaceSnap
             return !!diff.error || diff.timedOut || diff.status !== 0;
         },
         hasUnstagedChanges(relativePaths: readonly string[]): boolean {
+            assertWorkspacePlannedFilesCurrent(resolvedRepoRoot, plannedFiles);
             const keys = new Set(relativePaths.map(normalizePath));
             return gitGeneration.readClassification([]).changes.some(change => change.layer === 'unstaged'
                 && (!keys.size || keys.has(change.path) || (change.previousPath !== null && keys.has(change.previousPath))));
@@ -558,11 +598,13 @@ function createWorkspaceSnapshotRequestUncached(repoRoot: string): WorkspaceSnap
             includeUntracked: boolean,
             explicitChangedFiles: string[]
         ): ResolvedWorkspaceSnapshot {
+            assertWorkspacePlannedFilesCurrent(resolvedRepoRoot, plannedFiles);
             const key = normalizeSnapshotRequestKey(
                 resolvedRepoRoot,
                 detectionSource,
                 includeUntracked,
-                explicitChangedFiles
+                explicitChangedFiles,
+                () => cacheRelativePath ??= resolveSnapshotCacheRepoRelativePath(resolvedRepoRoot)
             );
             const existing = entries.get(key);
             if (existing) {
@@ -665,7 +707,7 @@ function assertWorkspaceSnapshotCacheGenerationStable(
         explicitChangedFiles
     );
     if (verifiedFingerprint.fingerprint !== generation.fingerprint.fingerprint) {
-        throw new Error(
+        throw new RetryableInvocationError(
             'Workspace snapshot cache generation changed during authenticated snapshot resolution; retry the invocation.'
         );
     }
@@ -676,7 +718,9 @@ function authenticateWorkspaceSnapshotCacheGeneration(
     generation: WorkspaceSnapshotCacheGeneration
 ): void {
     if (
-        !workspaceSnapshotCacheGenerations.has(generation)
+        generation.params.planned_source_visibility_sha256 !== captureWorkspacePlannedFiles(repoRoot).digest
+        || generation.params.untracked_build_output_regexes_sha256 !== buildOutputFilterSha256(repoRoot)
+        || !workspaceSnapshotCacheGenerations.has(generation)
         || generation.repoKey !== normalizeRepoCacheKey(repoRoot)
         || generation.workspaceIdentitySha256 !== buildWorkspaceIdentitySha256(
             generation.repoKey,
@@ -950,17 +994,15 @@ function readInvocationHead(repoRoot: string): string | null | undefined {
 export function readHeadSha(repoRoot: string): string | null {
     const observed = readInvocationHead(repoRoot);
     if (observed !== undefined) return observed;
-    try {
-        const result = spawnSyncWithTimeout('git', ['-C', String(repoRoot), 'rev-parse', 'HEAD'], {
-            encoding: 'utf8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-            timeoutMs: DEFAULT_GIT_TIMEOUT_MS
-        });
-        if (result.status !== 0 || result.timedOut || result.error) return null;
-        return String(result.stdout || '').trim() || null;
-    } catch {
-        return null;
+    const args = ['-C', String(repoRoot), 'rev-parse', 'HEAD'];
+    const result = spawnSyncWithTimeout('git', args, {
+        encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeoutMs: DEFAULT_GIT_TIMEOUT_MS
+    });
+    if (result.status !== 0 || result.timedOut || result.error || result.signal
+        || typeof result.stdout !== 'string' || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})\r?\n?$/u.test(result.stdout)) {
+        throw new Error(formatGitFingerprintProbeFailure(repoRoot, args, result));
     }
+    return result.stdout.trim();
 }
 
 /**
@@ -1046,7 +1088,7 @@ function readGitFingerprintStatusEntries(
         timeoutMs: DEFAULT_GIT_TIMEOUT_MS,
         maxBuffer: 10 * 1024 * 1024
     });
-    if (result.status !== 0 || result.timedOut || result.error) {
+    if (result.status !== 0 || result.timedOut || result.error || result.signal || typeof result.stdout !== 'string') {
         throw new Error(formatGitFingerprintProbeFailure(repoRoot, args, result));
     }
 
@@ -1171,7 +1213,9 @@ function formatGitFingerprintProbeFailure(repoRoot: string, args: string[], resu
         : result.error
             ? String(result.error)
             : String(result.stderr || result.stdout || `exit status ${result.status}`).trim();
-    return `Unable to compute workspace snapshot cache fingerprint: git ${displayArgs.join(' ')} failed in '${normalizePath(repoRoot)}' (${reason}).`;
+    const quote = (value: string) => "'" + value.replace(/'/gu, process.platform === 'win32' ? "''" : "'\"'\"'") + "'";
+    return `Unable to compute workspace snapshot cache fingerprint: git ${displayArgs.join(' ')} failed in '${normalizePath(repoRoot)}' (${reason}). `
+        + `Diagnose with: git -C ${quote(repoRoot)} ${displayArgs.map(quote).join(' ')}\nAfter repairing Git authority, retry the original gate.`;
 }
 
 function readGitCachedRawDiff(repoRoot: string): string {
@@ -1192,7 +1236,7 @@ function readGitCachedRawDiff(repoRoot: string): string {
         timeoutMs: DEFAULT_GIT_TIMEOUT_MS,
         maxBuffer: 10 * 1024 * 1024
     });
-    if (result.status !== 0 || result.timedOut || result.error) {
+    if (result.status !== 0 || result.timedOut || result.error || result.signal || typeof result.stdout !== 'string') {
         throw new Error(formatGitFingerprintProbeFailure(repoRoot, args, result));
     }
     return String(result.stdout || '').trimEnd();

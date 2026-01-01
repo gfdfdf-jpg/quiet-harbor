@@ -39,6 +39,7 @@ import { assertNoRuntimeLocksBeforeUpdateApply } from '../lock/runtime-lock-pref
 import { assertUpdateApplyAllowedInSwitchMode } from './update-off-mode';
 import { assertLifecycleLockHandoff } from '../lock/lifecycle-lock-handoff';
 import { traceUpdateProgress } from './update-progress';
+import { assertManualSelectorMigrationReady } from './manual-selector-preflight';
 
 interface RollbackRecord {
     relativePath: string;
@@ -322,6 +323,7 @@ function runValidatedUpdate(
     if (!dryRun) {
         assertNoRuntimeLocksBeforeUpdateApply(bundleRoot);
         bindContainedDestination(normalizedTarget, updateReportPath);
+        assertManualSelectorMigrationReady(normalizedTarget, bundleRoot, bundleRoot);
     }
 
     if (!dryRun) {

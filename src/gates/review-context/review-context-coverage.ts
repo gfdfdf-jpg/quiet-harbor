@@ -115,15 +115,16 @@ export function resolveAuthoritativeReviewValidationObligations(options: Authori
     const declaredOrMatrix = currentProjectValidationAuthority(options.repoRoot, options.preflight)
         || assessTrustBoundaryAnalysisApplicability(options.preflight).required;
     if (!declaredOrMatrix && !expectedRed) return undefined;
+    const lanes = resolveValidationSemanticReviewLanes(options.preflight.effective_review_snapshot as EffectiveReviewSnapshot);
+    // Independent lanes do not bind case selection/execution. Trust-boundary
+    // evidence retains its separate security binding in the review context.
+    if (!lanes.some(lane => lane === options.reviewType)) return undefined;
     const preflightPath = resolveCurrentNoOpPreflightPath(options.repoRoot, taskId, options.preflightPath);
     const retained = readValidationFile(options.repoRoot,
         path.relative(path.resolve(options.repoRoot), preflightPath).replace(/\\/gu, '/'));
     if (validationDigest(JSON.parse(retained.bytes.toString('utf8'))) !== validationDigest(options.preflight))
         throw new Error('Declared review coverage preflight differs from current canonical projection.');
     if (!declaredOrMatrix) {
-        const lanes = resolveValidationSemanticReviewLanes(options.preflight.effective_review_snapshot as EffectiveReviewSnapshot);
-        // The old expected-RED-only route never inspected retained RED for another lane.
-        if (!lanes.some(lane => lane === options.reviewType)) return undefined;
         const identity = taskValidationIdentity(options, preflightPath, retained.identity.sha256,
             options.taskModePath?.trim() ? path.resolve(options.repoRoot, options.taskModePath.trim()) : null);
         const red = readTaskExpectedRedObligations(options, taskId, preflightPath, retained.identity.sha256, identity);
@@ -159,7 +160,8 @@ interface DeclaredCoverageGraph extends AuthoritativeReviewCoverageContract {
 const DECLARED_COVERAGE_CONTRACT = createInvocationReadMemoKey<DeclaredCoverageGraph>('declared-review-coverage-contract');
 
 export function buildDeclaredReviewCoverageContract(options: Parameters<typeof resolveAuthoritativeReviewValidationObligations>[0]): DeclaredCoverageGraph {
-    const scope = resolveAuthoritativeReviewCoverageScope(options);
+    const { reviewType, preflight, repoRoot } = options;
+    const scope = resolveAuthoritativeReviewCoverageScope({ reviewType, preflight, repoRoot });
     // Keep the live validation facade and its registry synchronization before the pure node.
     const validationObligations = resolveAuthoritativeReviewValidationObligations(options);
     return readReviewValidationNode(DECLARED_COVERAGE_CONTRACT, () => [options, scope, validationObligations], () => {

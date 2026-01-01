@@ -174,8 +174,8 @@ describe('gates/build-review-context prompt artifacts and scoped hashes', () => 
             assert.ok(promptContract.includes('Supporting artifacts may inform observations but are not admissible location evidence'));
             assert.ok(promptContract.includes('Every FILE-* coverage obligation must cite its own target path:line'));
             assert.ok(promptContract.includes('Active finding object shape: {"id":"F-001"'));
-            assert.ok(promptContract.includes('The command must identify the one exact check target'));
-            assert.ok(promptContract.includes('For a passed command, evidence does not need to repeat the target path, even when the review reports a separate finding'));
+            assert.ok(promptContract.includes('The command must identify every exact check target'));
+            assert.ok(promptContract.includes('For a passed command, evidence does not need to repeat the target paths, even when the review reports a separate finding'));
             assert.ok(promptContract.includes('does not claim OS-enforced containment against another process running as the same OS user'));
             assert.ok(promptContract.includes('unless the authenticated task acceptance criteria explicitly require that stronger boundary'));
             assert.ok(promptContract.includes('Continue to report ordinary path traversal, symlink or junction escape, stale identity, and observable replacement defects'));
@@ -313,7 +313,7 @@ describe('gates/build-review-context prompt artifacts and scoped hashes', () => 
             assert.equal(/REVIEW PASSED|REVIEW FAILED|## Verdict/u.test(promptArtifact), false);
             assert.ok(promptArtifact.includes('Validation-boundary notes, command logs, positive inspection summaries, and speculative performance or environment hypotheticals are not findings'));
             assert.ok(promptArtifact.includes('Missing prior focused execution evidence is not by itself a finding or residual risk'));
-            assert.ok(promptArtifact.includes('execute the smallest safe relevant local test or validation command yourself for exactly one relevant repository test or validation target'));
+            assert.ok(promptArtifact.includes('execute the smallest safe relevant local test or validation command yourself for its declared repository test or validation target'));
             assert.ok(promptArtifact.includes(
                 '[garda:evidence-only:missing-focused-validation] test=<exact-repository-relative-test-path>; action=run-and-record-focused-test'
             ));
@@ -711,7 +711,7 @@ describe('gates/build-review-context prompt artifacts and scoped hashes', () => 
                 assert.ok(promptArtifact.includes('"findings"'));
                 assert.ok(promptArtifact.includes('"residual_risks"'));
                 assert.ok(promptArtifact.includes('Missing prior focused execution evidence is not by itself a finding or residual risk'));
-                assert.ok(promptArtifact.includes('execute the smallest safe relevant local test or validation command yourself for exactly one relevant repository test or validation target'));
+                assert.ok(promptArtifact.includes('execute the smallest safe relevant local test or validation command yourself for its declared repository test or validation target'));
                 assert.ok(promptArtifact.includes(
                     '[garda:evidence-only:missing-focused-validation] target=<exact-repository-relative-validation-path>; action=run-and-record-focused-validation'
                 ));

@@ -8,7 +8,7 @@ import {
 } from '../../core/constants';
 import { isOrchestratorSourceCheckout } from '../../gates/shared/helpers';
 import { REVIEW_REMEDIATION_IMPACT_ANALYSIS_TEMPLATE } from '../../gates/review-remediation/review-remediation-impact-template';
-import { bold, cyan, dim, green, styleHelpCommandLine } from './cli-format-output';
+import { bold, cyan, dim, green } from './cli-colors';
 
 interface GateHelpEntry {
     summary: string;
@@ -279,7 +279,7 @@ function buildPreflightGateHelpEntries(
         },
         'quality-checklist': {
             ...createGateHelpEntry(
-                'Record the configured optional quality checklist as machine-readable advisory gate evidence; answers input must include one answer object per active rule for the current preflight scope. Prefer --answers-path or --answers-stdin for PowerShell-safe JSON input. The navigator materializes or refreshes the bound --answers-path for the active preflight questions before printing this command. Use ACTION_REQUIRED only for follow-up the implementation agent should address before compile/review/full-suite; this gate never replaces reviewer receipts.',
+                'Record the configured optional quality checklist as machine-readable advisory gate evidence; answers input must include one answer object per active rule for the current preflight scope. Prefer --answers-path or --answers-stdin for PowerShell-safe JSON input. The navigator materializes or refreshes the bound --answers-path for the active preflight questions before printing this command. Use ACTION_REQUIRED only for follow-up the implementation agent should address before compile/review/task tests; this gate never replaces reviewer receipts.',
                 [
                     `${cliPrefix} gate quality-checklist --task-id "${TASK_ID_PLACEHOLDER}" --preflight-path "${buildBundleRelativePath(bundleName, `runtime/reviews/${TASK_ID_PLACEHOLDER}-preflight.json`)}" --answers-path "${buildBundleRelativePath(bundleName, `runtime/tmp/${TASK_ID_PLACEHOLDER}-quality-checklist-answers.json`)}" --repo-root "."`,
                     `Get-Content -Raw -LiteralPath "${buildBundleRelativePath(bundleName, `runtime/tmp/${TASK_ID_PLACEHOLDER}-quality-checklist-answers.json`)}" | ${cliPrefix} gate quality-checklist --task-id "${TASK_ID_PLACEHOLDER}" --preflight-path "${buildBundleRelativePath(bundleName, `runtime/reviews/${TASK_ID_PLACEHOLDER}-preflight.json`)}" --answers-stdin --repo-root "."`,
@@ -290,7 +290,7 @@ function buildPreflightGateHelpEntries(
         },
         'run-intermediate-command': {
             ...createGateHelpEntry(
-                'Run an opt-in auditable intermediate validation command with full raw output artifact and compact visible output. --timeout-ms overrides the default 120000 ms command timeout for slow runs such as cold container pulls.--expect-failure requires explicit operator approval before adding the exact TASK.md Notes marker "Test-first: expected-red", a current test-only preflight, and a focused changed test; changing that test invalidates its RED. Record fresh RED for current test bytes if still reproducible, or with operator approval remove the marker and continue ordinary tests, compile, full suite and every required review without task-reset. A real nonzero test exit is recorded as successful expected-red evidence, while timeout, cancellation, or an unexpected pass fails closed.',
+                'Run an opt-in auditable intermediate validation command with full raw output artifact and compact visible output. --timeout-ms overrides the default 120000 ms command timeout for slow runs such as cold container pulls.--expect-failure requires explicit operator approval before adding the exact TASK.md Notes marker "Test-first: expected-red", a current test-only preflight, and a focused changed test; changing that test invalidates its RED. Record fresh RED for current test bytes if still reproducible, or with operator approval remove the marker and continue ordinary tests, compile, task tests and every required review without task-reset. A real nonzero test exit is recorded as successful expected-red evidence, while timeout, cancellation, or an unexpected pass fails closed.',
                 [
                     `${cliPrefix} gate run-intermediate-command --task-id "${TASK_ID_PLACEHOLDER}" --command-source targeted-test --command "<validation command producing reports/result.xml>" --report-file '{"path":"reports/result.xml","max_bytes":1048576}' --repo-root "."`,
                     `${cliPrefix} gate run-intermediate-command --task-id "${TASK_ID_PLACEHOLDER}" --command-source "<targeted-test|typecheck|validation|node-test>" --command "<validation command>" [--selected-case '{"source":"<test file>","case_id":"<case>","selector":"<selector>"}'] --preflight-path "${buildBundleRelativePath(bundleName, `runtime/reviews/${TASK_ID_PLACEHOLDER}-preflight.json`)}" --coverage-contract-sha256 "<coverage contract sha256>" --repo-root "."`,
@@ -309,8 +309,8 @@ function buildPreflightGateHelpEntries(
         },
         'restart-coherent-cycle': {
             ...createSingleUsageEntry(
-                'Refresh preflight and downstream compile evidence for the current task after scope drift. This reruns the configured compile gate and can take the full project compile duration. Confirmation flags are required when re-entering protected task mode requires fresh operator approval; an ordinary unprotected restart does not require them. After files changed past REVIEW_GATE_PASSED the restart starts a new review cycle and requires the user\'s approval (--review-restart-approved yes with the approval time); revert the change instead unless the user approves. Follow next-step for the applicable command.',
-                `${cliPrefix} gate restart-coherent-cycle --task-id "${TASK_ID_PLACEHOLDER}" --task-intent "<task summary>" --changed-file "src/<file>" [--allow-plan-drift --allow-plan-drift-reason "<approved reason>"] [--operator-confirmed yes --operator-confirmed-at-utc "<ISO-8601 timestamp>"] [--review-restart-approved yes --review-restart-approved-at-utc "<ISO-8601 timestamp of the user approval>"] --repo-root "."`,
+                'Refresh preflight and downstream compile evidence for the current task after scope drift. This reruns the configured compile gate and can take the full project compile duration. Confirmation flags are required when re-entering protected task mode requires fresh operator approval; an ordinary unprotected restart does not require them. Pass --task-intent only for an intent the operator states: together with --operator-confirmed it records an operator-confirmed criteria change and every mandatory review repeats in FULL; without --task-intent the restart keeps the classified intent. After files changed past REVIEW_GATE_PASSED the restart starts a new review cycle and requires the user\'s approval (--review-restart-approved yes with the approval time); revert the change instead unless the user approves. Follow next-step for the applicable command.',
+                `${cliPrefix} gate restart-coherent-cycle --task-id "${TASK_ID_PLACEHOLDER}" [--task-intent "<operator-stated task intent>"] --changed-file "src/<file>" [--allow-plan-drift --allow-plan-drift-reason "<approved reason>"] [--operator-confirmed yes --operator-confirmed-at-utc "<ISO-8601 timestamp>"] [--review-restart-approved yes --review-restart-approved-at-utc "<ISO-8601 timestamp of the user approval>"] --repo-root "."`,
                 true
             )
         },
@@ -322,8 +322,10 @@ function buildPreflightGateHelpEntries(
             )
         },
         'compile-gate': {
-            ...createGateHelpEntry('Run the mandatory compile/build/type-check commands selected by the guarded compile flow; full test suites belong to full-suite-validation.', [
+            ...createGateHelpEntry('Run the mandatory compile/build/type-check commands selected by the guarded compile flow; selected task tests belong to task-test-validation.', [
                 `${cliPrefix} gate compile-gate --task-id "${TASK_ID_PLACEHOLDER}" --preflight-path "${buildBundleRelativePath(bundleName, `runtime/reviews/${TASK_ID_PLACEHOLDER}-preflight.json`)}" --repo-root "."`,
+                `${cliPrefix} gate compile-gate --task-id "${TASK_ID_PLACEHOLDER}" --compile-command "<task-compile-command>" --repo-root "."`,
+                `${cliPrefix} gate compile-gate --task-id "${TASK_ID_PLACEHOLDER}" --compile-not-applicable-reason "<why this stack has no separate compile phase>" --repo-root "."`,
                 `${cliPrefix} gate compile-gate --task-id "${TASK_ID_PLACEHOLDER}" --allow-full-test-compile-command --allow-full-test-compile-command-reason "<operator-approved reason>" --repo-root "."`
             ], true)
         },
@@ -482,14 +484,14 @@ function buildLifecycleGateHelpEntries(
         },
         'full-suite-validation': {
             ...createSingleUsageEntry(
-                'Run repository-wide test suite as part of mandatory closeout (when enabled). Enable it through workflow set --full-suite-enabled true --operator-confirmed yes --operator-confirmed-at-utc "<ISO-8601 timestamp>" after operator approval. Follow next-step for the configured full-suite placement; do not edit workflow-config.json directly.',
-                `${cliPrefix} gate full-suite-validation --task-id "${TASK_ID_PLACEHOLDER}" --preflight-path "${buildBundleRelativePath(bundleName, `runtime/reviews/${TASK_ID_PLACEHOLDER}-preflight.json`)}" --repo-root "."`,
+                'Run the selected task tests and required regressions (when enabled). Select commands and targets for the current task; a new entry, re-entry or reset requires a fresh selection. Follow next-step for validation placement. Legacy full-suite-validation and --full-suite-* remain aliases; internal evidence identifiers stay unchanged.',
+                `${cliPrefix} gate task-test-validation --task-id "${TASK_ID_PLACEHOLDER}" --preflight-path "${buildBundleRelativePath(bundleName, `runtime/reviews/${TASK_ID_PLACEHOLDER}-preflight.json`)}" --repo-root "."`,
                 true
             )
         },
         'full-suite-run-marker-recovery': {
             ...createGateHelpEntry(
-                'Inspect an interrupted full-suite run marker and clear only dead current-cycle markers after explicit confirmation.',
+                'Inspect an interrupted task test run marker and clear only dead current-cycle markers after explicit confirmation.',
                 [
                     `${cliPrefix} gate full-suite-run-marker-recovery --task-id "${TASK_ID_PLACEHOLDER}" --preflight-path "${buildBundleRelativePath(bundleName, `runtime/reviews/${TASK_ID_PLACEHOLDER}-preflight.json`)}" --repo-root "."`,
                     `${cliPrefix} gate full-suite-run-marker-recovery --task-id "${TASK_ID_PLACEHOLDER}" --preflight-path "${buildBundleRelativePath(bundleName, `runtime/reviews/${TASK_ID_PLACEHOLDER}-preflight.json`)}" --clear-dead-marker --operator-confirmed yes --repo-root "."`
@@ -499,7 +501,7 @@ function buildLifecycleGateHelpEntries(
         },
         'materialize-full-suite-repair-task': {
             ...createSingleUsageEntry(
-                'Validate an audited repair handoff with one or more meaningful linked children for an exhausted full-suite timeout blocker or an AUDIT_AND_BLOCK out-of-scope failure. Declare one repair task with independent Repair scope paths (more only for independent repairs), without asking the operator, then run the printed command to suspend parent WIP and latch the repair handoff.',
+                'Validate an audited repair handoff with one or more meaningful linked children for an exhausted task test timeout blocker or an AUDIT_AND_BLOCK out-of-scope failure. Declare one repair task with independent Repair scope paths (more only for independent repairs), without asking the operator, then run the printed command to suspend parent WIP and latch the repair handoff.',
                 `${cliPrefix} gate materialize-full-suite-repair-task --task-id "${TASK_ID_PLACEHOLDER}" --preflight-path "${buildBundleRelativePath(bundleName, `runtime/reviews/${TASK_ID_PLACEHOLDER}-preflight.json`)}" --full-suite-artifact-path "${buildBundleRelativePath(bundleName, `runtime/reviews/${TASK_ID_PLACEHOLDER}-full-suite-validation.json`)}" --repo-root "."`,
                 true
             )
@@ -541,7 +543,7 @@ function buildLifecycleGateHelpEntries(
             ], true)
         },
         'next-step': {
-            ...createGateHelpEntry('Default task-loop navigator: show the single next orchestrator command, effective full-suite config, review launchable batch, blocked lanes, and legacy NextReview compatibility.', [
+            ...createGateHelpEntry('Default task-loop navigator: show the single next orchestrator command, effective task test validation config, review launchable batch, blocked lanes, and legacy NextReview compatibility.', [
                 `${cliPrefix} next-step "${TASK_ID_PLACEHOLDER}" --repo-root "."`,
                 `${cliPrefix} gate next-step "${TASK_ID_PLACEHOLDER}" --repo-root "."`,
                 `${cliPrefix} gate next-step --task-id "${TASK_ID_PLACEHOLDER}" --repo-root "."`,
@@ -679,6 +681,7 @@ function resolveSuggestedCommand(entry: GateHelpEntry, mistakenTaskId: string | 
 }
 
 export function buildGateCommandOverviewText(repoRoot = process.cwd()): string {
+    const { styleHelpCommandLine } = require('./cli-help-output') as typeof import('./cli-help-output');
     const resolvedRepoRoot = resolveGateHelpRepoRoot(repoRoot);
     const { cliPrefix } = buildGateHelpCatalogContext(resolvedRepoRoot);
     return [
@@ -700,13 +703,14 @@ export function buildGateCommandOverviewText(repoRoot = process.cwd()): string {
 }
 
 export function buildGateHelpText(gateName: string, repoRoot = process.cwd()): string {
+    const { styleHelpCommandLine } = require('./cli-help-output') as typeof import('./cli-help-output');
     const entry = getGateHelpEntry(gateName, repoRoot);
     if (!entry) {
         throw new Error(`Unknown gate: ${gateName}`);
     }
     return [
         'GARDA_COMMAND_HELP',
-        `${cyan('gate')} ${cyan(gateName)}`,
+        `${cyan('gate')} ${cyan(gateName === 'full-suite-validation' ? 'task-test-validation' : gateName)}`,
         dim(entry.summary),
         '',
         bold('Usage'),
@@ -719,7 +723,7 @@ export function buildGateHelpText(gateName: string, repoRoot = process.cwd()): s
 
 export function getGateHelpEntry(gateName: string, repoRoot = process.cwd()): GateHelpInfo {
     const resolvedRepoRoot = resolveGateHelpRepoRoot(repoRoot);
-    const entry = getGateHelpEntries(resolvedRepoRoot)[gateName];
+    const entry = getGateHelpEntries(resolvedRepoRoot)[gateName === 'task-test-validation' ? 'full-suite-validation' : gateName];
     if (!entry) {
         throw new Error(`Unknown gate: ${gateName}`);
     }

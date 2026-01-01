@@ -21,6 +21,8 @@ import {
 } from '../workspace/dirty-worktree-protection';
 import { stringSha256, toPosix } from '../shared/helpers';
 import { canonicalPathList, pathListSha256 } from '../shared/canonical-path-list';
+import { normalizeCycleBindingPath, normalizeTaskCycleScopeBinding } from '../task-events-summary/task-events-summary-cycle-binding';
+import type { PreflightSummary } from './task-audit-summary-preflight-collection';
 import {
     type BlockerEntry,
     type FinalCloseoutDocsSummary,
@@ -449,13 +451,71 @@ export function evaluateStagedPostDoneAuditedScope(options: {
     };
 }
 
+/**
+ * Repair only the null header produced by failed closeout snapshot collection.
+ * The accepted scope comes from the ordered native compile event and its exact preflight.
+ */
+export function readRecoverableCloseoutContentHash(input: {
+    repoRoot: string;
+    taskId: string;
+    auditedFiles: string[];
+    finalCloseoutJsonPath: string;
+    preflight: PreflightSummary;
+    events: readonly Readonly<Record<string, unknown>>[];
+}): string | null {
+    const implementation = readFinalCloseoutImplementationSummary(input.finalCloseoutJsonPath, input.repoRoot);
+    if (!implementation || implementation.changed_files_sha256 !== null
+        || implementation.scope_content_sha256 !== null || implementation.scope_sha256 !== null
+        || input.preflight.raw?.detection_source !== 'explicit_changed_files'
+        || input.preflight.raw.use_staged === true) return null;
+    const provenance = implementation.audited_scope_provenance as Record<string, unknown> | null;
+    if (provenance?.source !== 'preflight' || provenance.detection_source !== 'explicit_changed_files'
+        || provenance.use_staged !== false || provenance.closeout_extra_scope !== null) return null;
+
+    const files = normalizeChangedFiles(input.auditedFiles);
+    if (!files.length || ![implementation.changed_files, input.preflight.changedFiles, provenance.changed_files].every(list =>
+        JSON.stringify(normalizeChangedFiles(list)) === JSON.stringify(files))) return null;
+
+    let compile: Readonly<Record<string, unknown>> | null = null;
+    let completion: Readonly<Record<string, unknown>> | null = null;
+    for (const event of input.events) {
+        const type = event.event_type;
+        if (type === 'TASK_MODE_ENTERED' || type === 'PREFLIGHT_CLASSIFIED' || type === 'PREFLIGHT_FAILED') {
+            compile = completion = null;
+        } else if (type === 'COMPILE_GATE_PASSED' || type === 'COMPILE_GATE_FAILED') {
+            compile = type === 'COMPILE_GATE_PASSED' ? event : null;
+            completion = null;
+        } else if (type === 'COMPLETION_GATE_PASSED' || type === 'COMPLETION_GATE_FAILED') {
+            completion = type === 'COMPLETION_GATE_PASSED' ? event : null;
+        }
+    }
+    if (![compile, completion].every(event => event?.actor === 'gate'
+        && event.task_id === input.taskId && event.outcome === 'PASS' && event.integrity)) return null;
+    const compileDetails = compile?.details as Record<string, unknown> | null;
+    const completionDetails = completion?.details as Record<string, unknown> | null;
+    const preflightPath = toPosix(input.preflight.path);
+    if (!input.preflight.sha256 || compileDetails?.preflight_hash_sha256 !== input.preflight.sha256
+        || normalizeCycleBindingPath(compileDetails?.preflight_path, input.repoRoot) !== preflightPath
+        || normalizeCycleBindingPath(completionDetails?.preflight_path, input.repoRoot) !== preflightPath) return null;
+
+    const scope = normalizeTaskCycleScopeBinding(compileDetails);
+    const metrics = input.preflight.raw.metrics as Record<string, unknown> | null;
+    if (!scope?.scope_content_sha256 || !scope.scope_sha256 || scope.changed_files_sha256 !== pathListSha256(files)
+        || !metrics || !['changed_files_sha256', 'scope_content_sha256', 'scope_sha256'].every(key => {
+            const name = key as keyof typeof scope;
+            return scope[name] === metrics[name] && scope[name] === provenance[name];
+        })) return null;
+    return scope.scope_content_sha256;
+}
+
 export function buildPostDoneWorkspaceDriftBlocker(
     repoRoot: string,
     auditedChangedFiles: string[],
     preflightChangedFiles: string[],
     preflight: Record<string, unknown> | null,
     finalCloseoutJsonPath: string,
-    workspaceSnapshotRequest?: WorkspaceSnapshotRequest
+    workspaceSnapshotRequest?: WorkspaceSnapshotRequest,
+    recoverContentHash?: () => string | null
 ): BlockerEntry | null {
     const authenticatedWorkspaceSnapshotRequest = workspaceSnapshotRequest
         ? resolveWorkspaceSnapshotRequest(repoRoot, workspaceSnapshotRequest)
@@ -517,11 +577,14 @@ export function buildPostDoneWorkspaceDriftBlocker(
             ? { gate: 'post-done-drift', reason: stagedScopeDecision.reason }
             : null;
     }
+    const completeAuditedFiles = canonicalPathList([...auditedSet]);
+    const recoveredContentHash = recoverContentHash?.();
     const auditedScopeBlocker = buildPostDoneAuditedScopeDriftBlocker(
         repoRoot,
-        canonicalPathList([...auditedSet]),
+        completeAuditedFiles,
         finalCloseoutJsonPath,
-        authenticatedWorkspaceSnapshotRequest
+        authenticatedWorkspaceSnapshotRequest,
+        recoveredContentHash
     );
     if (auditedScopeBlocker) {
         return auditedScopeBlocker;
@@ -535,7 +598,8 @@ export function buildPostDoneWorkspaceDriftBlocker(
         preflightChangedFiles,
         preflight,
         finalCloseoutJsonPath,
-        authenticatedWorkspaceSnapshotRequest
+        authenticatedWorkspaceSnapshotRequest,
+        recoveredContentHash
     );
 }
 
@@ -656,7 +720,8 @@ function buildPostDoneSameScopeDriftBlocker(
     preflightChangedFiles: string[],
     preflight: Record<string, unknown> | null,
     finalCloseoutJsonPath: string,
-    workspaceSnapshotRequest?: WorkspaceSnapshotRequest
+    workspaceSnapshotRequest?: WorkspaceSnapshotRequest,
+    recoveredContentHash?: string | null
 ): BlockerEntry | null {
     const authenticatedWorkspaceSnapshotRequest = workspaceSnapshotRequest
         ? resolveWorkspaceSnapshotRequest(repoRoot, workspaceSnapshotRequest)
@@ -668,7 +733,8 @@ function buildPostDoneSameScopeDriftBlocker(
             repoRoot,
             auditedFiles,
             finalCloseoutJsonPath,
-            authenticatedWorkspaceSnapshotRequest
+            authenticatedWorkspaceSnapshotRequest,
+            recoveredContentHash
         );
     }
     if (!preflight || typeof preflight !== 'object') {
@@ -724,7 +790,8 @@ function buildPostDoneSameScopeDriftBlocker(
             repoRoot,
             auditedFiles,
             finalCloseoutJsonPath,
-            authenticatedWorkspaceSnapshotRequest
+            authenticatedWorkspaceSnapshotRequest,
+            recoveredContentHash
         );
     }
 
@@ -745,7 +812,8 @@ function buildPostDoneAuditedScopeDriftBlocker(
     repoRoot: string,
     auditedFiles: string[],
     finalCloseoutJsonPath: string,
-    workspaceSnapshotRequest?: WorkspaceSnapshotRequest
+    workspaceSnapshotRequest?: WorkspaceSnapshotRequest,
+    recoveredContentHash?: string | null
 ): BlockerEntry | null {
     const authenticatedWorkspaceSnapshotRequest = workspaceSnapshotRequest
         ? resolveWorkspaceSnapshotRequest(repoRoot, workspaceSnapshotRequest)
@@ -754,8 +822,9 @@ function buildPostDoneAuditedScopeDriftBlocker(
         return null;
     }
     const implementationSummary = readFinalCloseoutImplementationSummary(finalCloseoutJsonPath, repoRoot);
-    const expectedScopeContentSha256 = normalizeOptionalHash(implementationSummary?.scope_content_sha256);
-    const expectedChangedFilesSha256 = normalizeOptionalHash(implementationSummary?.changed_files_sha256);
+    const expectedScopeContentSha256 = recoveredContentHash ?? normalizeOptionalHash(implementationSummary?.scope_content_sha256);
+    const expectedChangedFilesSha256 = recoveredContentHash ? changedFilesSha256(auditedFiles)
+        : normalizeOptionalHash(implementationSummary?.changed_files_sha256);
     if (!expectedScopeContentSha256 || !expectedChangedFilesSha256) {
         return {
             gate: 'post-done-drift',
@@ -768,12 +837,9 @@ function buildPostDoneAuditedScopeDriftBlocker(
 
     let currentAuditedSnapshot: PostDoneAuditedScopeFingerprint;
     try {
-        currentAuditedSnapshot = readPostDoneAuditedScopeFingerprint(
-            repoRoot,
-            auditedFiles,
-            implementationSummary,
-            authenticatedWorkspaceSnapshotRequest
-        );
+        currentAuditedSnapshot = recoveredContentHash
+            ? buildPostDoneAuditedScopeFingerprint(repoRoot, auditedFiles, authenticatedWorkspaceSnapshotRequest)
+            : readPostDoneAuditedScopeFingerprint(repoRoot, auditedFiles, implementationSummary, authenticatedWorkspaceSnapshotRequest);
     } catch (error) {
         const gitMetadataPath = path.join(repoRoot, '.git');
         if (!fs.existsSync(gitMetadataPath)) {

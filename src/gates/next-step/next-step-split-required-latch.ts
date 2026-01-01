@@ -1296,7 +1296,7 @@ function materializeSplitRequiredLatchTransaction(
 }
 
 /** A completed native WIP restore clears only its own timeout-repair latch. It does not
- * accept the parent: classify, compile, full-suite validation and reviews remain required. */
+ * accept the parent: classify, compile, task test validation and reviews remain required. */
 export function hasFullSuiteRepairRestoreClearedEvidence(params: {
     eventsRoot: string; taskId: string; latchEvidence: SplitRequiredLatchEvidence;
 }): boolean {

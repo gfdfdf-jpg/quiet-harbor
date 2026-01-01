@@ -70,7 +70,7 @@ describe('cli/commands/gates review launch prepared prompt artifacts', () => {
         assert.ok(prompt.includes('Do not launch another reviewer or subagent'));
         assert.ok(prompt.includes('Only read the artifacts named in this handoff and write the completed review JSON to the single ReviewOutputPath'));
         assert.ok(prompt.includes('Missing prior focused execution evidence is not by itself a finding or residual risk'));
-        assert.ok(prompt.includes('execute the smallest safe relevant local test or validation command yourself for exactly one relevant repository test or validation target'));
+        assert.ok(prompt.includes('execute the smallest safe relevant local test or validation command yourself for its declared repository test or validation target files, with no unrelated or directory target'));
         assert.ok(prompt.includes('command_outcome (`passed`, `failed`, `unavailable`, or `prohibited`)'));
         assert.ok(prompt.includes(
             "keep evidence.location as a concrete path:line inside the assigned lane's authenticated changed-file evidence domain"

@@ -16,8 +16,12 @@ export async function runRecipeCommand(options: RunIntermediateCommandOptions) {
     if (expectedFailure) assertValidationExpectedRed(repoRoot, taskId, options.recipeId);
     const attempt = await executeValidationRecipe({ repoRoot, taskId, recipeId: options.recipeId, signal: options.signal });
     const result = await evaluateValidationAttempt({ repoRoot, taskId, attemptId: attempt.attempt_id, expectedFailure });
-    const pendingRed = expectedFailure && result.status === 'UNRESOLVED' && isCompleteExpectedFailureAttempt(attempt);
-    return { exitCode: result.status === 'PASSED' || result.status === 'EXPECTED_FAILURE' || pendingRed ? EXIT_SUCCESS : EXIT_GATE_FAILURE,
-        outputLines: [`PROJECT_VALIDATION_${result.status}`, `RecipeId: ${result.recipe_id}`, `AttemptId: ${attempt.attempt_id}`,
+    const pendingRed = expectedFailure && isCompleteExpectedFailureAttempt(attempt);
+    const processPassed = !expectedFailure && attempt.exit_code === 0 && !attempt.timed_out && !attempt.cancelled
+        && !attempt.truncated && !attempt.termination_signal && attempt.violations.length === 0;
+    const status = pendingRed && result.status !== 'EXPECTED_FAILURE' ? 'PENDING_REVIEW'
+        : processPassed && result.status !== 'PASSED' ? 'PROCESS_PASSED' : result.status;
+    return { exitCode: processPassed || pendingRed ? EXIT_SUCCESS : EXIT_GATE_FAILURE,
+        outputLines: [`PROJECT_VALIDATION_${status}`, `ResultStatus: ${result.status}`, `RecipeId: ${result.recipe_id}`, `AttemptId: ${attempt.attempt_id}`,
             `ResultPath: ${result.result_path}`, `ResultSha256: ${result.result_sha256}`, `ExitCode: ${attempt.exit_code}`] };
 }

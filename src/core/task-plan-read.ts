@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { lstatFileIdentitySync } from './file-stat';
+import { invocationExpectedStatMatches, readInvocationFileContentWithObservation, readInvocationPathObservation } from './invocation-file-observation';
 import { joinOrchestratorPath, resolvePathInsideRepo } from './orchestrator-paths';
 import { TASK_QUEUE_FILENAME } from './orchestration-constants';
 import { assertCanonicalTaskId } from './task-ids';
@@ -35,6 +36,7 @@ export function resolveCanonicalTaskPlanLockPath(repoRoot: string, taskId: strin
 
 export function readBoundedTaskPlanFile(repoRoot: string, file: string, maxBytes: number): string | null {
     resolvePathInsideRepo(file, repoRoot, { allowMissing: true, enforceInside: true });
+    readInvocationPathObservation(file);
     let before: fs.Stats;
     try {
         before = lstatFileIdentitySync(file);
@@ -52,9 +54,13 @@ export function readBoundedTaskPlanFile(repoRoot: string, file: string, maxBytes
         if (!opened.isFile() || opened.nlink !== 1 || opened.dev !== before.dev || opened.ino !== before.ino) {
             throw new Error('Inspection file identity changed before reading.');
         }
-        const buffer = Buffer.alloc(maxBytes + 1);
-        let bytes = 0;
-        while (bytes < buffer.length) {
+        const observed = readInvocationFileContentWithObservation(file, maxBytes);
+        if (observed && !invocationExpectedStatMatches(observed.alias, opened)) {
+            throw new Error('Inspection file identity changed before reading.');
+        }
+        const buffer = observed ? observed.content.copyBytes() : Buffer.alloc(maxBytes + 1);
+        let bytes = observed ? buffer.length : 0;
+        while (!observed && bytes < buffer.length) {
             const count = fs.readSync(fd, buffer, bytes, buffer.length - bytes, null);
             if (count === 0) break;
             bytes += count;

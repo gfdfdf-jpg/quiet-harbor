@@ -5,7 +5,7 @@ import { readValidationFile, validationDigest } from '../../core/project-validat
 import { MAX_RETAINED_VALIDATION_OUTPUT_BYTES, readRetainedValidationReports } from '../../core/validation-report-evidence';
 import type { ValidationReportEvidenceBinding } from '../../core/validation-report-contract';
 import { isPlainRecord } from '../../core/records';
-import { assertCurrentIntermediateSelection, intermediateSourcePathKey, latestMatchingIntermediateAttempt, selectionMatchesCase } from '../../core/intermediate-selected-cases';
+import { assertCurrentIntermediateSelection, intermediateInvocationIdentity, intermediateSourcePathKey, latestMatchingIntermediateAttempt, selectionMatchesCase } from '../../core/intermediate-selected-cases';
 import type { QualityValidationObligation } from '../quality-checklist/quality-checklist-validation-phases';
 import { validationPaths } from '../project-validation/authority';
 import type { ValidationEvidenceInspection } from '../project-validation/attempt-evidence';
@@ -14,6 +14,15 @@ import { iterateRemediationOriginCandidates } from '../review-remediation/review
 import { collectRemediationLaneHistory } from '../review-remediation/review-remediation-scope-review-types';
 import { validateReviewRemediationBaselineArtifact } from '../review-remediation/review-remediation-baseline';
 import { resolveFailedReviewTaskCriteriaChange } from '../review-remediation/review-remediation-task-criteria';
+import { readInvocationVerifiedEventIndex } from '../../gate-runtime/timeline/task-events-integrity';
+import { readTaskTimelineValidationJsonLinesCompatible } from '../../gate-runtime/timeline/task-events-helpers';
+import { selectVerifiedEvents } from '../../gate-runtime/timeline/task-verified-event-index';
+
+interface NativeCaseTimelineEvent extends Record<string, unknown> {
+    event_type: string; task_id: string;
+    details: Record<string, unknown>;
+    integrity: { task_sequence: number };
+}
 
 const MAX_CONTROL_BYTES = 8 * 1024 * 1024;
 const MAX_QUOTE_CHARS = 4096;
@@ -22,7 +31,10 @@ const HASH = /^[a-f0-9]{64}$/u;
 
 export class NativeCaseExecutionUnavailableError extends Error {
     constructor(readonly violations: readonly string[]) {
-        super(`Native case execution is unavailable: ${violations.join(' ')}`);
+        super(`Current selected case execution is missing or rejected: ${violations.join(' ')} `
+            + 'Run gate run-intermediate-command --task-id "<task-id>" --command-source targeted-test '
+            + '--command "<task-test-command>" --preflight-path "<current-preflight>" '
+            + '--selected-case \'{"source":"<target>","case_id":"<case>","selector":"<exact selector>"}\'.');
     }
 }
 
@@ -77,6 +89,7 @@ export function readNativeCaseObligations(options: {
     scopeContentSha256: string; sources: readonly TrustBoundarySourceEvidence[];
     inspection?: ValidationEvidenceInspection;
     preserveSemanticBinding?: boolean;
+    requiredCommandByCase?: ReadonlyMap<string, string>;
 }): QualityValidationObligation[] {
     if (!options.sources.length) return [];
     const timelinePath = validationPaths(options.repoRoot, options.taskId).timeline;
@@ -88,7 +101,15 @@ export function readNativeCaseObligations(options: {
         expectedScopeContentSha256: options.scopeContentSha256, maxTimelineBytes: MAX_CONTROL_BYTES,
         maxTimelineEvents: 10_000, maxEntries: MAX_BOUNDARY_SOURCE_REFERENCES,
         maxIntermediateCandidatesScanned: 1024 });
-    const events = timeline.bytes.toString('utf8').split(/\r?\n/u).filter(Boolean).map(line => JSON.parse(line)).reverse();
+    const absoluteTimelinePath = path.resolve(options.repoRoot, timelinePath);
+    const captured = readInvocationVerifiedEventIndex(absoluteTimelinePath, options.taskId);
+    // Preserve validation's whitespace-row rejection on the native fallback. Successful captures
+    // share the original verified records, selecting only the evidence this reader actually uses.
+    const indexed = captured && readTaskTimelineValidationJsonLinesCompatible(absoluteTimelinePath) ? captured : null;
+    const events: NativeCaseTimelineEvent[] = indexed
+        ? selectVerifiedEvents(indexed, ['INTERMEDIATE_COMMAND_RUN', 'INTERMEDIATE_COMMAND_STARTED',
+            'TEST_FIRST_EXPECTED_FAILURE_RECORDED', 'REVIEW_RECORDED']).slice().reverse() as unknown as NativeCaseTimelineEvent[]
+        : timeline.bytes.toString('utf8').split(/\r?\n/u).filter(Boolean).map(line => JSON.parse(line) as NativeCaseTimelineEvent).reverse();
     if (!proof.entries.length) {
         const boundary = proof.carried_task_mode_sequence ?? proof.latest_task_mode_sequence;
         const hasCurrentAttempt = boundary != null && events.some(event =>
@@ -108,7 +129,10 @@ export function readNativeCaseObligations(options: {
     if (sources.violations.length) throw new Error(sources.violations.join(' '));
     let reviewedBindings: QualityValidationObligation[] | undefined;
     const obligations = sources.sourceEvidence.map(source => {
-        const latestRun = latestMatchingIntermediateAttempt(attempts, source.source_identity.path, source.case_id);
+        const requiredCommand = options.requiredCommandByCase?.get(JSON.stringify([source.source_identity.path, source.case_id]));
+        const matchingAttempts = requiredCommand ? attempts.filter(event =>
+            intermediateInvocationIdentity(event.details?.command) === requiredCommand) : attempts;
+        const latestRun = latestMatchingIntermediateAttempt(matchingAttempts, source.source_identity.path, source.case_id);
         const latest = proof.entries.find(entry => entry.command_source !== 'typecheck'
             && entry.event_task_sequence === latestRun?.integrity?.task_sequence);
         if (!latest) throw new NativeCaseExecutionUnavailableError([
@@ -139,7 +163,9 @@ export function readNativeCaseObligations(options: {
         }
         const reviewed = reviewedBindings?.find(binding => binding.target_id === source.case_id
             && validationDigest(binding.source_identity) === validationDigest(source.source_identity)
-            && binding.case_execution?.scope_content_sha256 === options.scopeContentSha256);
+            && binding.case_execution?.scope_content_sha256 === options.scopeContentSha256
+            && (!requiredCommand || events.some(event => event.integrity?.task_sequence === binding.case_execution?.event_task_sequence
+                && intermediateInvocationIdentity(event.details?.command) === requiredCommand)));
         if (reviewed?.case_execution) {
             const execution = reviewed.case_execution;
             const retained = readValidationFile(options.repoRoot, path.relative(options.repoRoot,

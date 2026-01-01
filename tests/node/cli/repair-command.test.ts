@@ -11,6 +11,7 @@ import {
     runRepairProtectedManifest,
     runRepairRebuildIndexes
 } from '../../../src/cli/commands/repair-command';
+import { appendTaskEvent } from '../../../src/gate-runtime/task-events';
 import { buildEventIntegrityHash } from '../../../src/gate-runtime/timeline/task-events-helpers';
 
 function makeRepairFixture(): { root: string; bundleRoot: string; cleanup: () => void } {
@@ -235,6 +236,45 @@ test('repair rebuild-indexes is dry-run by default and rebuilds only with confir
         assert.equal(fs.existsSync(timelineSummaryPath), true);
         assert.equal(fs.existsSync(reviewsIndexPath), true);
         assert.equal(applied.reviews_index_status, 'updated');
+    } finally {
+        fixture.cleanup();
+    }
+});
+
+test('repair rebuild-indexes recovers a NUL-filled summary only from valid canonical timelines', () => {
+    const fixture = makeRepairFixture();
+    try {
+        const eventsRoot = path.join(fixture.bundleRoot, 'runtime', 'task-events');
+        const summary = path.join(eventsRoot, '.timeline-summary.json');
+        const brokenBytes = Buffer.alloc(11646);
+        // Historical timelines can predate a live full-suite policy. That does not change their bytes.
+        fs.writeFileSync(path.join(fixture.bundleRoot, 'live/config/workflow-config.json'),
+            JSON.stringify({ full_suite_validation: { enabled: true } }));
+        const first = path.join(eventsRoot, 'T-001.jsonl');
+        const second = path.join(eventsRoot, 'T-002.jsonl');
+        appendTaskEvent(fixture.bundleRoot, 'T-001', 'PLAN_CREATED', 'INFO', 'First canonical fixture.', {});
+        const firstBytes = fs.readFileSync(first, 'utf8');
+        fs.writeFileSync(second, '{broken canonical event\n');
+        fs.writeFileSync(summary, brokenBytes);
+
+        runRepairRebuildIndexes(fixture.root, false);
+        assert.deepEqual(fs.readFileSync(summary), brokenBytes);
+        const refused = runRepairRebuildIndexes(fixture.root, true);
+        assert.ok(refused.timeline_summary_failed_tasks.includes('T-002'));
+        assert.deepEqual(fs.readFileSync(summary), brokenBytes);
+        assert.equal(fs.readFileSync(second, 'utf8'), '{broken canonical event\n');
+
+        fs.writeFileSync(second, '');
+        appendTaskEvent(fixture.bundleRoot, 'T-002', 'PLAN_CREATED', 'INFO', 'Second canonical fixture.', {});
+        const secondBytes = fs.readFileSync(second, 'utf8');
+        const applied = runRepairRebuildIndexes(fixture.root, true);
+        assert.deepEqual(applied.timeline_summary_failed_tasks, []);
+        const index = JSON.parse(fs.readFileSync(summary, 'utf8'));
+        assert.deepEqual(Object.keys(index.entries).sort(), ['T-001', 'T-002']);
+        assert.equal(index.entries['T-001'].integrity_status, 'PASS');
+        assert.equal(index.entries['T-002'].integrity_status, 'PASS');
+        assert.equal(fs.readFileSync(first, 'utf8'), firstBytes);
+        assert.equal(fs.readFileSync(second, 'utf8'), secondBytes);
     } finally {
         fixture.cleanup();
     }

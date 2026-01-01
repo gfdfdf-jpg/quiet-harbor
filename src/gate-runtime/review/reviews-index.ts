@@ -1,5 +1,7 @@
 import { countNextStepWork } from '../../core/next-step-measurement';
-import { readInvocationFileContent, readInvocationPathObservation } from '../../core/invocation-file-observation';
+import { observedInvocationValue, readInvocationFileContent, readInvocationPathObservation } from '../../core/invocation-file-observation';
+import { createInvocationReadMemoKey, isInvocationReadObservationActive, memoizeInvocationRead, registerInvocationDependency } from '../../core/invocation-read-observation';
+import { fingerprintObservationData, observeDerivationInput } from '../../core/derivation-observation-recorder';
 import { readNativeRealpath } from '../../core/paths';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -35,6 +37,8 @@ const MAX_COMPRESSED_ARTIFACT_OUTPUT_BYTES = 64 * 1024 * 1024;
 const MAX_REVIEW_ARTIFACT_INPUT_BYTES = 64 * 1024 * 1024;
 const MAX_REVIEWS_INDEX_BYTES = 64 * 1024 * 1024;
 const REVIEW_PATTERN_CACHE_LIMIT = 64;
+const TRANSACTION_OWNERS = createInvocationReadMemoKey<boolean>('review-transaction-owners');
+const CURRENT_REVIEW_ENTRIES = createInvocationReadMemoKey<ReviewsIndexEntry | { nativeFallback: true } | null>('current-review-entries');
 const immutableReviewSnapshotPatternCache = new Map<string, RegExp | null>();
 const immutableReviewArtifactTypePatternCache = new Map<string, RegExp | null>();
 const inProcessReviewTransactionSnapshots = new Map<string, { depth: number; index: ReviewsIndex }>();
@@ -393,15 +397,17 @@ function resolveContainedRegularReviewArtifact(
 ): { artifactPath: string; stat: fs.Stats } | null {
     const artifactPath = path.join(reviewsDir, fileName);
     try {
+        let observed = null;
         if (observeReads) {
             readInvocationPathObservation(reviewsDir);
-            readInvocationPathObservation(artifactPath);
+            observed = readInvocationPathObservation(artifactPath);
         }
-        const stat = fs.lstatSync(artifactPath);
+        const stat = observed ? observedInvocationValue(observed.stat) : fs.lstatSync(artifactPath);
         if (!stat.isFile() || stat.isSymbolicLink()) {
             return null;
         }
-        const reviewsRoot = reviewsRootRealPath || fs.realpathSync(reviewsDir);
+        const reviewsRoot = reviewsRootRealPath || resolveReviewsRootRealPath(reviewsDir, observeReads);
+        if (!reviewsRoot) return null;
         const artifactRealPath = fs.realpathSync(artifactPath);
         // Native directory membership uses the stored filename, including its spelling.
         // Do not accept a case-insensitive alias as an exact catalog entry.
@@ -420,9 +426,10 @@ function resolveContainedRegularReviewArtifact(
     }
 }
 
-function resolveReviewsRootRealPath(reviewsDir: string): string | null {
+function resolveReviewsRootRealPath(reviewsDir: string, observeReads = false): string | null {
     try {
-        return fs.realpathSync(reviewsDir);
+        const observed = observeReads ? readInvocationPathObservation(reviewsDir) : null;
+        return observed ? observedInvocationValue(observed.realPath) : fs.realpathSync(reviewsDir);
     } catch {
         return null;
     }
@@ -958,7 +965,7 @@ export function resolveCanonicalReviewsDirectoryPath(reviewsDir: string): string
     let candidate = resolved;
     while (true) {
         try {
-            return path.join(fs.realpathSync.native(candidate), ...missingSegments);
+            return path.join(readNativeRealpath(candidate), ...missingSegments);
         } catch (error: unknown) {
             const code = (error as NodeJS.ErrnoException)?.code;
             const parent = path.dirname(candidate);
@@ -1013,14 +1020,47 @@ function getInProcessReviewTransactionSnapshot(reviewsDir: string): ReviewsIndex
     return snapshot ? cloneReviewsIndex(snapshot.index) : null;
 }
 
-export function currentProcessOwnsReviewTransactionLock(reviewsDir: string): boolean {
-    const inspection = inspectFilesystemLock(resolveReviewTransactionLockPath(reviewsDir), {
+function inspectReviewTransactionOwnership(lockPath: string) {
+    const inspection = inspectFilesystemLock(lockPath, {
         staleMs: DEFAULT_INDEX_LOCK_STALE_MS
     });
-    return inspection.exists
+    // Ages do not affect ownership; metadata and liveness do.
+    return { exists: inspection.exists, metadata: inspection.metadata,
+        ownerHostMatchesCurrent: inspection.ownerHostMatchesCurrent, ownerAlive: inspection.ownerAlive };
+}
+
+export function currentProcessOwnsReviewTransactionLock(reviewsDir: string): boolean {
+    const lockPath = resolveReviewTransactionLockPath(reviewsDir);
+    const owns = (inspection: ReturnType<typeof inspectReviewTransactionOwnership>) => inspection.exists
         && inspection.metadata.pid === process.pid
         && inspection.ownerHostMatchesCurrent !== false
         && inspection.ownerAlive !== false;
+    // Transactions keep fresh authority reads while they publish. Only read
+    // observations share an inspection, and never retain it across invocations.
+    if (!isInvocationReadObservationActive() || inProcessReviewTransactionSnapshots.has(lockPath)) {
+        return owns(inspectReviewTransactionOwnership(lockPath));
+    }
+    return memoizeInvocationRead(TRANSACTION_OWNERS, lockPath, () => {
+        // A foreign lock can settle before the review generation is acquired.
+        // Only ownership is consumed here. An owner's heartbeat is allowed to
+        // advance while its lock identity and authority stay unchanged.
+        const fingerprint = (inspection: ReturnType<typeof inspectReviewTransactionOwnership>) =>
+            fingerprintObservationData(owns(inspection) ? {
+                lock_id: inspection.metadata.lock_id, pid: inspection.metadata.pid,
+                hostname: inspection.metadata.hostname, created_at_utc: inspection.metadata.created_at_utc,
+                metadata_status: inspection.metadata.metadata_status,
+                ownerHostMatchesCurrent: inspection.ownerHostMatchesCurrent, ownerAlive: inspection.ownerAlive
+            } : false);
+        const inspection = observeDerivationInput('review-transaction-ownership', 1, { path: lockPath },
+            () => inspectReviewTransactionOwnership(lockPath), fingerprint);
+        const originalFingerprint = fingerprint(inspection);
+        registerInvocationDependency(inspection, () => {
+            if (fingerprint(inspectReviewTransactionOwnership(lockPath)) !== originalFingerprint) {
+                throw new Error('Review transaction ownership changed: ' + lockPath);
+            }
+        });
+        return owns(inspection);
+    }).value;
 }
 
 function withIndexUpdateLock<T>(reviewsDir: string, callback: () => T): T {
@@ -1159,10 +1199,10 @@ export function canReadCurrentReviewArtifactEntries(reviewsDir: string, taskId: 
         || inProcessReviewTransactionSnapshots.has(resolveReviewTransactionLockPath(reviewsDir))
         || inProcessTaskIndexReadSnapshots.get(resolveTaskIndexReadSnapshotKey(reviewsDir, safeTaskId))?.index) return false;
     const indexPath = resolveIndexPath(reviewsDir);
-    readInvocationPathObservation(indexPath);
+    const observedPath = readInvocationPathObservation(indexPath);
     if (!fs.existsSync(indexPath)) return true;
     try {
-        const stat = fs.statSync(indexPath);
+        const stat = observedPath ? observedInvocationValue(observedPath.targetStat) : fs.statSync(indexPath);
         if (!stat.isFile() || stat.size !== Buffer.byteLength(EXACT_CURRENT_REVIEW_INDEX_MARKER)) return false;
         const observed = readInvocationFileContent(indexPath, Buffer.byteLength(EXACT_CURRENT_REVIEW_INDEX_MARKER));
         const bytes = observed ? observed.copyBytes() : fs.readFileSync(indexPath);
@@ -1176,7 +1216,7 @@ export function canReadCurrentReviewArtifactEntries(reviewsDir: string, taskId: 
 export function readCurrentReviewArtifactIndexEntry(reviewsDir: string, taskId: string, fileName: string): ReviewsIndexEntry | { nativeFallback: true } | null {
     const safeTaskId = assertCanonicalTaskId(taskId);
     if (!fileName.startsWith(`${safeTaskId}-`) || path.basename(fileName) !== fileName) return null;
-    return withReviewTransactionReadBarrier(reviewsDir, () => {
+    const entry = memoizeInvocationRead(CURRENT_REVIEW_ENTRIES, JSON.stringify([path.resolve(reviewsDir), safeTaskId, fileName]), () => withReviewTransactionReadBarrier(reviewsDir, () => {
         if (!canReadCurrentReviewArtifactEntries(reviewsDir, safeTaskId)) return null;
         readInvocationPathObservation(reviewsDir);
         // Native rebuilding requires directory listing access, not merely access to a named child.
@@ -1190,7 +1230,7 @@ export function readCurrentReviewArtifactIndexEntry(reviewsDir: string, taskId: 
             // Defer to the original catalog rather than turn an uncertain probe into rejection.
             return { nativeFallback: true } as const;
         }
-        const reviewsRootRealPath = resolveReviewsRootRealPath(reviewsDir);
+        const reviewsRootRealPath = resolveReviewsRootRealPath(reviewsDir, true);
         if (!reviewsRootRealPath) return null;
         const authorityFileNames: string[] = [];
         // Only task prefixes of this exact filename can affect collectMatchingTaskIds.
@@ -1212,7 +1252,9 @@ export function readCurrentReviewArtifactIndexEntry(reviewsDir: string, taskId: 
         countNextStepWork('review_index_current_entry');
         return { fileName, taskId: parsed.taskId, artifactType: parsed.artifactType,
             mtimeMs: artifact.stat.mtimeMs, sizeBytes: artifact.stat.size };
-    }, { readOnly: true });
+    }, { readOnly: true })).value;
+    // Public callers may edit their view; the retained entry is invocation-private.
+    return entry ? { ...entry } : null;
 }
 
 function loadTaskIndexUncached(reviewsDir: string, safeTaskId: string): ReviewsIndexLoadResult {

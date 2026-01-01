@@ -47,13 +47,11 @@ describe('full-suite command contract', () => {
         assert.equal(validateFullSuiteCommandContract('').supported, true);
     });
 
-    it('rejects unquoted compound command syntax before execution', () => {
+    it('admits an ordered literal invocation plan without invoking a shell', () => {
         const result = validateFullSuiteCommandContract('node first.js && node second.js');
 
-        assert.equal(result.supported, false);
-        assert.equal(result.provenance.validation_status, 'REJECTED');
-        assert.equal(result.provenance.rejection_reason, 'SHELL_CONTROL_OPERATOR');
-        assert.match(result.violation || '', /trusted wrapper/);
+        assert.equal(result.supported, true);
+        assert.equal(result.provenance.command_descriptor?.invocations.length, 2);
     });
 
     it('rejects other POSIX and Windows-style unquoted shell control operators', () => {

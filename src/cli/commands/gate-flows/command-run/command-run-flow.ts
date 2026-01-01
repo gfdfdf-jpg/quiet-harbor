@@ -37,7 +37,8 @@ import { hasTestFirstExpectedRedDeclaration } from '../../../../gates/test-first
 import { executeCommandAsync, splitCommandLine } from '../../../gate-cli/gates-subprocess';
 import { buildNextStepRecoveryCommand } from '../compile/compile-flow-shared-evidence';
 import { runRecipeCommand } from './recipe-command-flow';
-import { getCurrentIntermediateTestTargets, hasReportedFailedTestCase, isLiteralIntermediateInvocation, observeNativeIntermediateScope } from './intermediate-command-scope';
+import { getCurrentIntermediateTestTargets, isLiteralIntermediateInvocation, observeNativeIntermediateScope } from './intermediate-command-scope';
+import { requiredExpectedRedFiles, isExpectedRedTestScope } from '../../../../gates/test-first/expected-red-scope';
 
 const ALLOWED_COMMAND_SOURCES = ['node-test', 'targeted-test', 'typecheck', 'validation'] as const;
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -341,6 +342,7 @@ function isAllowedIntermediateCommand(command: string, commandSource: Intermedia
 interface ExpectedFailurePreflightBinding {
     preflightSha256: string;
     testScopeSha256: string;
+    preflight: Record<string, unknown>;
 }
 
 function readExpectedFailurePreflightBinding(options: {
@@ -375,9 +377,6 @@ function readExpectedFailurePreflightBinding(options: {
     if (String(preflight.task_id || '').trim() !== options.taskId) {
         throw new Error('--expect-failure preflight task_id must match --task-id.');
     }
-    if (String(preflight.scope_category || '').trim().toLowerCase() !== 'test-only') {
-        throw new Error('--expect-failure requires a current test-only preflight scope.');
-    }
     const taskEntry = readTaskQueueEntries(options.repoRoot).get(options.taskId);
     if (!hasTestFirstExpectedRedDeclaration(taskEntry)) {
         throw new Error('--expect-failure requires the exact TASK.md Notes marker "Test-first: expected-red".');
@@ -390,6 +389,9 @@ function readExpectedFailurePreflightBinding(options: {
     const admission = inspectValidationCommand(options.command, 'test');
     const selection = admission.descriptor
         ? captureIntermediateSelection(options.repoRoot, admission.descriptor, options.selectedCases) : undefined;
+    if (!isExpectedRedTestScope(preflight, options.repoRoot, options.taskId, selection?.cases.map(claim => claim.source))) {
+        throw new Error('--expect-failure requires a current test-only preflight scope: declare every task test/support input and record RED before implementation.');
+    }
     const focusedTestPaths = getCurrentIntermediateTestTargets(
         options.repoRoot, options.command,
         [...changedFiles], selection
@@ -413,6 +415,7 @@ function readExpectedFailurePreflightBinding(options: {
         throw new Error('--expect-failure preflight is missing a valid current scope SHA-256 binding.');
     }
     return {
+        preflight,
         preflightSha256: actualPreflightSha256,
         testScopeSha256
     };
@@ -759,12 +762,15 @@ export async function runIntermediateCommandCommand(
         }
         const outputArtifactSizeBytes = fs.statSync(artifacts.outputPath).size;
         let semanticCandidate = false;
-        if (expectFailure && selectionBinding?.before.cases.length && result.exitCode > 0
+        const redTargets = selectionBinding ? getCurrentIntermediateTestTargets(repoRoot, command,
+            nativeScopeBefore.changed_files, selectionBinding.before) : [];
+        if (expectFailure && selectionBinding && redTargets.length > 0 && result.exitCode > 0
             && !result.timedOut && !result.cancelled && result.invocations?.length === 1
             && !result.terminationSignal && !result.outputTruncated && result.sinkError === undefined
             && result.invocations[0].exitCode === result.exitCode && !result.invocations[0].executionError
             && nativeScopeAfter?.preflight_sha256 === nativeScopeBefore.preflight_sha256
             && nativeScopeAfter?.scope_content_sha256 === nativeScopeBefore.scope_content_sha256
+            && redTargets.every(source => requiredExpectedRedFiles(expectedFailureBinding!.preflight, repoRoot).includes(source))
             && selectionBinding.before.cases.every(claim => nativeScopeBefore.changed_files.includes(claim.source))) {
             try {
                 assertCurrentIntermediateSelection(repoRoot, selectionBinding, selectionBinding.before.sources
@@ -778,7 +784,7 @@ export async function runIntermediateCommandCommand(
                 ? 'FAILED'
                 : result.exitCode === EXIT_SUCCESS
                     ? 'UNEXPECTED_PASS'
-                    : hasReportedFailedTestCase(streamOutput) ? 'EXPECTED_FAILURE' : semanticCandidate ? 'PENDING_REVIEW' : 'FAILED'
+                    : semanticCandidate ? 'PENDING_REVIEW' : 'FAILED'
             : result.exitCode === EXIT_SUCCESS
                 ? 'PASSED'
                 : 'FAILED';
@@ -797,7 +803,7 @@ export async function runIntermediateCommandCommand(
             parserName: 'intermediate-command',
             parserStrategy: status === 'PASSED'
                 ? 'status_summary'
-                : status === 'EXPECTED_FAILURE'
+                : status === 'PENDING_REVIEW'
                     ? 'bounded_expected_failure_tail'
                     : 'bounded_failure_tail',
         });
@@ -865,7 +871,7 @@ export async function runIntermediateCommandCommand(
         const outputLines = [...visibleLines, `OutputTelemetry: ${formatTelemetryLine(telemetry)}`];
         return {
             exitCode: reports?.violations.length ? EXIT_GATE_FAILURE : expectFailure
-                ? (status === 'EXPECTED_FAILURE' || status === 'PENDING_REVIEW' ? EXIT_SUCCESS : EXIT_GATE_FAILURE)
+                ? (status === 'PENDING_REVIEW' ? EXIT_SUCCESS : EXIT_GATE_FAILURE)
                 : result.exitCode,
             outputLines: savingsLine ? [...outputLines, savingsLine] : outputLines,
         };

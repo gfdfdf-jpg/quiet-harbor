@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { readInvocationFileContent, readInvocationTextFile } from '../../core/invocation-file-observation';
 import { isPathRealpathInsideRoot, joinOrchestratorPath } from '../../core/orchestrator-paths';
 import { inspectTaskEventFile } from '../../gate-runtime/task-events';
 import { computeTaskCriteriaBinding, hasTaskCriteriaChanged,
@@ -26,6 +27,23 @@ export function resolveFailedReviewTaskCriteriaChange(options: {
     baselineSha256: string;
     currentTaskIntent: string;
 }): boolean | null {
+    // Reuse the current preflight's lane obligations as well as the new wording. The baseline authenticates
+    // the path; the caller and current review-context contract independently validate the preflight itself.
+    // Missing inputs fail closed when their requirements differ from the recorded binding.
+    let preflight: Record<string, unknown> = {};
+    const preflightPath = options.baseline.bindings?.scope?.preflight_path;
+    if (preflightPath) {
+        const resolved = path.resolve(options.repoRoot, preflightPath);
+        if (!isPathRealpathInsideRoot(resolved, options.repoRoot, { allowMissing: true })) return true;
+        try {
+            const parsed: unknown = JSON.parse(readInvocationTextFile(resolved));
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) preflight = parsed as Record<string, unknown>;
+        } catch { /* The criteria comparison below fails closed for unverifiable requirements. */ }
+    }
+    const snapshot = preflight.effective_review_snapshot;
+    preflight = { ...preflight, task_intent: options.currentTaskIntent,
+        ...(snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)
+            ? { effective_review_snapshot: { ...snapshot, inputs: { task_intent: options.currentTaskIntent } } } : {}) };
     const binding = options.baseline.bindings?.context;
     const contextPathText = String(binding?.review_context_path || '').trim();
     const contextSha256 = String(binding?.review_context_sha256 || '').trim().toLowerCase();
@@ -38,8 +56,9 @@ export function resolveFailedReviewTaskCriteriaChange(options: {
     let bytes: Buffer | null = null;
     if (isPathRealpathInsideRoot(contextPath, options.repoRoot, { allowMissing: false })) {
         try {
-            const current = fs.readFileSync(contextPath);
-            if (createHash('sha256').update(current).digest('hex') === contextSha256) bytes = current;
+            const content = readInvocationFileContent(contextPath);
+            const current = content ? content.copyBytes() : fs.readFileSync(contextPath);
+            if ((content?.sha256 ?? createHash('sha256').update(current).digest('hex')) === contextSha256) bytes = current;
         } catch { /* Try the independently authenticated copy below. */ }
     }
     if (!bytes) {
@@ -74,7 +93,7 @@ export function resolveFailedReviewTaskCriteriaChange(options: {
             if (boundRoutedCriteria && !conflictingCriteria) {
                 try {
                     const current = computeTaskCriteriaBinding({ repoRoot: options.repoRoot, taskId: options.taskId,
-                        preflight: { task_intent: options.currentTaskIntent } });
+                        preflight });
                     return current.sha256 !== boundRoutedCriteria;
                 } catch { return true; }
             }
@@ -94,7 +113,7 @@ export function resolveFailedReviewTaskCriteriaChange(options: {
     if (recorded === undefined) return reviewContextRequiresTaskCriteriaBinding(reviewContext as Record<string, unknown>) ? true : null;
     try {
         const current = computeTaskCriteriaBinding({
-            repoRoot: options.repoRoot, taskId: options.taskId, preflight: { task_intent: options.currentTaskIntent }
+            repoRoot: options.repoRoot, taskId: options.taskId, preflight
         });
         return hasTaskCriteriaChanged(recorded, current);
     } catch {

@@ -179,16 +179,23 @@ test('configuration inside test paths configures the test harness', () => {
     assert.equal(categoryOf('cypress/tsconfig.json'), 'shared_test_helper_or_harness');
 });
 
-test('non-configuration files under src, bin and scripts stay production and unknown files elsewhere stay ambiguous', () => {
-    for (const file of ['src/reports/ui/lang-packs/en.json', 'src/assets/logo.svg', 'bin/garda']) {
+test('reviewable unfamiliar task files use the same generic production fallback as preflight', () => {
+    for (const file of ['src/reports/ui/lang-packs/en.json', 'src/assets/logo.svg', 'bin/garda',
+        'assets/logo.svg', 'components/orders/behavior.qz', 'realm/partners/behavior.neb']) {
         assert.equal(categoryOf(file), 'production', file);
-    }
-    for (const file of ['assets/logo.svg']) {
-        assert.equal(categoryOf(file), 'ambiguous', file);
     }
     assert.equal(categoryOf('Dockerfile'), 'production');
     assert.equal(categoryOf('docs/examples/invoice.ts'), 'global');
     assert.equal(categoryOf('tests/fixtures/workspace/package.json'), 'shared_test_helper_or_harness');
+});
+
+test('generic remediation still requires readable line evidence and rejects symbolic or unreviewable sources', () => {
+    const options = { filePath: 'components/orders/behavior.qz', operation: 'modified' as const, changedLines: 2,
+        lineDeltaUnavailableReason: null, baselineStatus: 'text' as const, currentStatus: 'text' as const,
+        testPathRegexes: DEFAULT_REVIEW_TRIGGER_POLICY.test_path_regexes, structuralPatterns, structuralThreshold: 50 };
+    for (const currentStatus of ['symbolic_link', 'unreviewable'] as const)
+        assert.equal(reviewRemediationDeltaInternals.categorizeFile({ ...options, currentStatus }).category, 'ambiguous');
+    assert.equal(reviewRemediationDeltaInternals.categorizeFile({ ...options, changedLines: null }).category, 'ambiguous');
 });
 
 test('helper-named production folders stay production while test helpers keep their structural category', () => {

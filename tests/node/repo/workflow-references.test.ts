@@ -31,7 +31,7 @@ function runValidator(root: string) {
 test('repository workflow references match reviewed immutable pins', () => {
     const result = runValidator(getRepoRoot());
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /WORKFLOW_REFERENCES_VALID: 6 workflows, \d+ references/u);
+    assert.match(result.stdout, /WORKFLOW_REFERENCES_VALID: 7 workflows, \d+ references/u);
 });
 
 test('validator accepts local reusable workflows and pinned nested reusable calls', () => {

@@ -21,7 +21,7 @@ const GIT_TREE_METADATA_MIN_BUFFER_BYTES = 1024 * 1024;
 const GIT_TREE_METADATA_BYTES_PER_REQUEST = 512;
 const GIT_TREE_BATCH_MAX_BUFFER_BYTES = 256 * 1024 * 1024;
 
-class GitCommandError extends Error {
+export class GitCommandError extends Error {
     constructor(args: readonly string[], cause: unknown) {
         const message = cause instanceof Error ? cause.message : String(cause);
         super(`git ${args.join(' ')} failed: ${message}`, { cause });

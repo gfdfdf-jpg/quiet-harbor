@@ -13,7 +13,7 @@ Non-selected entrypoint files must only redirect to the selected source-of-truth
 2. Read only the linked rule files required for the current task.
 3. Avoid loading unrelated rule files to save context and tokens.
 4. Use compact command protocol from `40-commands.md`: first `scan`, then `inspect`, then verbose `debug` only by exception.
-5. The `40-commands.md` restraint applies only to standalone ad-hoc commands. It does NOT exempt mandatory gates: gates like `compile-gate` and `full-suite-validation` must execute their underlying build/test/type-check commands when the workflow requires them. See `00-core.md` § Mandatory Infrastructure Integrity.
+5. The `40-commands.md` restraint applies only to standalone ad-hoc commands. It does NOT exempt mandatory gates: gates like `compile-gate` and `task-test-validation` must execute their underlying build/test/type-check commands when the workflow requires them. See `00-core.md` § Mandatory Infrastructure Integrity.
 
 ## Hard Stop For Task Execution
 - Not every request is a task: answer questions, explanations, reviews of existing code, read-only commands, status checks and Garda setup (`agent-init`) directly, without a `TASK.md` row or task mode. Change code or config only through task mode for a `TASK.md` row that already exists or that the user explicitly asks to add. If a change is needed and no row matches, propose a row (ID, title, scope) or a `CAND-<number>` candidate and wait for the user's decision; never add a row and enter it without that decision. Rows that Garda materializes itself when next-step instructs (required review follow-ups through `materialize-review-follow-up-tasks`, linked repair children) are part of the approved work: create them without asking.

@@ -1,7 +1,7 @@
 import { isAuthenticatedReviewRestartBoundary } from '../review/review-restart-boundary';
 import { isInvocationReadObservationActive } from '../../core/invocation-read-observation';
 import { countNextStepWork } from '../../core/next-step-measurement';
-import { cloneJson } from '../../core/immutable-json';
+import { cloneJson, cloneFrozenJson } from '../../core/immutable-json';
 import { normalizePath } from '../../core/orchestrator-paths';
 import { isPlainRecord } from '../../core/records';
 
@@ -12,7 +12,7 @@ interface Row { event: Event; ordinal: number; startByte: number; sequence: numb
 interface WitnessLink { row: Row; references: number; previous: WitnessLink | null; next: WitnessLink | null }
 interface State {
     count: number; bytes: number; exact: Map<number, Row>; sha: Map<string, Row>;
-    latest: Map<string, Row>; lanes: Map<string, Row>; prepared: Map<string, Row>;
+    latest: Map<string, Row>; normalizedLatest: Map<string, Row>; lanes: Map<string, Row>; prepared: Map<string, Row>;
     reused: Map<string, Row>; routing: Map<string, Row>; attestations: Map<string, Row[]>; launchPrepared: Map<string, Row[]>; telemetry: Map<string, Row[]>; artifactBindings: Map<string, Row[]>;
     preflight: Map<string, Row>; prefix: Record<string, Row | undefined>; first: Map<string, Row>;
     split: Row[]; last: Row | null;
@@ -63,7 +63,7 @@ function replacePreflightWitness(s: State, name: string, row: Row): void {
 }
 
 export function beginRouteVerifiedPass() {
-    const s: State = { count: 0, bytes: 0, exact: new Map(), sha: new Map(), latest: new Map(),
+    const s: State = { count: 0, bytes: 0, exact: new Map(), sha: new Map(), latest: new Map(), normalizedLatest: new Map(),
         lanes: new Map(), prepared: new Map(), reused: new Map(), routing: new Map(), attestations: new Map(), launchPrepared: new Map(), telemetry: new Map(), artifactBindings: new Map(),
         preflight: new Map(), prefix: {}, first: new Map(), split: [], last: null,
         coherentRestarts: new Map(), laneRestarts: new Map(), allLaunchPrepared: [], launchInputPins: new Map(),
@@ -87,6 +87,7 @@ export function beginRouteVerifiedPass() {
             const details = isPlainRecord(event.details) ? event.details : {};
             s.exact.set(sequence, row); s.sha.set(lower(integrity.event_sha256), row);
             s.latest.set(type, row);
+            s.normalizedLatest.set(normalized, row);
             if (type) retainWitness(s, row);
             if (s.last && text(s.last.event.event_type)) releaseWitness(s, s.last);
             s.last = row;
@@ -202,6 +203,11 @@ export function routeLatestSequence(query: TaskRouteQuery, types: readonly strin
     }
     return latest;
 }
+/** Preflight recovery uses the normalized event type and the full verified timeline. */
+export function routeLatestNormalizedSequence(query: TaskRouteQuery, type: string): number | null {
+    countNextStepWork('visit:route_query_requested_type');
+    return state(query).normalizedLatest.get(type)?.sequence ?? null;
+}
 export function routeExactEvent(query: TaskRouteQuery, sequence: number, sha256: string): Event | null {
     const row = state(query).exact.get(sequence);
     return row && lower((row.event.integrity as Record<string, unknown>).event_sha256) === sha256 ? row.event : null;
@@ -239,27 +245,34 @@ export function routeHasBoundedEvents(query: TaskRouteQuery): boolean {
     const s = state(query); return bounded(s, s.last ?? undefined);
 }
 export interface RouteOrderedEvent {
-    event_type: string; outcome?: string; timestamp_utc: string; sequence: number;
+    event_type: string; task_id?: string; actor?: string; outcome?: string; timestamp_utc: string; sequence: number;
     details: Record<string, unknown> | null;
     integrity: { schema_version: number; task_sequence: number; prev_event_sha256: string | null; event_sha256: string };
 }
-function ordered(row: Row): RouteOrderedEvent {
+function ordered(row: Row, immutableDetails = false): RouteOrderedEvent {
     countNextStepWork('visit:route_query_ordered_witness');
     const event = row.event, integrity = event.integrity as Record<string, unknown>;
-    return { event_type: text(event.event_type).toUpperCase(), outcome: text(event.outcome).toUpperCase() || undefined,
+    return { event_type: text(event.event_type).toUpperCase(), task_id: text(event.task_id) || undefined, actor: text(event.actor) || undefined,
+        outcome: text(event.outcome).toUpperCase() || undefined,
         timestamp_utc: text(event.timestamp_utc), sequence: row.ordinal,
-        details: isPlainRecord(event.details) ? cloneJson(event.details) : null,
+        details: isPlainRecord(event.details) ? (immutableDetails ? cloneFrozenJson(event.details) : cloneJson(event.details)) : null,
         integrity: { schema_version: Number(integrity.schema_version), task_sequence: row.sequence,
             prev_event_sha256: integrity.prev_event_sha256 == null ? null : lower(integrity.prev_event_sha256) || null,
             event_sha256: lower(integrity.event_sha256) } };
 }
-export function routePreflightWitnesses(query: TaskRouteQuery): RouteOrderedEvent[] {
+export function routePreflightWitnesses(query: TaskRouteQuery, includeUnrelatedTail = true): RouteOrderedEvent[] {
     const selected: RouteOrderedEvent[] = [];
-    for (let link = state(query).witnessHead; link; link = link.next) selected.push(ordered(link.row));
+    const s = state(query);
+    for (let link = s.witnessHead; link; link = link.next) {
+        // Navigation predicates use only the retained preflight facts. An INFO-only last row has no
+        // role in their relative order; the public query keeps its original complete tail witness.
+        if (!includeUnrelatedTail && link.row === s.last && link.references === 1) continue;
+        selected.push(ordered(link.row, !includeUnrelatedTail));
+    }
     return selected;
 }
 export function routeSplitWitnesses(query: TaskRouteQuery): RouteOrderedEvent[] {
-    return state(query).split.map(ordered);
+    return state(query).split.map(row => ordered(row));
 }
 
 // Bind only the native immutable parser entry view, never arbitrary mutable public arrays.

@@ -18,6 +18,7 @@ export interface ReviewReceipt {
     review_execution_complete_scope_lineage_sha256?: string | null;
     review_execution_finding_reconciliation_sha256?: string | null;
     review_context_reuse_sha256?: string | null;
+    task_criteria_binding_sha256?: string | null;
     review_coverage_contract_sha256?: string | null;
     review_rule_context_sha256?: string | null;
     review_lane_binding_sha256?: string | null;
@@ -340,6 +341,7 @@ export function buildReviewReceipt(options: {
     reviewExecutionCompleteScopeLineageSha256?: string | null;
     reviewExecutionFindingReconciliationSha256?: string | null;
     reviewContextReuseSha256?: string | null;
+    taskCriteriaBindingSha256?: string | null;
     reviewCoverageContractSha256?: string | null;
     reviewRuleContextSha256?: string | null;
     reviewArtifactSha256: string | null;
@@ -377,6 +379,7 @@ export function buildReviewReceipt(options: {
         review_execution_finding_reconciliation_sha256:
             options.reviewExecutionFindingReconciliationSha256 ?? null,
         review_context_reuse_sha256: options.reviewContextReuseSha256 ?? null,
+        task_criteria_binding_sha256: options.taskCriteriaBindingSha256 ?? null,
         review_artifact_sha256: options.reviewArtifactSha256,
         reviewer_execution_mode: options.reviewerExecutionMode ?? null,
         reviewer_identity: options.reviewerIdentity ?? null,

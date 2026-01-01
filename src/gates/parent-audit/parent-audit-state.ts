@@ -1,10 +1,11 @@
-import { isTaskQueueDoneStatus } from '../../core/active-task-state';
+import { isTaskQueueActiveStatus, isTaskQueueDoneStatus } from '../../core/active-task-state';
+import { assertFullSuiteRepairParentWipPreserved } from './parent-audit-full-suite-wip';
 import { joinOrchestratorPath } from '../../core/orchestrator-paths';
 import { withTaskTimelineReadSnapshot } from '../../gate-runtime/task-events';
 import { captureTaskTimelineReadSnapshotSha256, assertTaskTimelineReadSnapshotCurrent } from '../../gate-runtime/timeline/task-timeline-read-snapshot';
 import { isDeepStrictEqual } from 'node:util';
 import { parentRecordDigest, readParentEvents } from './parent-audit-auth';
-import { parentEventHash, readParentCompletionContract, readParentQueue, readParentRecordedReview } from './parent-audit-contract';
+import { parentEventHash, readParentCompletionContract, readParentCompletionContractSnapshot, readParentQueue, readParentRecordedReview } from './parent-audit-contract';
 import { captureParentSource, readAcceptedParentChildren, assertParentWipPreserved } from './parent-audit-graph';
 import { readAcceptedParentAuditResult } from './parent-audit-evidence';
 import { readParentAuditFollowUp } from './parent-audit-follow-up';
@@ -30,16 +31,24 @@ export function inspectParentCompletion(root: string, taskId: string): ParentCom
             };
             assertCurrent();
             scope.rechecks.push(() => withTaskTimelineReadSnapshot(joinOrchestratorPath(root, 'runtime/task-events'), taskId, assertCurrent));
-            if (result.ready) scope.proofRechecks.push(() => withTaskTimelineReadSnapshot(joinOrchestratorPath(root, 'runtime/task-events'), taskId,
+            if (result.ready || result.implementationPending) scope.proofRechecks.push(() => withTaskTimelineReadSnapshot(joinOrchestratorPath(root, 'runtime/task-events'), taskId,
                 () => assertParentInspectionCurrent(root, taskId, snapshot)));
         }
         return result;
-    }), result => result?.ready === true);
+    }), result => result?.ready === true || result?.implementationPending === true);
 }
 
 function assertParentInspectionCurrent(root: string, taskId: string, snapshot: NonNullable<ReturnType<typeof inspectParentCompletionSnapshot>>): void {
-    const result = snapshot.inspection, contract = readParentCompletionContract(root, taskId);
+    const result = snapshot.inspection, authenticated = readParentCompletionContractSnapshot(root, taskId);
+    const contract = authenticated?.contract;
     if (!contract || !isDeepStrictEqual(contract, result.contract)) throw new Error('Parent completion contract changed during qualification.');
+    if (result.implementationPending) {
+        if (!restoredImplementationPending(root, contract, authenticated!.events)
+            || !isDeepStrictEqual(readAcceptedParentChildren(root, contract), result.childSources)) {
+            throw new Error('Restored parent implementation prerequisites changed during qualification.');
+        }
+        return;
+    }
     assertParentWipPreserved(root, contract);
     if (!contract.policy.audit_enabled) {
         if (!automaticFailuresResolved(root, contract, result.childSources)) throw new Error('Parent original failure resolution changed during qualification.');
@@ -48,6 +57,21 @@ function assertParentInspectionCurrent(root: string, taskId: string, snapshot: N
         throw new Error('Parent aggregate result or correction changed during qualification.');
     }
     if (!isDeepStrictEqual(captureParentSource(root), snapshot.source)) throw new Error('Parent Git source changed during qualification.');
+}
+
+/** A phase choice, never a PASS proof. Only a native restore can resume the
+ * parent's ordinary gates. Once SOURCE is recorded, aggregate acceptance owns
+ * continuation again; a handwritten DONE row cannot provide either authority. */
+function restoredImplementationPending(root: string, contract: ParentCompletionContract, events: readonly Record<string, unknown>[]): boolean {
+    if (events.some(event => event.event_type === 'DECOMPOSED_PARENT_COMPLETED')) return false;
+    const restored = events.reduce((latest, event, index) => event.event_type === 'FULL_SUITE_REPAIR_WIP_RESTORED' && event.outcome === 'PASS' ? index : latest, -1);
+    if (restored < 0 || events.some((event, index) => index > restored && event.event_type === 'TASK_SOURCE_COMMIT_ACCEPTED')) return false;
+    // SOURCE already ended the implementation phase above. Only a candidate
+    // resumed implementation needs another queue-status read; aggregate audit
+    // still validates its canonical queue and every SOURCE/validation proof.
+    const entry = readParentQueue(root).entries.get(contract.task_id);
+    if (!isTaskQueueActiveStatus(entry?.status ?? null) && !isTaskQueueDoneStatus(entry?.status ?? null)) return false;
+    return assertFullSuiteRepairParentWipPreserved(root, contract, events);
 }
 
 function readCurrentChildValidationEvents(root: string, taskId: string): Record<string, unknown>[] {
@@ -90,14 +114,20 @@ function inspectParentCompletionSnapshot(root: string, taskId: string): {
 } | null {
     const key = root + '\0' + taskId;
     if (inspecting.has(key)) throw new Error('Cyclic parent acceptance graph.');
-    const contract = readParentCompletionContract(root, taskId);
-    if (!contract) return null;
+    const authenticated = readParentCompletionContractSnapshot(root, taskId);
+    if (!authenticated) return null;
+    const contract = authenticated.contract;
     inspecting.add(key);
     try {
         const inspection: ParentCompletionInspection = { contract, contractSha256: parentRecordDigest(contract), childSources: [],
             ready: false, result: null, followUpTaskId: null, violations: [] };
         let source: ReturnType<typeof captureParentSource> | null = null;
         try {
+            if (restoredImplementationPending(root, contract, authenticated.events)) {
+                inspection.childSources = readAcceptedParentChildren(root, contract);
+                inspection.implementationPending = true;
+                return { inspection, source };
+            }
             source = captureParentSource(root);
             inspection.childSources = readAcceptedParentChildren(root, contract);
             assertParentWipPreserved(root, contract);
@@ -148,6 +178,7 @@ export function readRegisteredParentObligations(root: string, taskId: string): N
     if (!inspection.ready) violations.push('Parent awaits its accepted aggregate result or grouped correction.');
     if (!isTaskQueueDoneStatus(facts.taskStatus) || !facts.completion) violations.push('Parent awaits gate-owned DONE publication.');
     return { status: violations.length ? 'BLOCKED' : 'QUALIFIED',
+        implementationPending: inspection.implementationPending === true,
         native: { facts, requirements: { status: 'REQUIRES_PROOF', childTaskIds: children, requiredProofs: required,
             historicalFailures: inspection.contract.unresolved_failures, violations }, childSources: inspection.childSources },
         qualifiedProofs: violations.length ? [] : required, violations };

@@ -2,6 +2,8 @@ import { readTaskTimelineRouteQuery } from '../../gate-runtime/timeline/task-eve
 import { routeInvocationCandidates, bindRouteEntryView, routeQueryForEntries, routeEventIndexBySha, routePreparedLaunchIndices, routeArtifactBindingIndices, routeLaunchDiscoveryIndices, routeLaunchInputPinIndices, routeLatestLaneEvent } from '../../gate-runtime/timeline/task-route-query';
 import { countNextStepWork } from '../../core/next-step-measurement';
 import * as path from 'node:path';
+import { readReviewArtifactFileSha256 } from '../../gate-runtime/review-artifacts';
+import { lstatFileIdentitySync } from '../../core/file-stat';
 import { readAuthenticatedCompileReplay } from '../review/review-artifact-recovery';
 import { hasReviewerOutputCopy } from '../review/review-output-copy';
 
@@ -68,6 +70,13 @@ import { withNextStepReviewEvidenceSnapshot } from './next-step-review-timeline-
 export {
     getDelegatedReviewRoutingShaAfterCompile
 } from './next-step-reviewer-launch-evidence-telemetry';
+
+function reviewerArtifactSha256(filePath: string): string | null {
+    try {
+        if (!lstatFileIdentitySync(filePath).isFile()) return null;
+        return readReviewArtifactFileSha256(filePath);
+    } catch { return null; }
+}
 
 export interface CurrentReviewerLaunchArtifactEvidence {
     state: DelegatedReviewLaunchArtifactState;
@@ -928,7 +937,7 @@ function getCurrentReviewerLaunchArtifactEvidenceForInvocationFromSnapshot(
                     recordedResultUnauthenticated = fileSha256(state.receiptPath) !== receiptPin;
                 }
             }
-            if (artifactState === 'delegation_started' && reviewOutputPath && !fileExists(reviewOutputPath)) {
+            if (artifactState === 'delegation_started' && reviewOutputPath && !reviewerArtifactSha256(reviewOutputPath)) {
                 if (hasControllerResumeAfterSequence(lines, matchingDelegationStarted?.taskSequence ?? null)) {
                     artifactState = 'orphaned';
                     orphanedReason = 'controller_resume_after_delegation_start_with_missing_review_output';
@@ -936,9 +945,9 @@ function getCurrentReviewerLaunchArtifactEvidenceForInvocationFromSnapshot(
             } else if (
                 artifactState === 'launched'
                 && reviewOutputPath
-                && !fileExists(reviewOutputPath)
                 // A present report or receipt that the recorded result does not authenticate is lost, like a missing one.
                 && (!(state.artifactExists && state.receiptExists) || recordedResultUnauthenticated)
+                && !reviewerArtifactSha256(reviewOutputPath)
                 && !(Number.isFinite(Date.parse(getArtifactStringField(launchArtifact, 'review_output_source_mtime_utc')))
                     && typeof launchArtifact.review_output_source_mtime_ms === 'number'
                     && Number.isFinite(launchArtifact.review_output_source_mtime_ms)
@@ -1027,7 +1036,6 @@ function getCurrentReviewerLaunchArtifactEvidenceForInvocationFromSnapshot(
             ) {
                 continue;
             }
-            const launchInputExists = fileExists(authenticatedInputPin.path);
             const controlInputArtifactSha256 = getArtifactStringField(
                 launchArtifact,
                 'reviewer_launch_input_artifact_sha256',
@@ -1046,13 +1054,10 @@ function getCurrentReviewerLaunchArtifactEvidenceForInvocationFromSnapshot(
             if (controlInputArtifactSha256 !== authenticatedInputPin.sha256
                 || controlInputPinnedEventSha256 !== authenticatedInputPin.eventSha256
                 || controlInputPinnedEventTaskSequence !== authenticatedInputPin.eventTaskSequence) continue;
-            if (!launchInputExists) {
-                const lostLaunchInput = unfinishedAttemptWithLostLaunchInput();
-                if (lostLaunchInput) return lostLaunchInput;
-                continue;
-            }
             launchInputArtifactPath = authenticatedInputPin.path;
-            launchInputArtifactSha256 = fileSha256(authenticatedInputPin.path);
+            // This is a hash-pinned reviewer artifact, not a timeline. The artifact reader
+            // rejects redirected/non-file inputs and retains byte/identity freshness.
+            launchInputArtifactSha256 = reviewerArtifactSha256(authenticatedInputPin.path);
             if (!launchInputArtifactSha256 || launchInputArtifactSha256 !== authenticatedInputPin.sha256) {
                 const lostLaunchInput = unfinishedAttemptWithLostLaunchInput();
                 if (lostLaunchInput) return lostLaunchInput;

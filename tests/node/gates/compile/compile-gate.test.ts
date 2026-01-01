@@ -7,6 +7,8 @@ import {
     getCompileCommands,
     getCompileCommandContractHints,
     validateCompileGateCommand,
+    retainedTaskCompileDeclaration,
+    taskCompileDeclaration,
     getOutputStats,
     getWorkspaceSnapshot,
     extractNewPathFromNumstat
@@ -18,6 +20,38 @@ import { UNCONFIGURED_COMPILE_GATE_COMMAND } from '../../../../src/core/constant
 import { initGitRepo, runGitFixtureCommand } from '../git-fixtures';
 
 describe('gates/compile-gate', () => {
+    it('refuses a task-local substitute for configured mandatory compilation, including after refresh', () => {
+        const configured = 'mvn -q compile';
+        const substitute = 'opaque-compiler other/module';
+        assert.throws(() => taskCompileDeclaration(substitute, undefined, configured), /configured mandatory compile command.*mvn -q compile/iu);
+        assert.deepEqual(taskCompileDeclaration(configured, undefined, configured), { kind: 'command', command: configured });
+        assert.deepEqual(taskCompileDeclaration(substitute, undefined, null), { kind: 'command', command: substitute });
+        const native = { actor: 'gate', event_type: 'COMPILE_GATE_PASSED', integrity: { task_sequence: 10 }, details: {
+            compile_command_source: 'task_local', compile_declaration: { kind: 'command', command: substitute } } };
+        const refreshed = [native, { actor: 'gate', event_type: 'PREFLIGHT_CLASSIFIED' }];
+        // Refresh must validate against the current configured command as well.
+        assert.throws(() => retainedTaskCompileDeclaration(refreshed, configured), /configured mandatory compile command/iu);
+        assert.deepEqual(retainedTaskCompileDeclaration(refreshed, substitute), { kind: 'command', command: substitute });
+        assert.deepEqual(retainedTaskCompileDeclaration(refreshed, null), { kind: 'command', command: substitute });
+    });
+
+    it('retains a native task compile declaration across coherent refreshes without reusing success', () => {
+        const declaration = { kind: 'command', command: 'opaque-compiler product/behavior.zsrc' };
+        const native = { actor: 'gate', event_type: 'COMPILE_GATE_PASSED', integrity: { task_sequence: 10 }, details: {
+            compile_command_source: 'task_local', compile_declaration: declaration } };
+        const refreshed = [native, { actor: 'gate', event_type: 'TASK_MODE_ENTERED' }, { actor: 'gate', event_type: 'PREFLIGHT_CLASSIFIED' }];
+        assert.deepEqual(retainedTaskCompileDeclaration(refreshed), declaration);
+        assert.deepEqual(retainedTaskCompileDeclaration([{ ...native, event_type: 'COMPILE_GATE_FAILED' }]), declaration,
+            'A declaration can be retried; its result is never reused');
+        for (const event_type of ['TASK_RESET', 'TASK_DISCARDED'])
+            assert.equal(retainedTaskCompileDeclaration([...refreshed, { actor: 'gate', event_type }]), null);
+        assert.equal(retainedTaskCompileDeclaration([{ ...native, actor: 'agent' }]), null);
+        assert.equal(retainedTaskCompileDeclaration([{ ...native, integrity: undefined }]), null, 'Unsigned legacy prefixes cannot declare a command');
+        assert.equal(retainedTaskCompileDeclaration([native, { ...native, details: {} }]), null);
+        assert.throws(() => retainedTaskCompileDeclaration([{ ...native, details: {
+            compile_command_source: 'task_local', compile_declaration: { kind: 'command', command: 'opaque | other' } } }]));
+    });
+
     it('uses the configured compile purpose consistently for known and opaque task names', () => {
         for (const command of ['gradle build', 'loom build', 'mvn package', 'proof-driver --stage package']) {
             assert.doesNotThrow(() => validateCompileGateCommand(command, 'configured compile slot', {

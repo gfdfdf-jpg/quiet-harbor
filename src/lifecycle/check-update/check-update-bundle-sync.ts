@@ -28,6 +28,7 @@ import {
 import { assertNoRuntimeLocksBeforeUpdateApply } from '../lock/runtime-lock-preflight';
 import { withLifecycleRuntimeMutationGenerationAsync } from '../runtime-mutation-generation';
 import { traceUpdateProgress } from '../update/update-progress';
+import { assertManualSelectorMigrationReady } from '../update/manual-selector-preflight';
 import { NODE_COMPILE_CACHE_UPDATE_BUDGET_MS, pruneNodeCompileCache } from '../runtime-policy/node-compile-cache-maintenance';
 import { createLifecycleDiagnosticError } from '../update/update-diagnostics';
 import { getAgentInitializationReadinessSnapshot } from '../../validators/status';
@@ -636,6 +637,7 @@ async function applyAvailableUpdateUnjournaled(options: ApplyAvailableUpdateOpti
                     initAnswersPath
                 );
             }
+            assertManualSelectorMigrationReady(normalizedTarget, deployedBundleRoot, source.sourceRoot);
         }
 
         const sourceSyncItems = collectExistingSourceSyncItems(source.sourceRoot);

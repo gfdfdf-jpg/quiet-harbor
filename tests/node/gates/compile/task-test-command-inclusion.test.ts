@@ -87,14 +87,18 @@ test('Maven execution proof accepts a fresh executed class and refuses missing, 
         fs.mkdirSync(path.dirname(report), { recursive: true });
         fs.writeFileSync(report, '<testsuite><testcase classname="example.StatusTest" name="old"/></testsuite>');
         for (const outcome of ['stale', 'missing', 'skipped', 'foreign', 'runs'] as const) {
+            // Establish a real before observation after deletion: Windows file tunneling can
+            // otherwise preserve the deleted file's birth time and make the next write ambiguous.
+            if (!fs.existsSync(report)) fs.writeFileSync(report, '<testsuite><testcase classname="example.StatusTest" name="before"/></testsuite>');
             const start = startTaskTestExecutionProof(root, command, [target]);
-            await new Promise(resolve => setTimeout(resolve, 5));
+            await new Promise(resolve => setTimeout(resolve, 20));
             if (outcome === 'missing') fs.rmSync(report, { force: true });
             else if (outcome !== 'stale') fs.writeFileSync(report,
                 `<testsuite><testcase classname="${outcome === 'foreign' ? 'example.OtherTest' : 'example.StatusTest'}" name="${outcome}">${outcome === 'skipped' ? '<skipped/>' : ''}</testcase></testsuite>`);
             const proof = completeTaskTestExecutionProof(root, start);
-            assert.equal(proof.violations.length, outcome === 'runs' ? 0 : 1, outcome);
-            assert.equal(proof.reports.length, outcome === 'runs' ? 1 : 0, outcome);
+            assert.equal(proof.violations.length === 0, outcome === 'runs', outcome);
+            if (outcome === 'skipped') assert.match(proof.violations.join(' '), /skipped, failed or errored/u);
+            assert.equal(proof.reports.length, ['runs', 'skipped', 'foreign'].includes(outcome) ? 1 : 0, outcome);
             if (proof.reports.length) assert.match(proof.reports[0].start.anchor.identity.path, /(?:^|\/)runtime\/validation-output\/task-test-proof-/u);
             assert.equal(taskTestExecutionProofSatisfied(command, [target], proof.reports), outcome === 'runs', outcome);
             assert.equal(taskTestExecutionProofSatisfied(command, [target], undefined), false);
@@ -127,12 +131,12 @@ test('Maven root and arbitrarily nested modules bind fresh Surefire and Failsafe
                 fs.rmSync(report);
             }
             fs.writeFileSync(path.join(root, target), 'package wrong; class StatusTest {}');
-            assert.throws(() => startTaskTestExecutionProof(root, command, [target]), /Ambiguous Maven class layout.*supported runner/u);
+            assert.deepEqual(startTaskTestExecutionProof(root, command, [target]), [], 'An inconclusive adapter falls back to generic execution.');
         }
         const ambiguous = 'src/test/java/nested/src/test/java/example/StatusTest.java';
         fs.mkdirSync(path.dirname(path.join(root, ambiguous)), { recursive: true });
         fs.writeFileSync(path.join(root, ambiguous), 'package example; class StatusTest {}');
-        assert.throws(() => startTaskTestExecutionProof(root, command, [ambiguous]), /Cannot prove Maven execution.*supported test runner/u);
+        assert.deepEqual(startTaskTestExecutionProof(root, command, [ambiguous]), []);
         assert.equal(taskTestExecutionProofSatisfied(command, [ambiguous], []), false);
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

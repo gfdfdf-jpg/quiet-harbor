@@ -1,0 +1,3611 @@
+{
+  "schema_version": 1,
+  "concept_source": "docs/stand/concept-rules.md",
+  "checks": [
+    {
+      "id": "stand-units",
+      "kind": "suite",
+      "run": "stand-unit",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/synthetic/reference-stand-unit.test.ts",
+      "tests": [
+        "short and legacy sample select identical representative walks; full stays explicit",
+        "contract parts select each case once without matching the file ancestor, and include future literal cases",
+        "every timing checkpoint names an executable scenario and every required family has a checkpoint",
+        "short permits inconclusive timing while full and measured timing failures stay red",
+        "counter failures and known review findings remain failures in the consolidated report",
+        "nearest-rank p95, even median and relative/absolute growth limits are exact",
+        "a failed-execution checkpoint cannot be covered by the earlier initial selection",
+        "the timing boundary executes five warmups and retains all 100 calls; a mutation invalidates the entire series",
+        "checkpoint identities preserve target bytes/history and detect undeclared resolver writes",
+        "baseline edits require an explicit written decision and retain previous evidence",
+        "an empty/unquiet timing candidate cannot be accepted; existing source expectations are sealed",
+        "resume identity refuses changed protocol, source, fixture or environment",
+        "format-only baseline decisions preserve every value and cannot accept timing measurements",
+        "timing resume preserves completed failures and invalid attempts instead of retrying until green",
+        "measured child input shapes inherit accepted ceilings without changing the parent",
+        "counter input-shape inheritance rejects cycles and unknown parents",
+        "new measured input profiles require native planning, four-lane preflight or parent split facts"
+      ]
+    },
+    {
+      "id": "fixture-controls",
+      "kind": "suite",
+      "run": "fixture-contract",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/synthetic/synthetic-stack-fixtures.test.ts",
+      "tests": [
+        "matrix has nine distinct task specifications on 19 real project shapes, plus every declared adapter peer",
+        "stack calibration preserves every legacy budget and needs native task admission",
+        "all fixture runners execute only their declared own targets and validate the scripted source patch",
+        "every stack case mapping is admitted by native literal intermediate-source binding",
+        "A3 selects two components, and both polyglot combinations require two technologies in one task",
+        "own failure requires a source repair, and opaque RED precedes implementation on unchanged tests",
+        "reviewer RED quotes a real own failure and GREEN keeps the same test bytes",
+        "A9 child answers and case evidence stay inside the child component",
+        "fake-runner negative controls expose no-op, ignored selectors, stale reports, zero/skipped cases, dropped modules and report disagreement",
+        "wrong module/filter is refused; generic opaque evidence needs no recognized PASS token",
+        "runner cwd is bound to the declared repository root",
+        "adapter PASS cannot be weaker; missing peers are explicitly incomplete",
+        "resume identity seals runner bytes, manifests, task specifications, mode and oracle version",
+        "legacy descriptor retains exact Node files and opaque gate-tour declares every required native route"
+      ]
+    },
+    {
+      "id": "economy-units",
+      "kind": "suite",
+      "run": "economy",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/synthetic/synthetic-walk-economy.test.ts",
+      "tests": [
+        "a review repeats only when a rule says so: untouched, not yet run and in-flight lanes are not launched again",
+        "a small production fix repeats reached passed reviews in DELTA, and a test fix repeats only the test review",
+        "the fix size comes from the edit, the reviewed scope and the delta history, not from the observed run",
+        "only documents changed: nothing repeats, even a review waiting to be recorded",
+        "changed criteria run everything FULL, once per lane; DELTA where FULL is required is not economy",
+        "lost lane evidence repeats only that lane and its dependents, the shape of the route-248 defect",
+        "a broken report of an open reviewer costs no new launch, a lost one repeats that lane",
+        "a finished review not yet recorded counts as passed: the edit after it follows the fix rules (operator answer 1)",
+        "lost task evidence repeats no review (operator answer 2), a reset repeats every review that ran (answer 4)",
+        "an edit with lost evidence repeats only that review in FULL; the edit follows the rules for the others (operator answer 3)",
+        "with an edit, a review depending on the lost one follows the edit rules, not the lost-evidence rule (operator answer 3)",
+        "a review the rules require to repeat is a missed-review finding when the run keeps it",
+        "a required review that has not run must launch in FULL after an ordinary disturbance",
+        "changed criteria require FULL repeats of the lanes still required at DONE",
+        "an edit still requires a reached lane when its derived evidence or stale receipt is lost",
+        "a lane the baseline never reviewed runs once in FULL only when the change can require it",
+        "DELTA and unknown launches are safety findings whenever FULL is required, including planned launches",
+        "new sweep edits reach the right lanes, protected owner and scope-expansion bounds",
+        "operator stops are rejected for routine disturbances and blocked launches remain judged",
+        "a code-review safety floor accepts only its actual refusal and both named ways out",
+        "only lost launch authority with an exact reset handoff is an honest lane-owned stop",
+        "lost startup evidence before preflight cannot be hidden by an operator reset",
+        "only an edit after the current passed review gate receives modeled user approval",
+        "an early injected edit does not replace the task's still-pending implementation",
+        "policy recovery follows the navigator adoption route with the modeled user approval",
+        "terminal variants judge launches, but unfinished variants cannot miss future reviews",
+        "an already-started reviewer is not a future planned launch, and an affected unfinished review needs FULL",
+        "review mode is captured when delegation starts, including a missing context mode",
+        "the facts come from a passing baseline run and reach every sweep variant, keeping wrong-gate expectations separate",
+        "the bound reads the same edits the sweep writes",
+        "a policy disturbance changes the active review policy and retains valid JSON",
+        "artifacts belong to a lane by name or launch folder, everything else to the task",
+        "compareWalk reports one economy finding per lane and kind with its recovery route and replay",
+        "the report groups excess by route and disturbance, with replays, and lists no open question",
+        "a reviewer input lost after the handoff and before the launch is counted allows one repeat of that lane only",
+        "a lost prepared prompt cannot hide a required first FULL review"
+      ]
+    },
+    {
+      "id": "review-units",
+      "kind": "suite",
+      "run": "stack-review-unit",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/synthetic/synthetic-stack-review.test.ts",
+      "tests": [
+        "role classification refinement is progress; repeated or oscillating semantic states still loop",
+        "full has exactly three compact review/error scenarios on every stack; deep families belong to sweep",
+        "every seeded family contains unknown plus N rotated stacks and all required shapes; replay is exact",
+        "review expectations use shared rule bounds: small DELTA, large FULL, unaffected lanes and declared dependents",
+        "injected compact cases still reject extra reviews, wrong modes, missed reviews and missing DONE",
+        "deep wrong gates cover every legacy gate/checkpoint; policy changes cover an open reviewer",
+        "stack pillar exposes per-stack counts and modes and cannot hide a product failure",
+        "cross-stack comparison matches the same subcase and distinguishes an actual review difference",
+        "a cross-stack difference becomes permanent only through a reasoned baseline decision"
+      ]
+    },
+    {
+      "id": "field-units",
+      "kind": "suite",
+      "run": "field-unit",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/synthetic/synthetic-field-cases.test.ts",
+      "tests": [
+        "field-cases are permanent full/sweep scenarios with two own modules and independent result oracles",
+        "field command argv keeps both module and test lists as exact tokens, including the Windows cmd entrypoint",
+        "field CALL negative control: quoted caret and ampersand reach the real Windows child unchanged",
+        "selection input contract rejects traversal and junction escape before reading target bytes"
+      ]
+    },
+    {
+      "id": "field-lifecycle",
+      "kind": "suite",
+      "run": "field-lifecycle",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/synthetic/synthetic-field-lifecycle.test.ts",
+      "tests": [
+        "field R3-1-A: a previous release with a large operator block under Skill Packs updates through the ",
+        "field R3-1-B: an unedited previous release migrates with a backup and passes VERIFY",
+        "field C2-1: an outdated marked selector is refreshed from the template and outside operator text is kept",
+        "field C2-6: a marked file without the selector and with an edited Skill Packs section keeps well-formed markers",
+        "field F1: every workspace-snapshot cache hit equals a fresh snapshot after each build-output configuration change"
+      ],
+      "cases": [
+        "field R3-1-A: a previous release with a large operator block under Skill Packs updates through the candidate launcher",
+        "field R3-1-A: a previous release with a large operator block under Skill Packs updates through the installed launcher",
+        "field R3-1-B: an unedited previous release migrates with a backup and passes VERIFY",
+        "field C2-1: an outdated marked selector is refreshed from the template and outside operator text is kept",
+        "field C2-6: a marked file without the selector and with an edited Skill Packs section keeps well-formed markers",
+        "field F1: every workspace-snapshot cache hit equals a fresh snapshot after each build-output configuration change"
+      ]
+    },
+    {
+      "id": "trace-meta",
+      "kind": "suite",
+      "run": "stand-meta",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/synthetic/synthetic-stand-properties.test.ts",
+      "tests": [
+        "every concept rule and registry gate has live checks at every requested stand level",
+        "traceability rejects missing checks, new gates and unmapped concept rules",
+        "traceability detects a dropped schedule, filtered case, skipped registration and disconnected oracle",
+        "traceability detects a removed short scenario and an unregistered contract case",
+        "summary retains traceability failures, actual execution evidence and honest external limits"
+      ]
+    },
+    {
+      "id": "policy-short",
+      "kind": "suite",
+      "run": "policy-reuse",
+      "levels": [
+        "short"
+      ],
+      "file": "tests/node/synthetic/synthetic-policy-reuse.test.ts",
+      "tests": [
+        "a policy change finishes and reuses an already-started reviewer"
+      ]
+    },
+    {
+      "id": "policy-complete",
+      "kind": "suite",
+      "run": "policy-reuse",
+      "levels": [
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/synthetic/synthetic-policy-reuse.test.ts",
+      "tests": [
+        "coverage policy-change checkpoint ",
+        "policy adoption at ",
+        "adoption, rerun, coherent recovery and second adoption finish with passed lanes kept and a new lane once FULL",
+        "an adoption without retained carry authority routes to a real focused rerun and finishes",
+        "a policy change finishes and reuses an already-started reviewer",
+        "an approved code-policy change keeps an already recorded custom review"
+      ]
+    },
+    {
+      "id": "contract-case-1",
+      "kind": "contract",
+      "run": "contract-selection",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/policy/stack-universal-gates-contract.test.ts",
+      "tests": [
+        "unknown stack literal selection, native execution and consumers (rename="
+      ],
+      "cases": [
+        "unknown stack literal selection, native execution and consumers (rename=false)",
+        "unknown stack literal selection, native execution and consumers (rename=true)"
+      ]
+    },
+    {
+      "id": "contract-case-2",
+      "kind": "contract",
+      "run": "contract-selection",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/policy/stack-universal-gates-contract.test.ts",
+      "tests": [
+        "Spring multi-module Maven narrows a failed broad run without output attribution or report preconditions"
+      ]
+    },
+    {
+      "id": "contract-case-3",
+      "kind": "contract",
+      "run": "contract-selection",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/policy/stack-universal-gates-contract.test.ts",
+      "tests": [
+        "polyglot plan runs and records both declared invocations separately"
+      ]
+    },
+    {
+      "id": "contract-case-4",
+      "kind": "contract",
+      "run": "contract-selection",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/policy/stack-universal-gates-contract.test.ts",
+      "tests": [
+        "symbolic mapping admits opaque targets and bound support without changing global roles"
+      ]
+    },
+    {
+      "id": "contract-case-5",
+      "kind": "contract",
+      "run": "contract-selection",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/policy/stack-universal-gates-contract.test.ts",
+      "tests": [
+        "a no-op may prove process success but cannot close the task without independent review"
+      ]
+    },
+    {
+      "id": "contract-case-6",
+      "kind": "contract",
+      "run": "contract-selection",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/policy/stack-universal-gates-contract.test.ts",
+      "tests": [
+        "integrity refusal: "
+      ],
+      "cases": [
+        "integrity refusal: hash",
+        "integrity refusal: execution-binding",
+        "integrity refusal: chronology"
+      ]
+    },
+    {
+      "id": "contract-case-7",
+      "kind": "contract",
+      "run": "contract-selection",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/policy/stack-universal-gates-contract.test.ts",
+      "tests": [
+        "contained declaration manifest replaces large argv path lists and remains hash-bound"
+      ]
+    },
+    {
+      "id": "contract-case-8",
+      "kind": "contract",
+      "run": "contract-selection",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/policy/stack-universal-gates-contract.test.ts",
+      "tests": [
+        "validation command inventory has an explicit contract owner"
+      ]
+    },
+    {
+      "id": "contract-case-9",
+      "kind": "contract",
+      "run": "contract-tour",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/policy/stack-universal-gates-contract.test.ts",
+      "tests": [
+        "universal-fallbacks dependency: complete opaque gate tour (rename="
+      ],
+      "cases": [
+        "universal-fallbacks dependency: complete opaque gate tour (rename=false)"
+      ]
+    },
+    {
+      "id": "contract-renamed",
+      "kind": "contract",
+      "run": "contract-rename",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/policy/stack-universal-gates-contract.test.ts",
+      "tests": [
+        "universal-fallbacks dependency: complete opaque gate tour (rename="
+      ],
+      "cases": [
+        "universal-fallbacks dependency: complete opaque gate tour (rename=true)"
+      ]
+    },
+    {
+      "id": "navigator-oracle",
+      "kind": "oracle",
+      "run": "walk",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/synthetic/engine/navigator-walk.ts",
+      "symbol": "compareWalk",
+      "caller": "tests/node/synthetic/synthetic-navigator-walk.test.ts"
+    },
+    {
+      "id": "route-coverage",
+      "kind": "oracle",
+      "run": "walk",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/synthetic/engine/walk-routes.ts",
+      "symbol": "routeCoverage",
+      "caller": "tests/node/synthetic/engine/walk-report.ts"
+    },
+    {
+      "id": "execution-oracle",
+      "kind": "oracle",
+      "run": "walk",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/synthetic/engine/walk-stack-fixtures.ts",
+      "symbol": "stackExecutionViolations",
+      "caller": "tests/node/synthetic/engine/walk-stack-scenarios.ts"
+    },
+    {
+      "id": "review-economy",
+      "kind": "oracle",
+      "run": "walk",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/synthetic/engine/walk-economy.ts",
+      "symbol": "judgeReviewEconomy",
+      "caller": "tests/node/synthetic/engine/navigator-walk.ts"
+    },
+    {
+      "id": "adapter-parity",
+      "kind": "oracle",
+      "run": "walk",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/synthetic/engine/walk-stack-scenarios.ts",
+      "symbol": "stackAdapterRegressions",
+      "caller": "tests/node/synthetic/engine/walk-verdict.ts"
+    },
+    {
+      "id": "work-budgets",
+      "kind": "budget",
+      "run": "walk",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/synthetic/engine/walk-metrics.ts",
+      "symbol": "analyzeWalkMetrics",
+      "caller": "tests/node/synthetic/engine/walk-report.ts"
+    },
+    {
+      "id": "resume-identity",
+      "kind": "oracle",
+      "run": "stand-unit",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/synthetic/engine/walk-run-store.ts",
+      "symbol": "assertWalkResumeIdentity",
+      "caller": "tests/node/synthetic/reference-stand-unit.test.ts"
+    },
+    {
+      "id": "step-timing",
+      "kind": "timing",
+      "run": "timing",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/synthetic/engine/step-timing.ts",
+      "symbol": "compareTiming",
+      "caller": "tests/node/synthetic/engine/step-timing-session.ts"
+    },
+    {
+      "id": "stack-matrix",
+      "kind": "family",
+      "run": "walk",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "scenarios": {
+        "short": [
+          "stack-polyglot-maven-ts-a3-generic"
+        ],
+        "full": [
+          "stack-spring-maven-a1-generic",
+          "stack-spring-maven-a2-generic",
+          "stack-spring-maven-a3-generic",
+          "stack-spring-maven-a4-generic",
+          "stack-spring-maven-a5-generic",
+          "stack-spring-maven-a6-generic",
+          "stack-spring-maven-a7-generic",
+          "stack-spring-maven-a8-generic",
+          "stack-spring-maven-a9-generic",
+          "stack-spring-maven-a1-auto",
+          "stack-spring-maven-a2-auto",
+          "stack-spring-maven-a3-auto",
+          "stack-spring-maven-a4-auto",
+          "stack-spring-maven-a5-auto",
+          "stack-spring-maven-a6-auto",
+          "stack-spring-maven-a7-auto",
+          "stack-spring-maven-a8-auto",
+          "stack-spring-maven-a9-auto",
+          "stack-java-gradle-a1-generic",
+          "stack-java-gradle-a2-generic",
+          "stack-java-gradle-a3-generic",
+          "stack-java-gradle-a4-generic",
+          "stack-java-gradle-a5-generic",
+          "stack-java-gradle-a6-generic",
+          "stack-java-gradle-a7-generic",
+          "stack-java-gradle-a8-generic",
+          "stack-java-gradle-a9-generic",
+          "stack-kotlin-gradle-a1-generic",
+          "stack-kotlin-gradle-a2-generic",
+          "stack-kotlin-gradle-a3-generic",
+          "stack-kotlin-gradle-a4-generic",
+          "stack-kotlin-gradle-a5-generic",
+          "stack-kotlin-gradle-a6-generic",
+          "stack-kotlin-gradle-a7-generic",
+          "stack-kotlin-gradle-a8-generic",
+          "stack-kotlin-gradle-a9-generic",
+          "stack-dotnet-a1-generic",
+          "stack-dotnet-a2-generic",
+          "stack-dotnet-a3-generic",
+          "stack-dotnet-a4-generic",
+          "stack-dotnet-a5-generic",
+          "stack-dotnet-a6-generic",
+          "stack-dotnet-a7-generic",
+          "stack-dotnet-a8-generic",
+          "stack-dotnet-a9-generic",
+          "stack-go-a1-generic",
+          "stack-go-a2-generic",
+          "stack-go-a3-generic",
+          "stack-go-a4-generic",
+          "stack-go-a5-generic",
+          "stack-go-a6-generic",
+          "stack-go-a7-generic",
+          "stack-go-a8-generic",
+          "stack-go-a9-generic",
+          "stack-rust-a1-generic",
+          "stack-rust-a2-generic",
+          "stack-rust-a3-generic",
+          "stack-rust-a4-generic",
+          "stack-rust-a5-generic",
+          "stack-rust-a6-generic",
+          "stack-rust-a7-generic",
+          "stack-rust-a8-generic",
+          "stack-rust-a9-generic",
+          "stack-python-a1-generic",
+          "stack-python-a2-generic",
+          "stack-python-a3-generic",
+          "stack-python-a4-generic",
+          "stack-python-a5-generic",
+          "stack-python-a6-generic",
+          "stack-python-a7-generic",
+          "stack-python-a8-generic",
+          "stack-python-a9-generic",
+          "stack-node-a1-generic",
+          "stack-node-a2-generic",
+          "stack-node-a3-generic",
+          "stack-node-a4-generic",
+          "stack-node-a5-generic",
+          "stack-node-a6-generic",
+          "stack-node-a7-generic",
+          "stack-node-a8-generic",
+          "stack-node-a9-generic",
+          "stack-node-a1-auto",
+          "stack-node-a2-auto",
+          "stack-node-a3-auto",
+          "stack-node-a4-auto",
+          "stack-node-a5-auto",
+          "stack-node-a6-auto",
+          "stack-node-a7-auto",
+          "stack-node-a8-auto",
+          "stack-node-a9-auto",
+          "stack-php-phpunit-a1-generic",
+          "stack-php-phpunit-a2-generic",
+          "stack-php-phpunit-a3-generic",
+          "stack-php-phpunit-a4-generic",
+          "stack-php-phpunit-a5-generic",
+          "stack-php-phpunit-a6-generic",
+          "stack-php-phpunit-a7-generic",
+          "stack-php-phpunit-a8-generic",
+          "stack-php-phpunit-a9-generic",
+          "stack-php-laravel-a1-generic",
+          "stack-php-laravel-a2-generic",
+          "stack-php-laravel-a3-generic",
+          "stack-php-laravel-a4-generic",
+          "stack-php-laravel-a5-generic",
+          "stack-php-laravel-a6-generic",
+          "stack-php-laravel-a7-generic",
+          "stack-php-laravel-a8-generic",
+          "stack-php-laravel-a9-generic",
+          "stack-vite-playwright-a1-generic",
+          "stack-vite-playwright-a2-generic",
+          "stack-vite-playwright-a3-generic",
+          "stack-vite-playwright-a4-generic",
+          "stack-vite-playwright-a5-generic",
+          "stack-vite-playwright-a6-generic",
+          "stack-vite-playwright-a7-generic",
+          "stack-vite-playwright-a8-generic",
+          "stack-vite-playwright-a9-generic",
+          "stack-pnpm-nx-a1-generic",
+          "stack-pnpm-nx-a2-generic",
+          "stack-pnpm-nx-a3-generic",
+          "stack-pnpm-nx-a4-generic",
+          "stack-pnpm-nx-a5-generic",
+          "stack-pnpm-nx-a6-generic",
+          "stack-pnpm-nx-a7-generic",
+          "stack-pnpm-nx-a8-generic",
+          "stack-pnpm-nx-a9-generic",
+          "stack-ruby-a1-generic",
+          "stack-ruby-a2-generic",
+          "stack-ruby-a3-generic",
+          "stack-ruby-a4-generic",
+          "stack-ruby-a5-generic",
+          "stack-ruby-a6-generic",
+          "stack-ruby-a7-generic",
+          "stack-ruby-a8-generic",
+          "stack-ruby-a9-generic",
+          "stack-elixir-a1-generic",
+          "stack-elixir-a2-generic",
+          "stack-elixir-a3-generic",
+          "stack-elixir-a4-generic",
+          "stack-elixir-a5-generic",
+          "stack-elixir-a6-generic",
+          "stack-elixir-a7-generic",
+          "stack-elixir-a8-generic",
+          "stack-elixir-a9-generic",
+          "stack-swift-a1-generic",
+          "stack-swift-a2-generic",
+          "stack-swift-a3-generic",
+          "stack-swift-a4-generic",
+          "stack-swift-a5-generic",
+          "stack-swift-a6-generic",
+          "stack-swift-a7-generic",
+          "stack-swift-a8-generic",
+          "stack-swift-a9-generic",
+          "stack-cmake-a1-generic",
+          "stack-cmake-a2-generic",
+          "stack-cmake-a3-generic",
+          "stack-cmake-a4-generic",
+          "stack-cmake-a5-generic",
+          "stack-cmake-a6-generic",
+          "stack-cmake-a7-generic",
+          "stack-cmake-a8-generic",
+          "stack-cmake-a9-generic",
+          "stack-unknown-quartz-a1-generic",
+          "stack-unknown-quartz-a2-generic",
+          "stack-unknown-quartz-a3-generic",
+          "stack-unknown-quartz-a4-generic",
+          "stack-unknown-quartz-a5-generic",
+          "stack-unknown-quartz-a6-generic",
+          "stack-unknown-quartz-a7-generic",
+          "stack-unknown-quartz-a8-generic",
+          "stack-unknown-quartz-a9-generic",
+          "stack-polyglot-maven-ts-a1-generic",
+          "stack-polyglot-maven-ts-a2-generic",
+          "stack-polyglot-maven-ts-a3-generic",
+          "stack-polyglot-maven-ts-a4-generic",
+          "stack-polyglot-maven-ts-a5-generic",
+          "stack-polyglot-maven-ts-a6-generic",
+          "stack-polyglot-maven-ts-a7-generic",
+          "stack-polyglot-maven-ts-a8-generic",
+          "stack-polyglot-maven-ts-a9-generic",
+          "stack-polyglot-maven-ts-a1-auto",
+          "stack-polyglot-maven-ts-a2-auto",
+          "stack-polyglot-maven-ts-a3-auto",
+          "stack-polyglot-maven-ts-a4-auto",
+          "stack-polyglot-maven-ts-a5-auto",
+          "stack-polyglot-maven-ts-a6-auto",
+          "stack-polyglot-maven-ts-a7-auto",
+          "stack-polyglot-maven-ts-a8-auto",
+          "stack-polyglot-maven-ts-a9-auto",
+          "stack-polyglot-python-go-a1-generic",
+          "stack-polyglot-python-go-a2-generic",
+          "stack-polyglot-python-go-a3-generic",
+          "stack-polyglot-python-go-a4-generic",
+          "stack-polyglot-python-go-a5-generic",
+          "stack-polyglot-python-go-a6-generic",
+          "stack-polyglot-python-go-a7-generic",
+          "stack-polyglot-python-go-a8-generic",
+          "stack-polyglot-python-go-a9-generic"
+        ],
+        "sweep": [
+          "stack-spring-maven-a1-generic",
+          "stack-spring-maven-a2-generic",
+          "stack-spring-maven-a3-generic",
+          "stack-spring-maven-a4-generic",
+          "stack-spring-maven-a5-generic",
+          "stack-spring-maven-a6-generic",
+          "stack-spring-maven-a7-generic",
+          "stack-spring-maven-a8-generic",
+          "stack-spring-maven-a9-generic",
+          "stack-spring-maven-a1-auto",
+          "stack-spring-maven-a2-auto",
+          "stack-spring-maven-a3-auto",
+          "stack-spring-maven-a4-auto",
+          "stack-spring-maven-a5-auto",
+          "stack-spring-maven-a6-auto",
+          "stack-spring-maven-a7-auto",
+          "stack-spring-maven-a8-auto",
+          "stack-spring-maven-a9-auto",
+          "stack-java-gradle-a1-generic",
+          "stack-java-gradle-a2-generic",
+          "stack-java-gradle-a3-generic",
+          "stack-java-gradle-a4-generic",
+          "stack-java-gradle-a5-generic",
+          "stack-java-gradle-a6-generic",
+          "stack-java-gradle-a7-generic",
+          "stack-java-gradle-a8-generic",
+          "stack-java-gradle-a9-generic",
+          "stack-kotlin-gradle-a1-generic",
+          "stack-kotlin-gradle-a2-generic",
+          "stack-kotlin-gradle-a3-generic",
+          "stack-kotlin-gradle-a4-generic",
+          "stack-kotlin-gradle-a5-generic",
+          "stack-kotlin-gradle-a6-generic",
+          "stack-kotlin-gradle-a7-generic",
+          "stack-kotlin-gradle-a8-generic",
+          "stack-kotlin-gradle-a9-generic",
+          "stack-dotnet-a1-generic",
+          "stack-dotnet-a2-generic",
+          "stack-dotnet-a3-generic",
+          "stack-dotnet-a4-generic",
+          "stack-dotnet-a5-generic",
+          "stack-dotnet-a6-generic",
+          "stack-dotnet-a7-generic",
+          "stack-dotnet-a8-generic",
+          "stack-dotnet-a9-generic",
+          "stack-go-a1-generic",
+          "stack-go-a2-generic",
+          "stack-go-a3-generic",
+          "stack-go-a4-generic",
+          "stack-go-a5-generic",
+          "stack-go-a6-generic",
+          "stack-go-a7-generic",
+          "stack-go-a8-generic",
+          "stack-go-a9-generic",
+          "stack-rust-a1-generic",
+          "stack-rust-a2-generic",
+          "stack-rust-a3-generic",
+          "stack-rust-a4-generic",
+          "stack-rust-a5-generic",
+          "stack-rust-a6-generic",
+          "stack-rust-a7-generic",
+          "stack-rust-a8-generic",
+          "stack-rust-a9-generic",
+          "stack-python-a1-generic",
+          "stack-python-a2-generic",
+          "stack-python-a3-generic",
+          "stack-python-a4-generic",
+          "stack-python-a5-generic",
+          "stack-python-a6-generic",
+          "stack-python-a7-generic",
+          "stack-python-a8-generic",
+          "stack-python-a9-generic",
+          "stack-node-a1-generic",
+          "stack-node-a2-generic",
+          "stack-node-a3-generic",
+          "stack-node-a4-generic",
+          "stack-node-a5-generic",
+          "stack-node-a6-generic",
+          "stack-node-a7-generic",
+          "stack-node-a8-generic",
+          "stack-node-a9-generic",
+          "stack-node-a1-auto",
+          "stack-node-a2-auto",
+          "stack-node-a3-auto",
+          "stack-node-a4-auto",
+          "stack-node-a5-auto",
+          "stack-node-a6-auto",
+          "stack-node-a7-auto",
+          "stack-node-a8-auto",
+          "stack-node-a9-auto",
+          "stack-php-phpunit-a1-generic",
+          "stack-php-phpunit-a2-generic",
+          "stack-php-phpunit-a3-generic",
+          "stack-php-phpunit-a4-generic",
+          "stack-php-phpunit-a5-generic",
+          "stack-php-phpunit-a6-generic",
+          "stack-php-phpunit-a7-generic",
+          "stack-php-phpunit-a8-generic",
+          "stack-php-phpunit-a9-generic",
+          "stack-php-laravel-a1-generic",
+          "stack-php-laravel-a2-generic",
+          "stack-php-laravel-a3-generic",
+          "stack-php-laravel-a4-generic",
+          "stack-php-laravel-a5-generic",
+          "stack-php-laravel-a6-generic",
+          "stack-php-laravel-a7-generic",
+          "stack-php-laravel-a8-generic",
+          "stack-php-laravel-a9-generic",
+          "stack-vite-playwright-a1-generic",
+          "stack-vite-playwright-a2-generic",
+          "stack-vite-playwright-a3-generic",
+          "stack-vite-playwright-a4-generic",
+          "stack-vite-playwright-a5-generic",
+          "stack-vite-playwright-a6-generic",
+          "stack-vite-playwright-a7-generic",
+          "stack-vite-playwright-a8-generic",
+          "stack-vite-playwright-a9-generic",
+          "stack-pnpm-nx-a1-generic",
+          "stack-pnpm-nx-a2-generic",
+          "stack-pnpm-nx-a3-generic",
+          "stack-pnpm-nx-a4-generic",
+          "stack-pnpm-nx-a5-generic",
+          "stack-pnpm-nx-a6-generic",
+          "stack-pnpm-nx-a7-generic",
+          "stack-pnpm-nx-a8-generic",
+          "stack-pnpm-nx-a9-generic",
+          "stack-ruby-a1-generic",
+          "stack-ruby-a2-generic",
+          "stack-ruby-a3-generic",
+          "stack-ruby-a4-generic",
+          "stack-ruby-a5-generic",
+          "stack-ruby-a6-generic",
+          "stack-ruby-a7-generic",
+          "stack-ruby-a8-generic",
+          "stack-ruby-a9-generic",
+          "stack-elixir-a1-generic",
+          "stack-elixir-a2-generic",
+          "stack-elixir-a3-generic",
+          "stack-elixir-a4-generic",
+          "stack-elixir-a5-generic",
+          "stack-elixir-a6-generic",
+          "stack-elixir-a7-generic",
+          "stack-elixir-a8-generic",
+          "stack-elixir-a9-generic",
+          "stack-swift-a1-generic",
+          "stack-swift-a2-generic",
+          "stack-swift-a3-generic",
+          "stack-swift-a4-generic",
+          "stack-swift-a5-generic",
+          "stack-swift-a6-generic",
+          "stack-swift-a7-generic",
+          "stack-swift-a8-generic",
+          "stack-swift-a9-generic",
+          "stack-cmake-a1-generic",
+          "stack-cmake-a2-generic",
+          "stack-cmake-a3-generic",
+          "stack-cmake-a4-generic",
+          "stack-cmake-a5-generic",
+          "stack-cmake-a6-generic",
+          "stack-cmake-a7-generic",
+          "stack-cmake-a8-generic",
+          "stack-cmake-a9-generic",
+          "stack-unknown-quartz-a1-generic",
+          "stack-unknown-quartz-a2-generic",
+          "stack-unknown-quartz-a3-generic",
+          "stack-unknown-quartz-a4-generic",
+          "stack-unknown-quartz-a5-generic",
+          "stack-unknown-quartz-a6-generic",
+          "stack-unknown-quartz-a7-generic",
+          "stack-unknown-quartz-a8-generic",
+          "stack-unknown-quartz-a9-generic",
+          "stack-polyglot-maven-ts-a1-generic",
+          "stack-polyglot-maven-ts-a2-generic",
+          "stack-polyglot-maven-ts-a3-generic",
+          "stack-polyglot-maven-ts-a4-generic",
+          "stack-polyglot-maven-ts-a5-generic",
+          "stack-polyglot-maven-ts-a6-generic",
+          "stack-polyglot-maven-ts-a7-generic",
+          "stack-polyglot-maven-ts-a8-generic",
+          "stack-polyglot-maven-ts-a9-generic",
+          "stack-polyglot-maven-ts-a1-auto",
+          "stack-polyglot-maven-ts-a2-auto",
+          "stack-polyglot-maven-ts-a3-auto",
+          "stack-polyglot-maven-ts-a4-auto",
+          "stack-polyglot-maven-ts-a5-auto",
+          "stack-polyglot-maven-ts-a6-auto",
+          "stack-polyglot-maven-ts-a7-auto",
+          "stack-polyglot-maven-ts-a8-auto",
+          "stack-polyglot-maven-ts-a9-auto",
+          "stack-polyglot-python-go-a1-generic",
+          "stack-polyglot-python-go-a2-generic",
+          "stack-polyglot-python-go-a3-generic",
+          "stack-polyglot-python-go-a4-generic",
+          "stack-polyglot-python-go-a5-generic",
+          "stack-polyglot-python-go-a6-generic",
+          "stack-polyglot-python-go-a7-generic",
+          "stack-polyglot-python-go-a8-generic",
+          "stack-polyglot-python-go-a9-generic"
+        ]
+      },
+      "inventoryPattern": "^stack-.+-a[1-9]-(?:generic|auto)$",
+      "completeAt": [
+        "full",
+        "sweep"
+      ]
+    },
+    {
+      "id": "unknown-tours",
+      "kind": "family",
+      "run": "walk",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "scenarios": {
+        "short": [
+          "stack-unknown-quartz-a7-generic-gate-tour"
+        ],
+        "full": [
+          "stack-unknown-quartz-a7-generic-gate-tour",
+          "stack-unknown-quartz-a7-generic-gate-tour-renamed"
+        ],
+        "sweep": [
+          "stack-unknown-quartz-a7-generic-gate-tour",
+          "stack-unknown-quartz-a7-generic-gate-tour-renamed"
+        ]
+      }
+    },
+    {
+      "id": "field-cases",
+      "kind": "family",
+      "run": "walk",
+      "levels": [
+        "full",
+        "sweep"
+      ],
+      "scenarios": {
+        "full": [
+          "field-misleading-in-scope-refusal",
+          "field-project-command-reselection",
+          "field-cmd-call-argv",
+          "field-onlinestore-op035-follow-up-attribution",
+          "field-onlinestore-passed-delta-after-test-repair",
+          "field-onlinestore-t006-7-1-audit-only",
+          "field-onlinestore-t022-1-closeout",
+          "field-r144-lane-enable-keeps-passed-reviews",
+          "field-r144-lane-disable-keeps-passed-reviews",
+          "field-r144-lane-enable-with-criteria-change",
+          "field-r144-protected-restart-keeps-criteria",
+          "field-r144-protected-restart-after-agent-supplement",
+          "field-r144-protected-restart-operator-criteria-change",
+          "field-r144-protected-restart-confirms-agent-supplement",
+          "field-r144-omitted-required-lane-refresh",
+          "field-r144-unavailable-required-lane",
+          "field-r144-disabled-required-lane-after-selection",
+          "field-r144-red-changed-declared-fixture",
+          "field-r144-failed-task-local-compile-retry"
+        ],
+        "sweep": [
+          "field-misleading-in-scope-refusal",
+          "field-project-command-reselection",
+          "field-cmd-call-argv",
+          "field-onlinestore-op035-follow-up-attribution",
+          "field-onlinestore-passed-delta-after-test-repair",
+          "field-onlinestore-t006-7-1-audit-only",
+          "field-onlinestore-t022-1-closeout",
+          "field-r144-lane-enable-keeps-passed-reviews",
+          "field-r144-lane-disable-keeps-passed-reviews",
+          "field-r144-lane-enable-with-criteria-change",
+          "field-r144-protected-restart-keeps-criteria",
+          "field-r144-protected-restart-after-agent-supplement",
+          "field-r144-protected-restart-operator-criteria-change",
+          "field-r144-protected-restart-confirms-agent-supplement",
+          "field-r144-omitted-required-lane-refresh",
+          "field-r144-unavailable-required-lane",
+          "field-r144-disabled-required-lane-after-selection",
+          "field-r144-red-changed-declared-fixture",
+          "field-r144-failed-task-local-compile-retry"
+        ]
+      },
+      "inventoryPattern": "^field-",
+      "completeAt": [
+        "full",
+        "sweep"
+      ]
+    },
+    {
+      "id": "short-economy-walks",
+      "kind": "family",
+      "run": "walk",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "scenarios": {
+        "short": [
+          "clean-pass",
+          "test-failed-fixed-in-source"
+        ],
+        "full": [
+          "clean-pass",
+          "test-failed-fixed-in-source"
+        ],
+        "sweep": [
+          "clean-pass",
+          "test-failed-fixed-in-source"
+        ]
+      }
+    },
+    {
+      "id": "shared-plan-contract",
+      "kind": "suite",
+      "run": "validation-plan-unit",
+      "levels": [
+        "short",
+        "full",
+        "sweep"
+      ],
+      "file": "tests/node/core/task-validation-plan.test.ts",
+      "tests": [
+        "an unexecuted generic declaration binds exact targets without granting execution evidence",
+        "literal association is exact across paths, stems, selectors and comma list members",
+        "polyglot plan binds each command and cannot omit one target or introduce an unbound invocation",
+        "symbolic entrypoint and helper bindings are explicit review claims",
+        "only symbolic mappings or changed test-like support add mandatory test review",
+        "a 5000-target plan replays captured declarations with zero filesystem or subprocess observations",
+        "process contract rejects partial execution, altered bindings, scope mutations and reversed chronology",
+        "equivalent reselection retains the original execution chronology but rejects changed inputs and scope"
+      ]
+    },
+    {
+      "id": "compact-review-cases",
+      "kind": "family",
+      "run": "walk",
+      "levels": [
+        "full",
+        "sweep"
+      ],
+      "scenarios": {
+        "full": [
+          "stack-spring-maven-review-edit",
+          "stack-spring-maven-lost-evidence",
+          "stack-spring-maven-reset-and-wrong-gate",
+          "stack-java-gradle-review-edit",
+          "stack-java-gradle-lost-evidence",
+          "stack-java-gradle-reset-and-wrong-gate",
+          "stack-kotlin-gradle-review-edit",
+          "stack-kotlin-gradle-lost-evidence",
+          "stack-kotlin-gradle-reset-and-wrong-gate",
+          "stack-dotnet-review-edit",
+          "stack-dotnet-lost-evidence",
+          "stack-dotnet-reset-and-wrong-gate",
+          "stack-go-review-edit",
+          "stack-go-lost-evidence",
+          "stack-go-reset-and-wrong-gate",
+          "stack-rust-review-edit",
+          "stack-rust-lost-evidence",
+          "stack-rust-reset-and-wrong-gate",
+          "stack-python-review-edit",
+          "stack-python-lost-evidence",
+          "stack-python-reset-and-wrong-gate",
+          "stack-node-review-edit",
+          "stack-node-lost-evidence",
+          "stack-node-reset-and-wrong-gate",
+          "stack-php-phpunit-review-edit",
+          "stack-php-phpunit-lost-evidence",
+          "stack-php-phpunit-reset-and-wrong-gate",
+          "stack-php-laravel-review-edit",
+          "stack-php-laravel-lost-evidence",
+          "stack-php-laravel-reset-and-wrong-gate",
+          "stack-vite-playwright-review-edit",
+          "stack-vite-playwright-lost-evidence",
+          "stack-vite-playwright-reset-and-wrong-gate",
+          "stack-pnpm-nx-review-edit",
+          "stack-pnpm-nx-lost-evidence",
+          "stack-pnpm-nx-reset-and-wrong-gate",
+          "stack-ruby-review-edit",
+          "stack-ruby-lost-evidence",
+          "stack-ruby-reset-and-wrong-gate",
+          "stack-elixir-review-edit",
+          "stack-elixir-lost-evidence",
+          "stack-elixir-reset-and-wrong-gate",
+          "stack-swift-review-edit",
+          "stack-swift-lost-evidence",
+          "stack-swift-reset-and-wrong-gate",
+          "stack-cmake-review-edit",
+          "stack-cmake-lost-evidence",
+          "stack-cmake-reset-and-wrong-gate",
+          "stack-unknown-quartz-review-edit",
+          "stack-unknown-quartz-lost-evidence",
+          "stack-unknown-quartz-reset-and-wrong-gate",
+          "stack-polyglot-maven-ts-review-edit",
+          "stack-polyglot-maven-ts-lost-evidence",
+          "stack-polyglot-maven-ts-reset-and-wrong-gate",
+          "stack-polyglot-python-go-review-edit",
+          "stack-polyglot-python-go-lost-evidence",
+          "stack-polyglot-python-go-reset-and-wrong-gate"
+        ],
+        "sweep": [
+          "stack-spring-maven-review-edit",
+          "stack-spring-maven-lost-evidence",
+          "stack-spring-maven-reset-and-wrong-gate",
+          "stack-java-gradle-review-edit",
+          "stack-java-gradle-lost-evidence",
+          "stack-java-gradle-reset-and-wrong-gate",
+          "stack-kotlin-gradle-review-edit",
+          "stack-kotlin-gradle-lost-evidence",
+          "stack-kotlin-gradle-reset-and-wrong-gate",
+          "stack-dotnet-review-edit",
+          "stack-dotnet-lost-evidence",
+          "stack-dotnet-reset-and-wrong-gate",
+          "stack-go-review-edit",
+          "stack-go-lost-evidence",
+          "stack-go-reset-and-wrong-gate",
+          "stack-rust-review-edit",
+          "stack-rust-lost-evidence",
+          "stack-rust-reset-and-wrong-gate",
+          "stack-python-review-edit",
+          "stack-python-lost-evidence",
+          "stack-python-reset-and-wrong-gate",
+          "stack-node-review-edit",
+          "stack-node-lost-evidence",
+          "stack-node-reset-and-wrong-gate",
+          "stack-php-phpunit-review-edit",
+          "stack-php-phpunit-lost-evidence",
+          "stack-php-phpunit-reset-and-wrong-gate",
+          "stack-php-laravel-review-edit",
+          "stack-php-laravel-lost-evidence",
+          "stack-php-laravel-reset-and-wrong-gate",
+          "stack-vite-playwright-review-edit",
+          "stack-vite-playwright-lost-evidence",
+          "stack-vite-playwright-reset-and-wrong-gate",
+          "stack-pnpm-nx-review-edit",
+          "stack-pnpm-nx-lost-evidence",
+          "stack-pnpm-nx-reset-and-wrong-gate",
+          "stack-ruby-review-edit",
+          "stack-ruby-lost-evidence",
+          "stack-ruby-reset-and-wrong-gate",
+          "stack-elixir-review-edit",
+          "stack-elixir-lost-evidence",
+          "stack-elixir-reset-and-wrong-gate",
+          "stack-swift-review-edit",
+          "stack-swift-lost-evidence",
+          "stack-swift-reset-and-wrong-gate",
+          "stack-cmake-review-edit",
+          "stack-cmake-lost-evidence",
+          "stack-cmake-reset-and-wrong-gate",
+          "stack-unknown-quartz-review-edit",
+          "stack-unknown-quartz-lost-evidence",
+          "stack-unknown-quartz-reset-and-wrong-gate",
+          "stack-polyglot-maven-ts-review-edit",
+          "stack-polyglot-maven-ts-lost-evidence",
+          "stack-polyglot-maven-ts-reset-and-wrong-gate",
+          "stack-polyglot-python-go-review-edit",
+          "stack-polyglot-python-go-lost-evidence",
+          "stack-polyglot-python-go-reset-and-wrong-gate"
+        ]
+      },
+      "inventoryPattern": "^stack-.+-(?:review-edit|lost-evidence|reset-and-wrong-gate)$",
+      "completeAt": [
+        "full",
+        "sweep"
+      ]
+    }
+  ],
+  "properties": [
+    {
+      "id": "PROP.C2.1",
+      "statement": "Own tests only: run and fix only the task tests; never impose the project-wide command.",
+      "concept": [
+        "C2.1"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-2",
+        "execution-oracle",
+        "fixture-controls",
+        "stack-matrix"
+      ]
+    },
+    {
+      "id": "PROP.C2.2",
+      "statement": "Generic mode is the base of every gate and requires no stack knowledge.",
+      "concept": [
+        "C2.2"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-9",
+        "contract-renamed",
+        "unknown-tours",
+        "navigator-oracle"
+      ]
+    },
+    {
+      "id": "PROP.C2.3",
+      "statement": "Adapters add evidence only; missing, uncertain or unrecognized adapters fall back and never downgrade admission or PASS.",
+      "concept": [
+        "C2.3"
+      ],
+      "gates": [],
+      "checks": [
+        "fixture-controls",
+        "adapter-parity",
+        "stack-matrix"
+      ]
+    },
+    {
+      "id": "PROP.C2.4",
+      "statement": "Every refusal names the missing fact and an executable route; only real integrity, authority or scope decisions may need an operator.",
+      "concept": [
+        "C2.4"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-9",
+        "contract-renamed",
+        "unknown-tours",
+        "navigator-oracle"
+      ]
+    },
+    {
+      "id": "PROP.C2.5",
+      "statement": "All validation gates use the shared evidence contract without private stack-specific preconditions.",
+      "concept": [
+        "C2.5"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-9",
+        "contract-renamed",
+        "unknown-tours",
+        "navigator-oracle"
+      ]
+    },
+    {
+      "id": "PROP.C2.6",
+      "statement": "Capture facts at selection/execution; navigation and completion compare stored bindings without new Git/ACL processes, manifest walks or report scans.",
+      "concept": [
+        "C2.6"
+      ],
+      "gates": [],
+      "checks": [
+        "execution-oracle",
+        "fixture-controls",
+        "contract-case-1",
+        "contract-case-2",
+        "contract-case-3",
+        "contract-case-4",
+        "contract-case-5",
+        "contract-case-6",
+        "contract-case-7",
+        "contract-case-8",
+        "contract-case-9",
+        "contract-renamed",
+        "shared-plan-contract"
+      ]
+    },
+    {
+      "id": "PROP.C3.1",
+      "statement": "Mechanically distinguish declared task-bound selection (A), actual execution (B), and semantic suitability judged by the test reviewer (C).",
+      "concept": [
+        "C3.1"
+      ],
+      "gates": [],
+      "checks": [
+        "execution-oracle",
+        "fixture-controls",
+        "contract-case-1",
+        "contract-case-2",
+        "contract-case-3",
+        "contract-case-4",
+        "contract-case-5",
+        "contract-case-6",
+        "contract-case-7",
+        "contract-case-8",
+        "contract-case-9",
+        "contract-renamed",
+        "shared-plan-contract"
+      ]
+    },
+    {
+      "id": "PROP.C3.2",
+      "statement": "Runner recognition and exit code alone never prove the right assertions ran.",
+      "concept": [
+        "C3.2"
+      ],
+      "gates": [],
+      "checks": [
+        "execution-oracle",
+        "fixture-controls",
+        "contract-case-1",
+        "contract-case-2",
+        "contract-case-3",
+        "contract-case-4",
+        "contract-case-5",
+        "contract-case-6",
+        "contract-case-7",
+        "contract-case-8",
+        "contract-case-9",
+        "contract-renamed",
+        "shared-plan-contract"
+      ]
+    },
+    {
+      "id": "PROP.C3.1.1",
+      "statement": "Declare exact command argv, test targets and the task behavior they verify.",
+      "concept": [
+        "C3.1.1"
+      ],
+      "gates": [],
+      "checks": [
+        "execution-oracle",
+        "fixture-controls",
+        "contract-case-1",
+        "contract-case-2",
+        "contract-case-3",
+        "contract-case-4",
+        "contract-case-5",
+        "contract-case-6",
+        "contract-case-7",
+        "contract-case-8",
+        "contract-case-9",
+        "contract-renamed",
+        "shared-plan-contract"
+      ]
+    },
+    {
+      "id": "PROP.C3.1.2",
+      "statement": "Automatically require every changed task test and every carried regression target.",
+      "concept": [
+        "C3.1.2"
+      ],
+      "gates": [],
+      "checks": [
+        "execution-oracle",
+        "fixture-controls",
+        "contract-case-1",
+        "contract-case-2",
+        "contract-case-3",
+        "contract-case-4",
+        "contract-case-5",
+        "contract-case-6",
+        "contract-case-7",
+        "contract-case-8",
+        "contract-case-9",
+        "contract-renamed",
+        "shared-plan-contract"
+      ]
+    },
+    {
+      "id": "PROP.C3.1.3",
+      "statement": "An unchanged regression target has an explicit relationship to a changed task file.",
+      "concept": [
+        "C3.1.3"
+      ],
+      "gates": [],
+      "checks": [
+        "execution-oracle",
+        "fixture-controls",
+        "contract-case-1",
+        "contract-case-2",
+        "contract-case-3",
+        "contract-case-4",
+        "contract-case-5",
+        "contract-case-6",
+        "contract-case-7",
+        "contract-case-8",
+        "contract-case-9",
+        "contract-renamed",
+        "shared-plan-contract"
+      ]
+    },
+    {
+      "id": "PROP.C3.1.4",
+      "statement": "Targets are contained repository paths without traversal or symlinks.",
+      "concept": [
+        "C3.1.4"
+      ],
+      "gates": [],
+      "checks": [
+        "field-units",
+        "shared-plan-contract"
+      ]
+    },
+    {
+      "id": "PROP.C3.1.5",
+      "statement": "Literal target association is an exact argv element or list item, never a substring.",
+      "concept": [
+        "C3.1.5"
+      ],
+      "gates": [],
+      "checks": [
+        "shared-plan-contract",
+        "contract-case-3",
+        "stack-matrix"
+      ]
+    },
+    {
+      "id": "PROP.C3.1.6",
+      "statement": "Symbolic entrypoints require an explicit mapping and requires_semantic_review.",
+      "concept": [
+        "C3.1.6"
+      ],
+      "gates": [],
+      "checks": [
+        "shared-plan-contract",
+        "contract-case-4"
+      ]
+    },
+    {
+      "id": "PROP.C3.1.7",
+      "statement": "Selection is bound to task cycle, preflight scope and content; later changes make it stale.",
+      "concept": [
+        "C3.1.7"
+      ],
+      "gates": [],
+      "checks": [
+        "execution-oracle",
+        "fixture-controls",
+        "contract-case-1",
+        "contract-case-2",
+        "contract-case-3",
+        "contract-case-4",
+        "contract-case-5",
+        "contract-case-6",
+        "contract-case-7",
+        "contract-case-8",
+        "contract-case-9",
+        "contract-renamed",
+        "shared-plan-contract"
+      ]
+    },
+    {
+      "id": "PROP.C3.1.8",
+      "statement": "Equality with the configured project command grants no admission privilege.",
+      "concept": [
+        "C3.1.8"
+      ],
+      "gates": [],
+      "checks": [
+        "execution-oracle",
+        "fixture-controls",
+        "contract-case-1",
+        "contract-case-2",
+        "contract-case-3",
+        "contract-case-4",
+        "contract-case-5",
+        "contract-case-6",
+        "contract-case-7",
+        "contract-case-8",
+        "contract-case-9",
+        "contract-renamed",
+        "shared-plan-contract"
+      ]
+    },
+    {
+      "id": "PROP.C3.1.9",
+      "statement": "Allow several declared commands, each with its own targets; execute and verify each separately and require all to pass.",
+      "concept": [
+        "C3.1.9"
+      ],
+      "gates": [],
+      "checks": [
+        "shared-plan-contract",
+        "contract-case-3",
+        "stack-matrix"
+      ]
+    },
+    {
+      "id": "PROP.C3.1.10",
+      "statement": "Task tests may combine arbitrary technologies; no single command or shell chain is required.",
+      "concept": [
+        "C3.1.10"
+      ],
+      "gates": [],
+      "checks": [
+        "shared-plan-contract",
+        "contract-case-3",
+        "stack-matrix"
+      ]
+    },
+    {
+      "id": "PROP.C3.1.11",
+      "statement": "Declared unknown extensions remain task tests without a global regex or file-role change.",
+      "concept": [
+        "C3.1.11"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-9",
+        "contract-renamed",
+        "unknown-tours",
+        "navigator-oracle"
+      ]
+    },
+    {
+      "id": "PROP.C3.2.1",
+      "statement": "The orchestrator executes the declared command and retains argv, start/end, exit, timeout/cancel, output digest, selection digest and before/after scope.",
+      "concept": [
+        "C3.2.1"
+      ],
+      "gates": [],
+      "checks": [
+        "execution-oracle",
+        "fixture-controls",
+        "contract-case-1",
+        "contract-case-2",
+        "contract-case-3",
+        "contract-case-4",
+        "contract-case-5",
+        "contract-case-6",
+        "contract-case-7",
+        "contract-case-8",
+        "contract-case-9",
+        "contract-renamed",
+        "shared-plan-contract"
+      ]
+    },
+    {
+      "id": "PROP.C3.2.2",
+      "statement": "Exit zero with intact process evidence is generic selected-test PASS.",
+      "concept": [
+        "C3.2.2"
+      ],
+      "gates": [],
+      "checks": [
+        "execution-oracle",
+        "fixture-controls",
+        "contract-case-1",
+        "contract-case-2",
+        "contract-case-3",
+        "contract-case-4",
+        "contract-case-5",
+        "contract-case-6",
+        "contract-case-7",
+        "contract-case-8",
+        "contract-case-9",
+        "contract-renamed",
+        "shared-plan-contract"
+      ]
+    },
+    {
+      "id": "PROP.C3.2.3",
+      "statement": "Adapters may add per-case run/skip/failure and source facts.",
+      "concept": [
+        "C3.2.3"
+      ],
+      "gates": [],
+      "checks": [
+        "fixture-controls",
+        "adapter-parity",
+        "stack-matrix"
+      ]
+    },
+    {
+      "id": "PROP.C3.2.4",
+      "statement": "Missing, stale, malformed or unsupported adapter reports never downgrade generic PASS.",
+      "concept": [
+        "C3.2.4"
+      ],
+      "gates": [],
+      "checks": [
+        "fixture-controls",
+        "adapter-parity",
+        "stack-matrix"
+      ]
+    },
+    {
+      "id": "PROP.C3.2.5",
+      "statement": "Contradictory adapter facts are visible reviewer findings, not automatic refusals.",
+      "concept": [
+        "C3.2.5"
+      ],
+      "gates": [],
+      "checks": [
+        "fixture-controls",
+        "adapter-parity",
+        "stack-matrix"
+      ]
+    },
+    {
+      "id": "PROP.C3.2.6",
+      "statement": "Damaged core process records, bindings or chronology remain integrity violations.",
+      "concept": [
+        "C3.2.6"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-6",
+        "shared-plan-contract"
+      ]
+    },
+    {
+      "id": "PROP.C3.3.1",
+      "statement": "Own-test failure routes to fix, refresh and rerun the same selection without dropping required targets.",
+      "concept": [
+        "C3.3.1"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-2",
+        "execution-oracle",
+        "fixture-controls",
+        "stack-matrix"
+      ]
+    },
+    {
+      "id": "PROP.C3.3.2",
+      "statement": "A failed broad command may narrow to own tests without runner-output attribution.",
+      "concept": [
+        "C3.3.2"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-2",
+        "execution-oracle",
+        "fixture-controls",
+        "stack-matrix"
+      ]
+    },
+    {
+      "id": "PROP.C3.3.3",
+      "statement": "Narrowing keeps all changed tests and carried targets.",
+      "concept": [
+        "C3.3.3"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-2",
+        "execution-oracle",
+        "fixture-controls",
+        "stack-matrix"
+      ]
+    },
+    {
+      "id": "PROP.C3.3.4",
+      "statement": "Retain the whole broad command, artifact and failure event in a grouped follow-up, marked not attributed when attribution is absent.",
+      "concept": [
+        "C3.3.4"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-2",
+        "execution-oracle",
+        "fixture-controls",
+        "stack-matrix"
+      ]
+    },
+    {
+      "id": "PROP.C3.3.5",
+      "statement": "Older unattributed evidence narrows without another broad run.",
+      "concept": [
+        "C3.3.5"
+      ],
+      "gates": [],
+      "checks": [
+        "field-cases",
+        "field-units",
+        "contract-case-2"
+      ],
+      "levels": [
+        "full",
+        "sweep"
+      ]
+    },
+    {
+      "id": "PROP.C3.3.6",
+      "statement": "Adapter attribution is informational only.",
+      "concept": [
+        "C3.3.6"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-2",
+        "execution-oracle",
+        "fixture-controls",
+        "stack-matrix"
+      ]
+    },
+    {
+      "id": "PROP.C3.4.1",
+      "statement": "Selection prefills changed and carried targets with an explicit command placeholder and shows the project command only as reference.",
+      "concept": [
+        "C3.4.1"
+      ],
+      "gates": [],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "unknown-tours",
+        "shared-plan-contract"
+      ]
+    },
+    {
+      "id": "PROP.C3.4.2",
+      "statement": "Run guidance says Selected task test command and matches the command actually offered.",
+      "concept": [
+        "C3.4.2"
+      ],
+      "gates": [],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "unknown-tours",
+        "shared-plan-contract"
+      ]
+    },
+    {
+      "id": "PROP.C3.4.3",
+      "statement": "A recorded project command with own tests offers a second command to select only those tests.",
+      "concept": [
+        "C3.4.3"
+      ],
+      "gates": [],
+      "checks": [
+        "field-cases",
+        "field-units",
+        "navigator-oracle"
+      ],
+      "levels": [
+        "full",
+        "sweep"
+      ]
+    },
+    {
+      "id": "PROP.C3.4.4",
+      "statement": "Refusals preserve the real inner reason and name its repair rather than replacing it with a generic explanation.",
+      "concept": [
+        "C3.4.4"
+      ],
+      "gates": [],
+      "checks": [
+        "field-cases",
+        "field-units",
+        "navigator-oracle"
+      ],
+      "levels": [
+        "full",
+        "sweep"
+      ]
+    },
+    {
+      "id": "PROP.C4.1",
+      "statement": "Discovery/init invents nothing for an unknown stack; commands may be declared task-locally.",
+      "concept": [
+        "C4.1"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-9",
+        "contract-renamed",
+        "unknown-tours",
+        "navigator-oracle"
+      ]
+    },
+    {
+      "id": "PROP.C4.2",
+      "statement": "Compile accepts a task-local declaration or justified not applicable when there is no separate compile phase.",
+      "concept": [
+        "C4.2"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-9",
+        "contract-renamed",
+        "unknown-tours",
+        "navigator-oracle"
+      ]
+    },
+    {
+      "id": "PROP.C4.3",
+      "statement": "Task test selection applies claim A.",
+      "concept": [
+        "C4.3"
+      ],
+      "gates": [],
+      "checks": [
+        "execution-oracle",
+        "fixture-controls",
+        "contract-case-1",
+        "contract-case-2",
+        "contract-case-3",
+        "contract-case-4",
+        "contract-case-5",
+        "contract-case-6",
+        "contract-case-7",
+        "contract-case-8",
+        "contract-case-9",
+        "contract-renamed",
+        "shared-plan-contract"
+      ]
+    },
+    {
+      "id": "PROP.C4.4",
+      "statement": "Task test execution applies claim B.",
+      "concept": [
+        "C4.4"
+      ],
+      "gates": [],
+      "checks": [
+        "execution-oracle",
+        "fixture-controls",
+        "contract-case-1",
+        "contract-case-2",
+        "contract-case-3",
+        "contract-case-4",
+        "contract-case-5",
+        "contract-case-6",
+        "contract-case-7",
+        "contract-case-8",
+        "contract-case-9",
+        "contract-renamed",
+        "shared-plan-contract"
+      ]
+    },
+    {
+      "id": "PROP.C4.5",
+      "statement": "Failure handling and narrowing use the same generic evidence contract.",
+      "concept": [
+        "C4.5"
+      ],
+      "gates": [],
+      "checks": [
+        "execution-oracle",
+        "fixture-controls",
+        "contract-case-1",
+        "contract-case-2",
+        "contract-case-3",
+        "contract-case-4",
+        "contract-case-5",
+        "contract-case-6",
+        "contract-case-7",
+        "contract-case-8",
+        "contract-case-9",
+        "contract-renamed",
+        "shared-plan-contract"
+      ]
+    },
+    {
+      "id": "PROP.C4.6",
+      "statement": "Focused validation after a finding uses that contract with one or more targets.",
+      "concept": [
+        "C4.6"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-9",
+        "contract-renamed",
+        "unknown-tours",
+        "navigator-oracle"
+      ]
+    },
+    {
+      "id": "PROP.C4.7",
+      "statement": "Expected RED and GREEN use the same declared command and bound targets.",
+      "concept": [
+        "C4.7"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-9",
+        "contract-renamed",
+        "unknown-tours",
+        "navigator-oracle"
+      ]
+    },
+    {
+      "id": "PROP.C4.8",
+      "statement": "Quality checklist cases bind declared cases to targets and executed commands.",
+      "concept": [
+        "C4.8"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-9",
+        "contract-renamed",
+        "unknown-tours",
+        "navigator-oracle"
+      ]
+    },
+    {
+      "id": "PROP.C4.9",
+      "statement": "Completion consumes all bound obligations and materialized follow-ups for broad failures.",
+      "concept": [
+        "C4.9"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-9",
+        "contract-renamed",
+        "unknown-tours",
+        "navigator-oracle"
+      ]
+    },
+    {
+      "id": "PROP.C4.10",
+      "statement": "Generated-output mappings bind explicit producers and sources without directory-name magic.",
+      "concept": [
+        "C4.10"
+      ],
+      "gates": [],
+      "checks": [
+        "execution-oracle",
+        "fixture-controls",
+        "contract-case-1",
+        "contract-case-2",
+        "contract-case-3",
+        "contract-case-4",
+        "contract-case-5",
+        "contract-case-6",
+        "contract-case-7",
+        "contract-case-8",
+        "contract-case-9",
+        "contract-renamed",
+        "shared-plan-contract"
+      ]
+    },
+    {
+      "id": "PROP.C5.1",
+      "statement": "Test review compares selected targets with the diff and task criteria to catch irrelevant tests.",
+      "concept": [
+        "C5.1"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-5",
+        "fixture-controls",
+        "execution-oracle"
+      ]
+    },
+    {
+      "id": "PROP.C5.2",
+      "statement": "Test-source and retained execution review catches no-op runners; adapter zero-case facts remain visible.",
+      "concept": [
+        "C5.2"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-5",
+        "fixture-controls",
+        "execution-oracle"
+      ]
+    },
+    {
+      "id": "PROP.C5.3",
+      "statement": "Changed runnable tests remain required and helper/fixture mappings are reviewed.",
+      "concept": [
+        "C5.3"
+      ],
+      "gates": [],
+      "checks": [
+        "shared-plan-contract",
+        "contract-case-4"
+      ]
+    },
+    {
+      "id": "PROP.C5.4",
+      "statement": "Broad failures cannot disappear: preserve failed attempts in follow-ups while own tests pass.",
+      "concept": [
+        "C5.4"
+      ],
+      "gates": [],
+      "checks": [
+        "execution-oracle",
+        "fixture-controls",
+        "contract-case-1",
+        "contract-case-2",
+        "contract-case-3",
+        "contract-case-4",
+        "contract-case-5",
+        "contract-case-6",
+        "contract-case-7",
+        "contract-case-8",
+        "contract-case-9",
+        "contract-renamed",
+        "shared-plan-contract"
+      ]
+    },
+    {
+      "id": "PROP.C5.5",
+      "statement": "Editing tests after selection makes content bindings stale.",
+      "concept": [
+        "C5.5"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-6",
+        "shared-plan-contract"
+      ]
+    },
+    {
+      "id": "PROP.C5.6",
+      "statement": "Generic evidence proves process and binding; independent review judges test semantics.",
+      "concept": [
+        "C5.6"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-5",
+        "fixture-controls",
+        "execution-oracle"
+      ]
+    },
+    {
+      "id": "PROP.C5.1.1",
+      "statement": "RED fails on declared targets before implementation and binds test bytes and pre-implementation source.",
+      "concept": [
+        "C5.1.1"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-9",
+        "contract-renamed",
+        "unknown-tours",
+        "shared-plan-contract",
+        "fixture-controls"
+      ]
+    },
+    {
+      "id": "PROP.C5.1.2",
+      "statement": "GREEN passes the same command and targets after implementation.",
+      "concept": [
+        "C5.1.2"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-9",
+        "contract-renamed",
+        "unknown-tours",
+        "shared-plan-contract",
+        "fixture-controls"
+      ]
+    },
+    {
+      "id": "PROP.C5.1.3",
+      "statement": "Enforce RED before implementation before GREEN; forbid backdating or reuse across changed tests.",
+      "concept": [
+        "C5.1.3"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-9",
+        "contract-renamed",
+        "unknown-tours",
+        "shared-plan-contract",
+        "fixture-controls"
+      ]
+    },
+    {
+      "id": "PROP.C5.1.4",
+      "statement": "The agent and test reviewer judge why RED failed; missing case-level adapters never block.",
+      "concept": [
+        "C5.1.4"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-9",
+        "contract-renamed",
+        "unknown-tours",
+        "shared-plan-contract",
+        "fixture-controls"
+      ]
+    },
+    {
+      "id": "PROP.C6.1.1",
+      "statement": "Derive required lanes from classification/task profile and freeze policy at task entry.",
+      "concept": [
+        "C6.1.1"
+      ],
+      "gates": [],
+      "checks": [
+        "review-economy",
+        "economy-units",
+        "review-units",
+        "policy-short",
+        "policy-complete",
+        "short-economy-walks",
+        "compact-review-cases"
+      ]
+    },
+    {
+      "id": "PROP.C6.1.2",
+      "statement": "Launch a new clean-context reviewer for every current context; never reuse a session across contexts and close it after its receipt.",
+      "concept": [
+        "C6.1.2"
+      ],
+      "gates": [],
+      "checks": [
+        "review-economy",
+        "economy-units",
+        "review-units",
+        "policy-short",
+        "policy-complete",
+        "short-economy-walks",
+        "compact-review-cases"
+      ]
+    },
+    {
+      "id": "PROP.C6.1.3",
+      "statement": "Bind review context to diff, task criteria, validation selections/executions/adapter facts/failures and upstream results with a recorded digest.",
+      "concept": [
+        "C6.1.3"
+      ],
+      "gates": [],
+      "checks": [
+        "review-economy",
+        "economy-units",
+        "review-units",
+        "policy-short",
+        "policy-complete",
+        "short-economy-walks",
+        "compact-review-cases"
+      ]
+    },
+    {
+      "id": "PROP.C6.1.4",
+      "statement": "Bind each receipt to context digest, reviewer launch and provider invocation; reject missing, forged and mismatched receipts.",
+      "concept": [
+        "C6.1.4"
+      ],
+      "gates": [],
+      "checks": [
+        "review-economy",
+        "economy-units",
+        "review-units",
+        "policy-short",
+        "policy-complete",
+        "short-economy-walks",
+        "compact-review-cases"
+      ]
+    },
+    {
+      "id": "PROP.C6.1.5",
+      "statement": "Enforce the declared lane dependency graph at review and completion through one shared rule.",
+      "concept": [
+        "C6.1.5"
+      ],
+      "gates": [],
+      "checks": [
+        "review-economy",
+        "economy-units",
+        "review-units",
+        "policy-short",
+        "policy-complete",
+        "short-economy-walks",
+        "compact-review-cases"
+      ]
+    },
+    {
+      "id": "PROP.C6.2.1",
+      "statement": "Keep passed reviews while their bound context is unchanged.",
+      "concept": [
+        "C6.2.1"
+      ],
+      "gates": [],
+      "checks": [
+        "review-economy",
+        "economy-units",
+        "review-units",
+        "policy-short",
+        "policy-complete",
+        "short-economy-walks",
+        "compact-review-cases"
+      ]
+    },
+    {
+      "id": "PROP.C6.2.2",
+      "statement": "Use DELTA for eligible small changes; large changes or lost contexts require FULL.",
+      "concept": [
+        "C6.2.2"
+      ],
+      "gates": [],
+      "checks": [
+        "review-economy",
+        "economy-units",
+        "review-units",
+        "policy-short",
+        "policy-complete",
+        "short-economy-walks",
+        "compact-review-cases"
+      ]
+    },
+    {
+      "id": "PROP.C6.2.3",
+      "statement": "Repeat only affected lanes and declared dependents once after edits or lost/corrupt/stale inputs.",
+      "concept": [
+        "C6.2.3"
+      ],
+      "gates": [],
+      "checks": [
+        "review-economy",
+        "economy-units",
+        "review-units",
+        "policy-short",
+        "policy-complete",
+        "short-economy-walks",
+        "compact-review-cases"
+      ]
+    },
+    {
+      "id": "PROP.C6.2.4",
+      "statement": "Policy adoption keeps passed reviews; changed acceptance criteria rerun all required lanes FULL.",
+      "concept": [
+        "C6.2.4"
+      ],
+      "gates": [],
+      "checks": [
+        "review-economy",
+        "economy-units",
+        "review-units",
+        "policy-short",
+        "policy-complete",
+        "short-economy-walks",
+        "compact-review-cases"
+      ]
+    },
+    {
+      "id": "PROP.C6.2.5",
+      "statement": "Ask the same reachable reviewer to correct malformed reports; FULL rerun only when unreachable.",
+      "concept": [
+        "C6.2.5"
+      ],
+      "gates": [],
+      "checks": [
+        "review-economy",
+        "economy-units",
+        "review-units",
+        "policy-short",
+        "policy-complete",
+        "short-economy-walks",
+        "compact-review-cases"
+      ]
+    },
+    {
+      "id": "PROP.C6.2.6",
+      "statement": "Test reselection/rerun invalidates only lanes whose validation inputs changed, normally the test lane.",
+      "concept": [
+        "C6.2.6"
+      ],
+      "gates": [],
+      "checks": [
+        "review-economy",
+        "economy-units",
+        "review-units",
+        "policy-short",
+        "policy-complete",
+        "short-economy-walks",
+        "compact-review-cases"
+      ]
+    },
+    {
+      "id": "PROP.C6.2.7",
+      "statement": "Wrong gates, repeated commands and stale locks cost no extra reviews.",
+      "concept": [
+        "C6.2.7"
+      ],
+      "gates": [],
+      "checks": [
+        "review-economy",
+        "economy-units",
+        "review-units",
+        "policy-short",
+        "policy-complete",
+        "short-economy-walks",
+        "compact-review-cases"
+      ]
+    },
+    {
+      "id": "PROP.C6.3.1",
+      "statement": "Findings support fix now, follow-up, or ignore with a reason.",
+      "concept": [
+        "C6.3.1"
+      ],
+      "gates": [],
+      "checks": [
+        "review-economy",
+        "economy-units",
+        "review-units",
+        "policy-short",
+        "policy-complete",
+        "short-economy-walks",
+        "compact-review-cases"
+      ]
+    },
+    {
+      "id": "PROP.C6.3.2",
+      "statement": "Accepted follow-ups and broad test failures materialize grouped authenticated child tasks.",
+      "concept": [
+        "C6.3.2"
+      ],
+      "gates": [],
+      "checks": [
+        "review-economy",
+        "economy-units",
+        "review-units",
+        "policy-short",
+        "policy-complete",
+        "short-economy-walks",
+        "compact-review-cases"
+      ]
+    },
+    {
+      "id": "PROP.C6.3.3",
+      "statement": "Fixed findings are rechecked by the affected lane with eligible DELTA and generic focused validation on one or more targets.",
+      "concept": [
+        "C6.3.3"
+      ],
+      "gates": [],
+      "checks": [
+        "review-economy",
+        "economy-units",
+        "review-units",
+        "policy-short",
+        "policy-complete",
+        "short-economy-walks",
+        "compact-review-cases"
+      ]
+    },
+    {
+      "id": "PROP.C7.1",
+      "statement": "The single report has pass/fail for navigator correctness, stack independence, review logic and speed.",
+      "concept": [
+        "C7.1"
+      ],
+      "gates": [],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "unknown-tours"
+      ]
+    },
+    {
+      "id": "PROP.C7.2",
+      "statement": "Navigator correctness rejects dead ends, loops and unreachable routes and checks recovery after disturbances.",
+      "concept": [
+        "C7.2"
+      ],
+      "gates": [],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "unknown-tours"
+      ]
+    },
+    {
+      "id": "PROP.C7.3",
+      "statement": "Stack independence is proved by the unknown contract and stack/task matrix within synthetic limits.",
+      "concept": [
+        "C7.3"
+      ],
+      "gates": [],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "unknown-tours",
+        "compact-review-cases"
+      ]
+    },
+    {
+      "id": "PROP.C7.4",
+      "statement": "Review logic checks counts/modes/reuse/affected lanes/order/findings/follow-ups on each stack and archetype.",
+      "concept": [
+        "C7.4"
+      ],
+      "gates": [],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "unknown-tours"
+      ]
+    },
+    {
+      "id": "PROP.C7.5",
+      "statement": "Speed is guarded by deterministic work budgets and separately measured step timing.",
+      "concept": [
+        "C7.5"
+      ],
+      "gates": [],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "unknown-tours"
+      ]
+    },
+    {
+      "id": "PROP.C7.1.1",
+      "statement": "The unknown project uses invented extensions, opaque runner output and no recognized manifest.",
+      "concept": [
+        "C7.1.1"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-9",
+        "contract-renamed",
+        "unknown-tours",
+        "navigator-oracle"
+      ]
+    },
+    {
+      "id": "PROP.C7.1.2",
+      "statement": "The long native tour covers discovery, compile declaration, unknown tests plus helper/data mappings, RED and own GREEN.",
+      "concept": [
+        "C7.1.2"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-9",
+        "contract-renamed",
+        "unknown-tours",
+        "navigator-oracle"
+      ]
+    },
+    {
+      "id": "PROP.C7.1.3",
+      "statement": "The tour includes an unattributed broad failure, target-preserving narrowing, checklist and several review lanes.",
+      "concept": [
+        "C7.1.3"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-9",
+        "contract-renamed",
+        "unknown-tours",
+        "navigator-oracle"
+      ]
+    },
+    {
+      "id": "PROP.C7.1.4",
+      "statement": "The tour includes two-target focused validation after a finding, a materialized follow-up and DONE.",
+      "concept": [
+        "C7.1.4"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-9",
+        "contract-renamed",
+        "unknown-tours",
+        "navigator-oracle"
+      ]
+    },
+    {
+      "id": "PROP.C7.1.5",
+      "statement": "Unknown stacks must not cause operator handoffs, missing commands, repeated unchanged refusals, substituted known-stack tests or global regex/config changes.",
+      "concept": [
+        "C7.1.5"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-9",
+        "contract-renamed",
+        "unknown-tours",
+        "navigator-oracle"
+      ]
+    },
+    {
+      "id": "PROP.C7.1.6",
+      "statement": "Renaming executable, extensions and layout preserves DONE.",
+      "concept": [
+        "C7.1.6"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-9",
+        "contract-renamed",
+        "unknown-tours",
+        "navigator-oracle"
+      ]
+    },
+    {
+      "id": "PROP.C7.1.7",
+      "statement": "Negative controls damage source hashes, execution bindings and chronology and require real integrity refusals.",
+      "concept": [
+        "C7.1.7"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-6",
+        "shared-plan-contract"
+      ]
+    },
+    {
+      "id": "PROP.C7.1.8",
+      "statement": "Explicit validation-gate ownership plus source-derived route instrumentation makes new uncovered test/build gates fail.",
+      "concept": [
+        "C7.1.8"
+      ],
+      "gates": [],
+      "checks": [
+        "contract-case-8",
+        "route-coverage",
+        "trace-meta"
+      ]
+    },
+    {
+      "id": "PROP.C7.2.1",
+      "statement": "Fixtures model Maven multi-module/external parent/excludes/list selectors, Gradle, Kotlin, .NET, Go, Rust, Python, Node, PHP, frontend, Ruby, Elixir, Swift, CMake and unknown stacks.",
+      "concept": [
+        "C7.2.1"
+      ],
+      "gates": [],
+      "checks": [
+        "execution-oracle",
+        "fixture-controls",
+        "contract-case-1",
+        "contract-case-2",
+        "contract-case-3",
+        "contract-case-4",
+        "contract-case-5",
+        "contract-case-6",
+        "contract-case-7",
+        "contract-case-8",
+        "contract-case-9",
+        "contract-renamed",
+        "stack-matrix",
+        "adapter-parity"
+      ],
+      "levels": [
+        "full",
+        "sweep"
+      ]
+    },
+    {
+      "id": "PROP.C7.2.2",
+      "statement": "At least two polyglot combinations contain tasks with two technologies and separately executed commands.",
+      "concept": [
+        "C7.2.2"
+      ],
+      "gates": [],
+      "checks": [
+        "execution-oracle",
+        "fixture-controls",
+        "contract-case-1",
+        "contract-case-2",
+        "contract-case-3",
+        "contract-case-4",
+        "contract-case-5",
+        "contract-case-6",
+        "contract-case-7",
+        "contract-case-8",
+        "contract-case-9",
+        "contract-renamed",
+        "stack-matrix",
+        "adapter-parity"
+      ],
+      "levels": [
+        "full",
+        "sweep"
+      ]
+    },
+    {
+      "id": "PROP.C7.2.3",
+      "statement": "Each project covers production+test, test-only, two modules, docs-only, repaired own failure, broad failure+narrowing, TDD, security/refactor reviews and decomposition.",
+      "concept": [
+        "C7.2.3"
+      ],
+      "gates": [],
+      "checks": [
+        "execution-oracle",
+        "fixture-controls",
+        "contract-case-1",
+        "contract-case-2",
+        "contract-case-3",
+        "contract-case-4",
+        "contract-case-5",
+        "contract-case-6",
+        "contract-case-7",
+        "contract-case-8",
+        "contract-case-9",
+        "contract-renamed",
+        "stack-matrix",
+        "adapter-parity"
+      ],
+      "levels": [
+        "full",
+        "sweep"
+      ]
+    },
+    {
+      "id": "PROP.C7.2.4",
+      "statement": "Every task reaches DONE or declared handoff with review counts and modes checked.",
+      "concept": [
+        "C7.2.4"
+      ],
+      "gates": [],
+      "checks": [
+        "execution-oracle",
+        "fixture-controls",
+        "contract-case-1",
+        "contract-case-2",
+        "contract-case-3",
+        "contract-case-4",
+        "contract-case-5",
+        "contract-case-6",
+        "contract-case-7",
+        "contract-case-8",
+        "contract-case-9",
+        "contract-renamed",
+        "stack-matrix",
+        "adapter-parity"
+      ],
+      "levels": [
+        "full",
+        "sweep"
+      ]
+    },
+    {
+      "id": "PROP.C7.2.5",
+      "statement": "Adapter mode is the same or stronger than generic and never introduces a refusal; matrix shapes are not a supported-stack whitelist.",
+      "concept": [
+        "C7.2.5"
+      ],
+      "gates": [],
+      "checks": [
+        "execution-oracle",
+        "fixture-controls",
+        "contract-case-1",
+        "contract-case-2",
+        "contract-case-3",
+        "contract-case-4",
+        "contract-case-5",
+        "contract-case-6",
+        "contract-case-7",
+        "contract-case-8",
+        "contract-case-9",
+        "contract-renamed",
+        "stack-matrix",
+        "adapter-parity"
+      ],
+      "levels": [
+        "full",
+        "sweep"
+      ]
+    },
+    {
+      "id": "PROP.C7.3.1",
+      "statement": "Every walk checks fresh reviewer launch counts and FULL/DELTA modes against independent scenario expectations.",
+      "concept": [
+        "C7.3.1"
+      ],
+      "gates": [],
+      "checks": [
+        "review-economy",
+        "economy-units",
+        "review-units",
+        "policy-short",
+        "policy-complete",
+        "short-economy-walks",
+        "compact-review-cases"
+      ]
+    },
+    {
+      "id": "PROP.C7.3.2",
+      "statement": "Every walk checks passed-review reuse, rule-derived disturbance bounds and finding follow-ups.",
+      "concept": [
+        "C7.3.2"
+      ],
+      "gates": [],
+      "checks": [
+        "review-economy",
+        "economy-units",
+        "review-units",
+        "policy-short",
+        "policy-complete",
+        "short-economy-walks",
+        "compact-review-cases"
+      ]
+    },
+    {
+      "id": "PROP.C7.3.3",
+      "statement": "Changed counts or modes are regressions; expectation changes need an explicit rule-derived reason.",
+      "concept": [
+        "C7.3.3"
+      ],
+      "gates": [],
+      "checks": [
+        "review-economy",
+        "economy-units",
+        "review-units",
+        "policy-short",
+        "policy-complete",
+        "short-economy-walks",
+        "compact-review-cases"
+      ]
+    },
+    {
+      "id": "PROP.C7.4.1",
+      "statement": "Each navigator/gate step records Git/ACL subprocesses, file probes, hashes, payload reads and timeline bytes/events/clones.",
+      "concept": [
+        "C7.4.1"
+      ],
+      "gates": [],
+      "checks": [
+        "work-budgets",
+        "stand-units"
+      ]
+    },
+    {
+      "id": "PROP.C7.4.2",
+      "statement": "Every route has a justified deterministic budget independent of machine load.",
+      "concept": [
+        "C7.4.2"
+      ],
+      "gates": [],
+      "checks": [
+        "work-budgets",
+        "stand-units"
+      ]
+    },
+    {
+      "id": "PROP.C7.4.3",
+      "statement": "Never raise subprocess ceilings; newly measured route entries name concrete required inputs.",
+      "concept": [
+        "C7.4.3"
+      ],
+      "gates": [],
+      "checks": [
+        "work-budgets",
+        "stand-units"
+      ]
+    },
+    {
+      "id": "PROP.C7.4.4",
+      "statement": "History-only work may grow linearly within tolerance with each event read/verified once per call; repeated clones/parses or constant-work/subprocess growth fails.",
+      "concept": [
+        "C7.4.4"
+      ],
+      "gates": [],
+      "checks": [
+        "work-budgets",
+        "stand-units"
+      ]
+    },
+    {
+      "id": "PROP.C7.4.5",
+      "statement": "On a quiet machine compare next-step median and p95 per route with the stored prior-release baseline and report growth.",
+      "concept": [
+        "C7.4.5"
+      ],
+      "gates": [],
+      "checks": [
+        "work-budgets",
+        "stand-units",
+        "step-timing"
+      ]
+    },
+    {
+      "id": "PROP.C7.4.6",
+      "statement": "Timing is isolated from other heavy work; unavailable quiet evidence is inconclusive.",
+      "concept": [
+        "C7.4.6"
+      ],
+      "gates": [],
+      "checks": [
+        "work-budgets",
+        "stand-units",
+        "step-timing"
+      ]
+    },
+    {
+      "id": "PROP.C7.5.1",
+      "statement": "Short runs the contract and representative walks per pillar; full runs all scenarios and the whole matrix; release sweep adds disturbances.",
+      "concept": [
+        "C7.5.1"
+      ],
+      "gates": [],
+      "checks": [
+        "stand-units",
+        "resume-identity",
+        "trace-meta"
+      ]
+    },
+    {
+      "id": "PROP.C7.5.2",
+      "statement": "Persist each completed scenario atomically, print progress/counts/ETA after each and retain partial findings while running.",
+      "concept": [
+        "C7.5.2"
+      ],
+      "gates": [],
+      "checks": [
+        "stand-units",
+        "resume-identity",
+        "trace-meta"
+      ]
+    },
+    {
+      "id": "PROP.C7.5.3",
+      "statement": "Resume only with unchanged seed, level, provider, scenario manifest, fixture and input hashes.",
+      "concept": [
+        "C7.5.3"
+      ],
+      "gates": [],
+      "checks": [
+        "stand-units",
+        "resume-identity",
+        "trace-meta"
+      ]
+    },
+    {
+      "id": "PROP.C7.5.4",
+      "statement": "Long runs retain a heartbeat without fixed short timeouts.",
+      "concept": [
+        "C7.5.4"
+      ],
+      "gates": [],
+      "checks": [
+        "stand-units",
+        "resume-identity",
+        "trace-meta"
+      ]
+    },
+    {
+      "id": "PROP.C7.5.5",
+      "statement": "One summary contains pass/fail per pillar and links to all details.",
+      "concept": [
+        "C7.5.5"
+      ],
+      "gates": [],
+      "checks": [
+        "stand-units",
+        "resume-identity",
+        "trace-meta"
+      ]
+    },
+    {
+      "id": "PROP.C7.5.6",
+      "statement": "Change budgets, timing baselines and expectations only with a written reason, never to hide a red result.",
+      "concept": [
+        "C7.5.6"
+      ],
+      "gates": [],
+      "checks": [
+        "stand-units",
+        "resume-identity",
+        "trace-meta"
+      ]
+    },
+    {
+      "id": "PROP.C7.5.7",
+      "statement": "Isolate long runs from other heavy work; full test groups belong to external manual CI.",
+      "concept": [
+        "C7.5.7"
+      ],
+      "gates": [],
+      "checks": [
+        "stand-units",
+        "resume-identity",
+        "trace-meta"
+      ]
+    },
+    {
+      "id": "GATE.validate-manifest",
+      "statement": "The validate-manifest registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "validate-manifest"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.enter-task-mode",
+      "statement": "The enter-task-mode registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "enter-task-mode"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.recover-task-mode-protected-manifest",
+      "statement": "The recover-task-mode-protected-manifest registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "recover-task-mode-protected-manifest"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.restart-coherent-cycle",
+      "statement": "The restart-coherent-cycle registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "restart-coherent-cycle"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.restart-review-cycle",
+      "statement": "The restart-review-cycle registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "restart-review-cycle"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.load-rule-pack",
+      "statement": "The load-rule-pack registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "load-rule-pack"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.bind-rule-pack-to-preflight",
+      "statement": "The bind-rule-pack-to-preflight registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "bind-rule-pack-to-preflight"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.record-no-op",
+      "statement": "The record-no-op registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "record-no-op"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.record-review-cycle-continuation",
+      "statement": "The record-review-cycle-continuation registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "record-review-cycle-continuation"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.record-review-cycle-split-decision",
+      "statement": "The record-review-cycle-split-decision registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "record-review-cycle-split-decision"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.record-strict-decomposition-decision",
+      "statement": "The record-strict-decomposition-decision registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "record-strict-decomposition-decision"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.list-split-required-wip",
+      "statement": "The list-split-required-wip registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "list-split-required-wip"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.restore-split-required-wip",
+      "statement": "The restore-split-required-wip registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "restore-split-required-wip"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.retire-split-required-wip",
+      "statement": "The retire-split-required-wip registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "retire-split-required-wip"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.compile-gate",
+      "statement": "The compile-gate registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "compile-gate"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.full-suite-validation",
+      "statement": "The full-suite-validation registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "full-suite-validation"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.full-suite-run-marker-recovery",
+      "statement": "The full-suite-run-marker-recovery registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "full-suite-run-marker-recovery"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.materialize-full-suite-repair-task",
+      "statement": "The materialize-full-suite-repair-task registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "materialize-full-suite-repair-task"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.restore-full-suite-repair-wip",
+      "statement": "The restore-full-suite-repair-wip registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "restore-full-suite-repair-wip"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.completion-gate",
+      "statement": "The completion-gate registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "completion-gate"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.classify-change",
+      "statement": "The classify-change registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "classify-change"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.build-scoped-diff",
+      "statement": "The build-scoped-diff registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "build-scoped-diff"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.build-review-context",
+      "statement": "The build-review-context registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "build-review-context"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.activate-optional-skill",
+      "statement": "The activate-optional-skill registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "activate-optional-skill"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.decline-optional-skill",
+      "statement": "The decline-optional-skill registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "decline-optional-skill"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.doc-impact-gate",
+      "statement": "The doc-impact-gate registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "doc-impact-gate"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.required-reviews-check",
+      "statement": "The required-reviews-check registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "required-reviews-check"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.record-review-result",
+      "statement": "The record-review-result registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "record-review-result"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.record-review-output-correction-transport",
+      "statement": "The record-review-output-correction-transport registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "record-review-output-correction-transport"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.record-review-output-correction-response",
+      "statement": "The record-review-output-correction-response registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "record-review-output-correction-response"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.record-review-output-correction-invocation",
+      "statement": "The record-review-output-correction-invocation registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "record-review-output-correction-invocation"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.materialize-review-follow-up-tasks",
+      "statement": "The materialize-review-follow-up-tasks registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "materialize-review-follow-up-tasks"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.record-review-routing",
+      "statement": "The record-review-routing registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "record-review-routing"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.prepare-reviewer-launch",
+      "statement": "The prepare-reviewer-launch registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "prepare-reviewer-launch"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.record-reviewer-delegation-started",
+      "statement": "The record-reviewer-delegation-started registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "record-reviewer-delegation-started"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.record-reviewer-launch-failed",
+      "statement": "The record-reviewer-launch-failed registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "record-reviewer-launch-failed"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.complete-reviewer-launch",
+      "statement": "The complete-reviewer-launch registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "complete-reviewer-launch"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.record-review-invocation",
+      "statement": "The record-review-invocation registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "record-review-invocation"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.record-review-receipt",
+      "statement": "The record-review-receipt registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "record-review-receipt"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.log-task-event",
+      "statement": "The log-task-event registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "log-task-event"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.task-events-summary",
+      "statement": "The task-events-summary registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "task-events-summary"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.task-audit-summary",
+      "statement": "The task-audit-summary registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "task-audit-summary"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.parent-audit",
+      "statement": "The parent-audit registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "parent-audit"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.next-step",
+      "statement": "The next-step registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "next-step"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.human-commit",
+      "statement": "The human-commit registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "human-commit"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.handshake-diagnostics",
+      "statement": "The handshake-diagnostics registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "handshake-diagnostics"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.shell-smoke-preflight",
+      "statement": "The shell-smoke-preflight registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "shell-smoke-preflight"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.command-timeout-diagnostics",
+      "statement": "The command-timeout-diagnostics registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "command-timeout-diagnostics"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.quality-checklist",
+      "statement": "The quality-checklist registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "quality-checklist"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.run-intermediate-command",
+      "statement": "The run-intermediate-command registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "run-intermediate-command"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.project-memory-impact",
+      "statement": "The project-memory-impact registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "project-memory-impact"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.validate-isolation",
+      "statement": "The validate-isolation registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "validate-isolation"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.prepare-isolation",
+      "statement": "The prepare-isolation registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "prepare-isolation"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.task-reset",
+      "statement": "The task-reset registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "task-reset"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "GATE.validate-config",
+      "statement": "The validate-config registry entry remains under the shared native route/integrity contract.",
+      "concept": [],
+      "gates": [
+        "validate-config"
+      ],
+      "checks": [
+        "navigator-oracle",
+        "route-coverage",
+        "contract-case-8"
+      ]
+    },
+    {
+      "id": "FIELD.regressions",
+      "statement": "Permanent field regressions preserve legacy evidence, two-module narrowing, exact refusal reasons, reselection offers and cmd argv.",
+      "concept": [],
+      "gates": [],
+      "checks": [
+        "field-units",
+        "field-cases",
+        "field-lifecycle"
+      ],
+      "levels": [
+        "full",
+        "sweep"
+      ]
+    },
+    {
+      "id": "FIELD.release-update",
+      "statement": "Updating a real installed previous release that carries operator edits succeeds: operator bytes outside managed sections survive, the shipped managed contract is present, the prior file is backed up and the installed VERIFY passes; managed-section refresh keeps ownership markers well formed and idempotent; a persistent cache hit always equals a fresh computation of the inputs it reads.",
+      "concept": [],
+      "gates": [],
+      "checks": [
+        "field-lifecycle"
+      ]
+    }
+  ],
+  "limits": [
+    {
+      "unproved": "real toolchain behavior (the fixture runners simulate Maven and other toolchains)",
+      "external": "real-project acceptance with native build/test tools"
+    },
+    {
+      "unproved": "behavior on other operating systems from a local synthetic run",
+      "external": "manually authorized CI on three OS (Windows, Linux, macOS)"
+    },
+    {
+      "unproved": "real agent decisions, clean-context behavior or semantic review quality",
+      "external": "T-406/T-408 and real-project acceptance with real agents"
+    },
+    {
+      "unproved": "quiet-machine step timing when timing is NOT_REQUESTED, INCONCLUSIVE or UNBASELINED",
+      "external": "isolated timing run with a complete prior-release baseline"
+    },
+    {
+      "unproved": "full or release-sweep coverage from a short or selected run",
+      "external": "complete full stand and release disturbance sweep on the final source identity"
+    }
+  ]
+}

@@ -143,7 +143,10 @@ function literalNodeFilesInclude(tokens: string[], root: string, target: string,
         });
 }
 
-/** One checker belongs to one validation/read invocation; no module observation survives into another call. */
+/** Optional legacy adapter observations only. False means inconclusive, never a generic admission refusal.
+ * One checker belongs to one capture; no module observation survives into another call.
+ * Task selection uses core/task-validation-plan instead of this partial effective-model parser.
+ */
 export function createTaskTestCommandContainerChecker(command: string, root: string, inspectConfiguration = true,
     captureInput?: CaptureInput): (target: string) => boolean {
     try {

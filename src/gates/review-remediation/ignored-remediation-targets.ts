@@ -1,4 +1,5 @@
 import { countNextStepWork } from '../../core/next-step-measurement';
+import { readInvocationPathObservation, readInvocationTextFile } from '../../core/invocation-file-observation';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -194,6 +195,7 @@ function isTaskManualValidationPath(taskId: string, relativePath: string): boole
 
 function readSmallTextFile(filePath: string): string {
     try {
+        readInvocationPathObservation(filePath);
         if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
             return '';
         }
@@ -201,7 +203,7 @@ function readSmallTextFile(filePath: string): string {
         if (stat.size > REVIEW_TEXT_MAX_BYTES) {
             return '';
         }
-        return fs.readFileSync(filePath, 'utf8');
+        return readInvocationTextFile(filePath);
     } catch {
         return '';
     }
@@ -209,10 +211,11 @@ function readSmallTextFile(filePath: string): string {
 
 function readJsonRecord(filePath: string): Record<string, unknown> | null {
     try {
+        readInvocationPathObservation(filePath);
         if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
             return null;
         }
-        const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as unknown;
+        const parsed = JSON.parse(readInvocationTextFile(filePath)) as unknown;
         return isPlainRecord(parsed) ? parsed : null;
     } catch {
         return null;

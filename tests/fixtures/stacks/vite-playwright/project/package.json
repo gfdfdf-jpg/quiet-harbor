@@ -1,0 +1,1 @@
+{"name":"orders-ui","devDependencies":{"vite":"^6","vitest":"^3","@playwright/test":"^1"}}

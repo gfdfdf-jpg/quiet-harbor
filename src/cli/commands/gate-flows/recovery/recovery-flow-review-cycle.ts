@@ -1,9 +1,11 @@
-import { resolveRestartTaskIntent } from '../../../../gates/review-context/review-context-task-criteria-binding';
+import { resolveRestartTaskIntent, taskIntentSha256 } from '../../../../gates/review-context/review-context-task-criteria-binding';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { FileRoleBindings } from '../../../../core/file-role-bindings';
+import { readValidationFile } from '../../../../core/project-validation-identity';
 import { sha256RedactedJsonPayload } from '../../../../core/redaction';
 import { classifyChange, getClassificationConfig } from '../../../../gates/preflight/classify-change';
+import type { ResolvedClassificationConfig } from '../../../../gates/preflight/classify-change';
 import { buildReviewTreeState } from '../../../../gates/review/review-tree-state';
 import { isSafeOrdinaryDocumentationPath } from '../../../../gates/preflight/classify-change-doc-safety';
 import { EXIT_GATE_FAILURE } from '../../../exit-codes';
@@ -30,6 +32,7 @@ import {
 } from '../../../../gates/review-remediation/review-remediation-baseline';
 import {
     classifyReviewRemediationDelta,
+    resolveRemediationTaskRoleConfig,
     type ReviewRemediationFileDelta
 } from '../../../../gates/review-remediation/review-remediation-delta';
 import { collectReviewRemediationScopeReviewTypes, mentionsReviewSecurityWord as mentionsSecurityWord,
@@ -49,6 +52,7 @@ import { resolveRemediationOriginReviewType } from '../../../../gates/review-rem
 import { resolveReviewRestartApproval } from './recovery-flow-review-restart-approval';
 import {
     resolveAuthoritativeReviewRemediationDecision,
+    resolveProfilePolicySnapshotSha256,
     type AuthoritativeReviewRemediationDecision,
     type ReviewRemediationDecisionClassification,
     type ReviewRemediationModePolicyValidationInputs,
@@ -119,6 +123,12 @@ import {
     resolveRecoveryPreflightPath
 } from './recovery-flow-restart-evidence';
 import { runRecoveryFlowPreflightPipeline } from './recovery-flow-preflight-pipeline';
+import { NativeCaseExecutionUnavailableError } from '../../../../gates/review/native-case-semantics';
+import { ExpectedRedEvidenceError } from '../../../../gates/test-first/expected-red-evidence';
+import { resolveAuthoritativeReviewValidationObligations } from '../../../../gates/review-context/review-context-coverage';
+function isCaseExecutionPrerequisite(error: unknown): boolean {
+    return error instanceof NativeCaseExecutionUnavailableError || error instanceof ExpectedRedEvidenceError && error.needsGreen;
+}
 function getDependencyBlockReason(error: unknown, reviewType: string): string | null {
     const message = error instanceof Error ? error.message : String(error);
     const isUpstreamReviewBlock = message.includes(
@@ -127,7 +137,7 @@ function getDependencyBlockReason(error: unknown, reviewType: string): string | 
     const isTrustBoundaryPrerequisiteBlock = message.includes(
         'Review context cannot be built because required trust-boundary analysis is'
     );
-    if (!isUpstreamReviewBlock && !isTrustBoundaryPrerequisiteBlock) {
+    if (!isUpstreamReviewBlock && !isTrustBoundaryPrerequisiteBlock && !isCaseExecutionPrerequisite(error)) {
         return null;
     }
     return message.trim();
@@ -154,6 +164,7 @@ export function resolveRemediationDeltaReviewTriggers(options: {
     remediationDeltaFiles: readonly string[];
     profilePolicySnapshot?: unknown;
     preflightPayload?: unknown;
+    classificationConfig?: ResolvedClassificationConfig;
 }): { triggersPayload: unknown; classified: boolean } {
     if (options.remediationDeltaFiles.length === 0) {
         return { triggersPayload: {}, classified: true };
@@ -170,7 +181,8 @@ export function resolveRemediationDeltaReviewTriggers(options: {
             normalizedFiles: [...options.remediationDeltaFiles],
             repoRoot: options.repoRoot,
             isSourceCheckout: gateHelpers.isOrchestratorSourceCheckout(options.repoRoot),
-            classificationConfig: getClassificationConfig(options.repoRoot, reviewTriggerPolicy ? { reviewTriggerPolicy } : {})
+            classificationConfig: options.classificationConfig
+                ?? getClassificationConfig(options.repoRoot, reviewTriggerPolicy ? { reviewTriggerPolicy } : {})
         });
         return { triggersPayload: { triggers: classification.triggers, scope_category: classification.scope_category }, classified: true };
     } catch {
@@ -275,6 +287,7 @@ export function resolveRuntimeDecisionInputs(options: {
     };
     allowAuthenticatedDelta: boolean;
     preflightPayload?: unknown;
+    preflightPath?: string;
     authenticatedTaskCriteria?: string | null;
     currentTaskCriteria?: string | null;
     /** The intent the new preflight is classified with; enables the shared task-criteria binding rule. */
@@ -323,7 +336,8 @@ export function resolveRuntimeDecisionInputs(options: {
         if (!fs.existsSync(baselineArtifactPath) || !fs.statSync(baselineArtifactPath).isFile()) {
             return buildFullFallback('Authenticated remediation baseline is unavailable; FULL review is required.');
         }
-        const { integrity: timelineIntegrity, lanes: laneReviews, timingEvents, trustedReceipts } = collectRemediationLaneHistory({
+        const { integrity: timelineIntegrity, lanes: laneReviews, timingEvents, trustedReceipts,
+            authenticatedPreflightSha256 } = collectRemediationLaneHistory({
             repoRoot: options.repoRoot, taskId: options.taskId
         });
         const recordedEventDetails = laneReviews.get(currentReviewType)?.details;
@@ -385,6 +399,28 @@ export function resolveRuntimeDecisionInputs(options: {
         }
         try {
             assertProtectedTriggerRegexesCompile(getClassificationConfig(options.repoRoot));
+            let taskRolePreflightText: string | undefined;
+            let taskRoleConfig: ResolvedClassificationConfig | undefined;
+            const payload = options.preflightPayload as { declared_test_paths?: unknown } | null | undefined;
+            if (options.preflightPath && authenticatedPreflightSha256 && Array.isArray(payload?.declared_test_paths)
+                && payload.declared_test_paths.length > 0) {
+                try {
+                    const retained = readValidationFile(options.repoRoot,
+                        path.relative(options.repoRoot, options.preflightPath).replace(/\\/gu, '/'), 1024 * 1024);
+                    const snapshot = options.profilePolicySnapshot as { review_trigger_policy?: unknown } | null | undefined;
+                    const policy = snapshot && typeof snapshot === 'object' && snapshot.review_trigger_policy !== undefined
+                        ? resolveTaskProfileReviewTriggerPolicy(snapshot as Parameters<typeof resolveTaskProfileReviewTriggerPolicy>[0])
+                        : undefined;
+                    const config = getClassificationConfig(options.repoRoot, policy ? { reviewTriggerPolicy: policy } : {});
+                    taskRoleConfig = resolveRemediationTaskRoleConfig({ repoRoot: options.repoRoot, taskId: options.taskId,
+                        preflightText: retained.bytes.toString('utf8'), authenticatedPreflightHashes: [authenticatedPreflightSha256],
+                        config: { ...config, file_roles: options.reviewTriggerPolicy.file_roles ?? config.file_roles,
+                            test_trigger_regexes: [...options.reviewTriggerPolicy.test_path_regexes] } });
+                    taskRolePreflightText = retained.bytes.toString('utf8');
+                } catch {
+                    // Missing, stale, foreign or unsafe declarations grant no task-local role.
+                }
+            }
             const modePolicyResolution = resolveReviewRemediationModePolicyFromSnapshot(
                 options.profilePolicySnapshot
             );
@@ -396,7 +432,8 @@ export function resolveRuntimeDecisionInputs(options: {
                     repoRoot: options.repoRoot,
                     remediationDeltaFiles,
                     profilePolicySnapshot: options.profilePolicySnapshot,
-                    preflightPayload: options.preflightPayload
+                    preflightPayload: options.preflightPayload,
+                    classificationConfig: taskRoleConfig
                 });
                 deltaModeGuards = resolveRuntimeReviewRemediationModeGuards({
                     repoRoot: options.repoRoot, remediationFileDeltas: fileDeltas,
@@ -428,22 +465,44 @@ export function resolveRuntimeDecisionInputs(options: {
                 baselineArtifactSha256: baselineSnapshotSha256,
                 currentChangedFiles: options.currentChangedFiles,
                 testPathRegexes: options.reviewTriggerPolicy.test_path_regexes,
-                fileRoles: options.reviewTriggerPolicy.file_roles,
+                fileRoles: taskRoleConfig?.file_roles ?? options.reviewTriggerPolicy.file_roles,
                 structuralTestPathRegexes: options.reviewTriggerPolicy.test_refactor_structural_path_regexes,
                 structuralTestChangedLinesThreshold:
                     options.reviewTriggerPolicy.test_refactor_changed_lines_threshold,
-                isOrdinaryDocument: resolveOrdinaryDocumentTest(options.repoRoot, options.profilePolicySnapshot),
+                isOrdinaryDocument: taskRoleConfig
+                    ? (filePath) => isSafeOrdinaryDocumentationPath(filePath, taskRoleConfig!)
+                    : resolveOrdinaryDocumentTest(options.repoRoot, options.profilePolicySnapshot),
                 currentTaskIntent: options.currentTaskIntent,
                 modePolicy: modePolicyResolution.policy,
                 modePolicyLegacyFallback: modePolicyResolution.legacy_fallback,
                 consecutiveDeltaReviews,
                 resolveModeGuards: resolveDeltaModeGuards
             });
+            if (taskRolePreflightText !== undefined) {
+                const { classification_sha256: _previousHash, ...withoutHash } = delta;
+                const withTaskRoles = { ...withoutHash, task_role_preflight_text: taskRolePreflightText };
+                delta = { ...withTaskRoles, classification_sha256: sha256RedactedJsonPayload(withTaskRoles) };
+            }
             const modeGuards: RuntimeReviewRemediationModeGuards = deltaModeGuards
                 ?? resolveDeltaModeGuards(delta.documents_only ? [] : delta.changed_files, []);
             const baseline = JSON.parse(fs.readFileSync(baselineSnapshotPath, 'utf8')) as Record<string, unknown>;
             const bindings = baseline.bindings as Record<string, unknown> | undefined;
             const policy = bindings?.policy as Record<string, unknown> | undefined;
+            // An unchanged authenticated PASS needs no repair review. Empty deltas otherwise classify as
+            // ambiguous, which would turn a wording-only restart into unrelated FULL reviews. Keep every
+            // freshness, criteria, scope and policy guard; reuse still authenticates each lane separately.
+            if (typeof options.currentTaskIntent === 'string' && originReceipt?.passed === true
+                && delta.changed_files.length === 0 && delta.file_deltas.length === 0 && delta.scope.membership_unchanged
+                && !modeGuards.taskCriteriaChanged && !modeGuards.policyChanged && !modeGuards.uncertainCrossFileImpact
+                && modeGuards.scopeReviewTypes !== null && modeGuards.protectedBoundarySignals.length === 0
+                && policy?.profile_policy_snapshot_sha256 === resolveProfilePolicySnapshotSha256(options.profilePolicySnapshot)
+                && delta.full_review_reasons.every(reason => delta.mode_policy_assessment?.full_review_reasons.includes(reason))) {
+                return { currentReviewType, modePolicyValidationInputs: null, classification: {
+                    source: 'runtime_fix', classification: { category: 'unchanged_review_scope',
+                        reason: `Authenticated passed baseline ${baselineSnapshotSha256} has unchanged scope, content, criteria and policy.`,
+                        blocked_before_reuse: false, invalidated_review_types: [] }
+                } };
+            }
             const laneDeltas: NonNullable<typeof delta.lane_deltas> = {};
             if (!delta.full_review_required) {
                 for (const reviewType of options.carriedInvalidatedReviewTypes ?? []) {
@@ -471,6 +530,7 @@ export function resolveRuntimeDecisionInputs(options: {
                 currentReviewType,
                 modePolicyValidationInputs: {
                     consecutiveDeltaReviews,
+                    reviewedReviewTypes: [...laneReviews.keys()],
                     protectedBoundarySignals: modeGuards.protectedBoundarySignals,
                     scopeReviewTypes: modeGuards.scopeReviewTypes,
                     deltaReadyReviewTypes: [...laneReviews.entries()]
@@ -675,6 +735,17 @@ export async function runRestartReviewCycleCommand(
     }) || '').trim();
     if (!taskSummary) {
         throw new Error('Task intent could not be resolved for review-cycle restart.');
+    }
+    const previousTaskIntent = resolveRestartTaskIntent({ repoRoot, taskId: resolvedTaskId,
+        preflight: previousPreflight.preflight, taskMode: previousTaskMode });
+    const taskIntentUpdate = taskIntentSha256(resolvedTaskId, previousTaskIntent) === taskIntentSha256(resolvedTaskId, taskSummary)
+        ? null : { task_id: resolvedTaskId, previous_task_intent: previousTaskIntent, task_intent: taskSummary,
+            previous_task_intent_sha256: taskIntentSha256(resolvedTaskId, previousTaskIntent),
+            task_intent_sha256: taskIntentSha256(resolvedTaskId, taskSummary) };
+    if (reviewEvidenceOnly && taskIntentUpdate) {
+        return { outputLines: ['REVIEW_CYCLE_RESTART_REFUSED', `TaskId: ${resolvedTaskId}`,
+            'An intent update requires ordinary restart-review-cycle so classification and reviewer requirements are refreshed.'],
+        exitCode: EXIT_GATE_FAILURE };
     }
     // The older criteria comparison (failed-review contexts without a criteria binding) keeps its own inputs.
     const legacyTaskCriteria = String(options.taskIntent || previousTaskMode.task_summary || '').trim();
@@ -1118,7 +1189,7 @@ export async function runRestartReviewCycleCommand(
             requiredReviewTypes: previousRequiredReviewTypes,
             remediationFixClassification, profilePolicySnapshot: previousTaskMode.profile_policy_snapshot,
             currentChangedFiles: scopeBoundary.currentChangedFiles, reviewTriggerPolicy,
-            allowAuthenticatedDelta: true, preflightPayload: previousPreflight.preflight,
+            allowAuthenticatedDelta: true, preflightPayload: previousPreflight.preflight, preflightPath: resolvedPreflightPath,
             authenticatedTaskCriteria: previousTaskMode.task_summary, currentTaskCriteria: legacyTaskCriteria,
             currentTaskIntent: taskSummary
         });
@@ -1131,6 +1202,10 @@ export async function runRestartReviewCycleCommand(
             outputPath: refreshedPreflightPath,
             taskIntent: taskSummary,
             remediationRequiredReviewTypes: [...new Set([...previousRequiredReviewTypes, ...remediationRequiredReviewTypes])],
+            reviewRestartOrigin: !reviewRestartApproval.blockingEvent && originReviewType
+                && preflightDecisionInputs.classification.source === 'delta'
+                ? { reviewType: originReviewType, taskModeSha256: requireArtifactSha256(resolvedTaskModePath, 'task-mode') }
+                : undefined,
             changedFiles: resolveReviewRemediationClassifyChangedFiles(
                 replayScope,
                 scopeBoundary,
@@ -1225,6 +1300,7 @@ export async function runRestartReviewCycleCommand(
             reviewTriggerPolicy,
             allowAuthenticatedDelta: true,
             preflightPayload: refreshedPreflight.preflight,
+            preflightPath: refreshedPreflightPath,
             authenticatedTaskCriteria: previousTaskMode.task_summary,
             currentTaskCriteria: legacyTaskCriteria,
             currentTaskIntent: taskSummary,
@@ -1277,6 +1353,7 @@ export async function runRestartReviewCycleCommand(
         const launchRequiredReviewTypes: string[] = [];
         let pendingReviewTypes: string[] = [];
         let pendingReason: string | null = null;
+        let pendingCaseExecution = false;
 
         for (let batchIndex = 0; batchIndex < requiredReviewBatches.length; batchIndex += 1) {
             const reviewBatch = requiredReviewBatches[batchIndex];
@@ -1288,6 +1365,19 @@ export async function runRestartReviewCycleCommand(
                     const laneDecision = preliminaryLaneDecisionByType.get(reviewType);
                     if (!laneDecision) {
                         throw new Error(`Authoritative remediation decision is missing required lane '${reviewType}'.`);
+                    }
+                    // Fresh contexts would immediately become stale when the pending
+                    // selected-case execution changes. Preserve reuse probes, but defer
+                    // new preparation until the shared semantic owner has current GREEN.
+                    if (!laneDecision.reuse_eligible) {
+                        for (const semanticLane of requiredReviewTypes) {
+                            resolveAuthoritativeReviewValidationObligations({
+                                repoRoot, reviewType: semanticLane,
+                                preflight: refreshedPreflight.preflight,
+                                preflightPath: refreshedPreflightPath,
+                                taskModePath: String(previousTaskMode.evidence_path || '').trim() || undefined
+                            });
+                        }
                     }
                     const scopedDiffExpected = buildReviewContextPreflightDiffExpectations(
                         refreshedPreflight.preflight,
@@ -1386,6 +1476,7 @@ export async function runRestartReviewCycleCommand(
             if (dependencyBlockedResult) {
                 pendingReviewTypes = requiredReviewTypes.slice(requiredReviewTypes.indexOf(dependencyBlockedResult.reviewType));
                 pendingReason = dependencyBlockedResult.dependencyBlockReason;
+                pendingCaseExecution = isCaseExecutionPrerequisite(dependencyBlockedResult.error);
                 break;
             }
         }
@@ -1471,12 +1562,14 @@ export async function runRestartReviewCycleCommand(
             'Review context cannot be built because required trust-boundary analysis is'
         ) === true;
         const reviewContextsRefreshStatus = pendingReviewTypes.length > 0
-            ? pendingOnTrustBoundaryPrerequisite
+            ? pendingOnTrustBoundaryPrerequisite || pendingCaseExecution
                 ? 'partially_prepared_prerequisite_blocked'
                 : 'partially_prepared_dependency_blocked'
             : 'prepared_or_reused';
         const nextStep = pendingReviewTypes.length > 0
-            ? pendingOnTrustBoundaryPrerequisite
+            ? pendingCaseExecution
+                ? 'Rerun next-step to record current selected-case execution before building review contexts; all pending reviews remain required.'
+                : pendingOnTrustBoundaryPrerequisite
                 ? 'Rerun next-step to refresh the mandatory trust-boundary checklist before building review contexts.'
                 : 'Launch and record the prepared upstream reviews first, then rerun restart-review-cycle to materialize the remaining downstream review contexts.'
             : launchRequiredReviewTypes.length > 0
@@ -1501,6 +1594,7 @@ export async function runRestartReviewCycleCommand(
                 targets: ignoredRemediationTargetAssessment.targets,
                 violations: ignoredRemediationTargetAssessment.violations
             },
+            ...(taskIntentUpdate ? { task_intent_update: taskIntentUpdate } : {}),
             remediation_fix_classification: remediationFixClassification,
             authoritative_review_decision: authoritativeDecision,
             authoritative_review_classification: authoritativeDecisionInputs.classification,
@@ -1551,6 +1645,7 @@ export async function runRestartReviewCycleCommand(
             extraDetails: {
                 remediation_artifact_path: gateHelpers.normalizePath(remediationArtifactPath),
                 remediation_artifact_sha256: requireArtifactSha256(remediationArtifactPath, 'review-remediation-cycle'),
+                ...(taskIntentUpdate ? { task_intent_update: taskIntentUpdate } : {}),
                 impact_analysis_source: remediationImpactAnalysis.source,
                 affected_files_count: scopeBoundary.currentChangedFiles.length,
                 remediation_category: remediationFixClassification.category,
