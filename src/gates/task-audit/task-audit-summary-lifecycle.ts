@@ -9,7 +9,8 @@ import { isTaskQueueDecomposedStatus, isTaskQueueDoneStatus } from '../../core/a
 import { isPlainRecord } from '../../core/records';
 import { joinOrchestratorPath } from '../../core/orchestrator-paths';
 import { TASK_QUEUE_FILENAME } from '../../core/orchestration-constants';
-import { readTransactionBytes } from '../../core/file-transaction-journal';
+import { assertTransactionPath, MAX_TRANSACTION_FILE_BYTES, readTransactionBytes } from '../../core/file-transaction-journal';
+import { readInvocationFileContent, readInvocationPathObservation } from '../../core/invocation-file-observation';
 import { extractExplicitLinkedChildTaskIds } from '../next-step/next-step-task-queue';
 import { getStrictDecompositionDecisionEvidence } from '../task-mode/strict-decomposition-decision';
 import { deriveDecomposedParentAuditRequirements } from './task-audit-summary-decomposed-parent';
@@ -670,6 +671,61 @@ function readNativeParentInput(root: string, file: string): Buffer {
     return bytes;
 }
 
+interface NativeParentQueueScope {
+    captured: boolean;
+    bytes: Buffer | null;
+}
+
+// Parent qualification is synchronous. Nested audits share the same initial
+// canonical queue, and its checkpoints always use the live transaction reader.
+const nativeParentQueueScopes = new Map<string, NativeParentQueueScope>();
+
+export function withNativeParentQueueReadScope<T>(repoRoot: string, read: () => T): T {
+    const root = path.resolve(repoRoot);
+    if (nativeParentQueueScopes.has(root)) return read();
+    nativeParentQueueScopes.set(root, { captured: false, bytes: null });
+    try { return read(); }
+    finally { nativeParentQueueScopes.delete(root); }
+}
+
+function captureNativeParentQueue(root: string): Buffer | null {
+    const file = path.join(root, TASK_QUEUE_FILENAME);
+    const observed = readInvocationPathObservation(file);
+    if (!observed) return readTransactionBytes(root, file);
+    // Keep the transaction reader's no-link, regular-file, link-count and size
+    // rules even when the invocation already holds descriptor-verified bytes.
+    assertTransactionPath(root, file);
+    if ('error' in observed.stat) {
+        const error = observed.stat.error as NodeJS.ErrnoException;
+        if (error?.code === 'ENOENT') return null;
+        throw error;
+    }
+    const stat = observed.stat.value;
+    if (!stat.isFile() || stat.nlink !== 1 || stat.size > MAX_TRANSACTION_FILE_BYTES) {
+        throw new Error('Invalid or oversized transaction file.');
+    }
+    return readInvocationFileContent(file, MAX_TRANSACTION_FILE_BYTES)!.copyBytes();
+}
+
+export function readNativeParentQueueInput(repoRoot: string): Buffer | null {
+    const root = path.resolve(repoRoot), scope = nativeParentQueueScopes.get(root);
+    if (!scope) return captureNativeParentQueue(root);
+    if (!scope.captured) {
+        scope.bytes = captureNativeParentQueue(root);
+        scope.captured = true;
+    }
+    return scope.bytes === null ? null : Buffer.from(scope.bytes);
+}
+
+export function assertNativeParentQueueCurrent(repoRoot: string): void {
+    const root = path.resolve(repoRoot), scope = nativeParentQueueScopes.get(root);
+    if (!scope?.captured) return;
+    const current = readTransactionBytes(root, path.join(root, TASK_QUEUE_FILENAME));
+    if (scope.bytes === null ? current !== null : current === null || !current.equals(scope.bytes)) {
+        throw new Error('Original parent inputs changed during qualification.');
+    }
+}
+
 function nativeParentReference(event: TaskAuditEvent | undefined, taskId: string): ParentAuditEventReference | null {
     if (!event || event.schema_version !== 2 || event.event_source !== 'task-events'
         || event.task_id !== taskId || !isPlainRecord(event.integrity)) return null;
@@ -684,7 +740,8 @@ export function readNativeDecomposedParentFacts(repoRoot: string, taskId: string
     observeChildSources?: (childTaskId: string) => readonly NativeChildSourceAcceptance[]
 ): NativeDecomposedParentFacts | null {
     const root = path.resolve(repoRoot), id = assertValidTaskId(taskId);
-    const queuePath = path.join(root, TASK_QUEUE_FILENAME), queueBytes = readNativeParentInput(root, queuePath);
+    const queuePath = path.join(root, TASK_QUEUE_FILENAME), queueBytes = readNativeParentQueueInput(root);
+    if (!queueBytes) throw new Error('Native parent input is missing.');
     const entries = parseTaskQueueEntriesFromContent(queueBytes.toString('utf8')), parent = entries.get(id);
     if (!parent) throw new Error('Native parent task is missing from the canonical queue.');
     const children = extractExplicitLinkedChildTaskIds(parent.notes, entries.keys(), id);

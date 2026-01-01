@@ -1,3 +1,4 @@
+import { readInvocationTextFile } from '../core/invocation-file-observation';
 import * as fs from 'node:fs';
 import { normalizeFileRoleBindings, type FileRoleBindings } from '../core/file-role-bindings';
 import {
@@ -112,7 +113,7 @@ export function loadReviewTriggerPolicy(pathsConfigPath: string): ReviewTriggerP
     if (!fs.existsSync(pathsConfigPath)) return cloneDefaultPolicy();
     let parsed: unknown;
     try {
-        parsed = JSON.parse(fs.readFileSync(pathsConfigPath, 'utf8')) as unknown;
+        parsed = JSON.parse(readInvocationTextFile(pathsConfigPath)) as unknown;
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(`Could not parse review-trigger configuration '${pathsConfigPath}': ${message}`);

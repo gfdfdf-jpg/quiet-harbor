@@ -1,3 +1,4 @@
+import { readInvocationTextFile } from '../../core/invocation-file-observation';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { bindContainedDestination, writeContainedFile } from '../../core/contained-filesystem';
@@ -41,7 +42,7 @@ export function isOrchestratorSourceCheckout(repoRoot: string): boolean {
         return false;
     }
     try {
-        const parsed = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as Record<string, unknown>;
+        const parsed = JSON.parse(readInvocationTextFile(packageJsonPath)) as Record<string, unknown>;
         return isRecognizedPackageName(parsed.name);
     } catch {
         return false;

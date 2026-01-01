@@ -264,7 +264,7 @@ describe('cli/commands/gates intermediate command wrapper', () => {
         }
     });
 
-    it('records a bounded nonzero focused test as explicit expected-red evidence', async () => {
+    it('records a bounded nonzero focused test as expected-red pending semantic review', async () => {
         const repoRoot = createTempRepo();
         const taskId = 'T-EXPECTED-RED';
         try {
@@ -287,19 +287,19 @@ describe('cli/commands/gates intermediate command wrapper', () => {
             });
 
             assert.equal(result.exitCode, 0, result.outputLines.join('\n'));
-            assert.match(result.outputLines.join('\n'), /TEST_FIRST_EXPECTED_FAILURE_RECORDED/u);
+            assert.match(result.outputLines.join('\n'), /TEST_FIRST_ASSERTION_SEMANTICS_PENDING/u);
             const event = readTaskTimelineEvents(repoRoot, taskId)
                 .find((candidate) => candidate.event_type === 'TEST_FIRST_EXPECTED_FAILURE_RECORDED');
             assert.ok(event);
-            assert.equal(event.outcome, 'PASS');
+            assert.equal(event.outcome, 'PENDING');
             const details = event.details as Record<string, unknown>;
             assert.equal(details.expected_failure, true);
-            assert.equal(details.recorded_status, 'EXPECTED_FAILURE');
+            assert.equal(details.recorded_status, 'PENDING_REVIEW');
             assert.equal(details.exit_code, 1);
             const preflight = JSON.parse(fs.readFileSync(preflightPath, 'utf8'));
             assert.equal(details.test_scope_sha256, preflight.metrics.scope_content_sha256);
             const artifact = JSON.parse(fs.readFileSync(String(details.artifact_path), 'utf8')) as Record<string, unknown>;
-            assert.equal(artifact.status, 'EXPECTED_FAILURE');
+            assert.equal(artifact.status, 'PENDING_REVIEW');
             assert.equal(artifact.exit_code, 1);
             assert.equal(artifact.timed_out, false);
             assert.equal(artifact.cancelled, false);
@@ -414,7 +414,7 @@ describe('cli/commands/gates intermediate command wrapper', () => {
             writePreflight({ task_id: 'T-FOREIGN' });
             await assert.rejects(invoke, /preflight task_id must match/u);
 
-            writePreflight({ scope_category: 'mixed' });
+            writePreflight({ scope_category: 'mixed', changed_files: ['tests/node/gates/focused-command.test.ts', 'src/implementation.ts'] });
             await assert.rejects(invoke, /current test-only preflight scope/u);
 
             writePreflight({});

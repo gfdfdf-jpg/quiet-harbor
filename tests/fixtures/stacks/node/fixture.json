@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "id": "node",
+  "title": "Node / TAP",
+  "adapter": "node-tap-v1",
+  "technologies": [
+    {
+      "id": "node",
+      "executable": "tools/node",
+      "compileArgv": [
+        "--check",
+        "packages/orders/src/service.ts"
+      ],
+      "firstArgv": [
+        "--test",
+        "--test-reporter=tap",
+        "packages/orders/test/service.test.ts"
+      ],
+      "allArgv": [
+        "--test",
+        "--test-reporter=tap",
+        "packages/orders/test/service.test.ts",
+        "packages/partners/test/service.test.ts"
+      ],
+      "broadArgv": [
+        "--test"
+      ],
+      "report": "text",
+      "secondArgv": [
+        "--test",
+        "--test-reporter=tap",
+        "packages/partners/test/service.test.ts"
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "orders",
+      "technology": "node",
+      "source": "packages/orders/src/service.ts",
+      "target": "packages/orders/test/service.test.ts",
+      "case": "task-contract",
+      "comment": "//"
+    },
+    {
+      "id": "partners",
+      "technology": "node",
+      "source": "packages/partners/src/service.ts",
+      "target": "packages/partners/test/service.test.ts",
+      "case": "task-contract",
+      "comment": "//"
+    }
+  ],
+  "helpers": []
+}

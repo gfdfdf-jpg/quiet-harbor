@@ -1,3 +1,4 @@
+import { readInvocationTextFile } from '../../core/invocation-file-observation';
 import * as fs from 'node:fs';
 import { toProjectMemoryPosixPath } from '../../core/project-memory';
 
@@ -14,7 +15,7 @@ export function readJsonFileIfPresent(filePath: string): unknown | null {
         return null;
     }
     try {
-        return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        return JSON.parse(readInvocationTextFile(filePath));
     } catch {
         return null;
     }

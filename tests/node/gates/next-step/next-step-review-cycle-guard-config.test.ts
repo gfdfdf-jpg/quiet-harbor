@@ -106,7 +106,8 @@ describe('gates/next-step review cycle guard config', () => {
         assert.equal(result.next_gate, 'workflow-config-validation');
         assert.ok(result.reason.includes('workflow-config.scope_budget_guard.action'));
         assert.ok(result.commands[0].command.includes('workflow validate'));
-        assert.equal(result.full_suite_validation.config_source, 'effective_workflow_config');
+        // Without a current task selection the configured command is only a reference to narrow from.
+        assert.equal(result.full_suite_validation.config_source, 'project_command_reference');
         assert.equal(result.full_suite_validation.command, 'npm test');
         assert.equal(preflightPath.endsWith(`${TASK_ID}-preflight.json`), true);
     });
@@ -134,7 +135,7 @@ describe('gates/next-step review cycle guard config', () => {
         assert.equal(result.full_suite_validation.placement, null);
         assert.equal(result.full_suite_validation.config_path, null);
         assert.deepEqual(result.review.launchable_review_types, []);
-        assert.match(fx.formatNextStepText(result), /FullSuite: unavailable/);
+        assert.match(fx.formatNextStepText(result), /TaskTestValidation: unavailable/);
         assert.throws(() => loadFullSuiteValidationConfig(repoRoot), /must be a JSON object/);
         assert.deepEqual(JSON.parse(fs.readFileSync(path.join(repoRoot, 'garda-agent-orchestrator', 'live', 'config', 'workflow-config.json'), 'utf8')), ['not-a-workflow-config']);
     });
@@ -159,7 +160,7 @@ describe('gates/next-step review cycle guard config', () => {
         assert.equal(result.full_suite_validation.enabled, null);
         assert.equal(result.full_suite_validation.command, null);
         assert.deepEqual(result.review.launchable_review_types, []);
-        assert.match(fx.formatNextStepText(result), /FullSuite: unavailable/);
+        assert.match(fx.formatNextStepText(result), /TaskTestValidation: unavailable/);
         assert.throws(() => loadFullSuiteValidationConfig(repoRoot), /invalid JSON/);
         assert.equal(fs.readFileSync(configPath, 'utf8'), original);
     });

@@ -417,7 +417,15 @@ const JOURNAL_OWNER_PATTERN = /(?:withLifecycleRuntimeMutationGeneration(?:ForPa
 // directory walk inspects the bound chain before each creation instead of before each component, the temporary file is
 // inspected once before the identity check unless a mode copy needs it, and the update snapshot skips copying bundle
 // items that the sync backup replaces right afterwards (createRollbackSnapshot stays inside its generation journal).
-const BOUNDED_MUTATION_SURFACE_SHA256 = '6b31a6932f5dba958fdd2ec54a916710832cf56b04fd3055d4925be0478c6b15';
+// 2026-11-06 read-reuse audit: review-artifacts.ts only shares already admitted bytes and their hash with other readers
+// of the same identity-checked file; no writer, journal owner or mutation edge changes.
+// 2026-11-07 CI audit since aa4243f5: the only bounded delta is migration snippet matching.
+// It reads current/legacy wording through a new uncached helper; all 28 writer edges and journals remain unchanged.
+// 2026-11-08 audit since 63f6b36f: 118 bounded files / 28 edges; only review-artifacts.ts changed. Read scopes in one
+// invocation share one captured review generation and defer its final check to invocation exit. The write guard now
+// checks that generation and any active barrier against a live realpath of the reviews directory. No writer, journal
+// owner or mutation edge changes.
+const BOUNDED_MUTATION_SURFACE_SHA256 = 'bca6273b5ffd9e056bf7d620476818f86a5fbc67bf9202352c1db2998eaeaa5b';
 const READ_ONLY_FS_OPERATIONS = new Set([
     'access', 'accessSync', 'close', 'closeSync', 'exists', 'existsSync',
     'fstat', 'fstatSync', 'lstat', 'lstatSync', 'open', 'opendir', 'opendirSync',

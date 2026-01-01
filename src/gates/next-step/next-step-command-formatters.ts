@@ -303,15 +303,15 @@ export function formatNextStepText(result: NextStepResult): string {
         lines.push(`MarkdownWorkingPlanSha256: ${result.markdown_working_plan.working_plan_sha256}`);
     }
     if (result.full_suite_validation.config_source === 'unavailable_workflow_config') {
-        lines.push(`FullSuite: unavailable; ${result.full_suite_validation.note}`);
+        lines.push(`TaskTestValidation: unavailable; ${result.full_suite_validation.note}`);
     } else {
-        lines.push(`FullSuite: enabled=${result.full_suite_validation.enabled}; placement=${result.full_suite_validation.placement}; command="${result.full_suite_validation.command}"; config=${result.full_suite_validation.config_path}`);
+        lines.push(`TaskTestValidation: enabled=${result.full_suite_validation.enabled}; placement=${result.full_suite_validation.placement}; command="${result.full_suite_validation.command}"; config=${result.full_suite_validation.config_path}`);
     }
     if (result.full_suite_validation.performance_guidance_note) {
-        lines.push(`FullSuitePerformance: ${result.full_suite_validation.performance_guidance_note}`);
+        lines.push(`TaskTestPerformance: ${result.full_suite_validation.performance_guidance_note}`);
     }
     if (result.full_suite_validation.timeout_forecast_note) {
-        lines.push(`FullSuiteTimeout: ${result.full_suite_validation.timeout_forecast_note}`);
+        lines.push(`TaskTestTimeout: ${result.full_suite_validation.timeout_forecast_note}`);
     }
     if (result.project_memory) {
         lines.push(result.project_memory.visible_summary_line);
@@ -507,11 +507,11 @@ export function formatNextStepText(result: NextStepResult): string {
         }
     }
     if (result.status !== 'DONE' && result.review_cycle_block?.auto_split_prompt) {
-        lines.push('AfterCommand: follow AutoSplitPromptArtifact instructions; do not run parent compile, review, or full-suite gates before split handling.');
+        lines.push('AfterCommand: follow AutoSplitPromptArtifact instructions; do not run parent compile, review, or task test gates before split handling.');
     } else if (result.status !== 'DONE' && result.review_cycle_block) {
         lines.push(result.commands.length > 0
-            ? `AfterCommand: after the operator-approved command above completes, rerun ${result.navigator_command}; do not run compile, review, or full-suite gates before the approval evidence exists.`
-            : 'AfterCommand: inspect diagnostics only if needed, then wait for operator choice; do not run compile, review, or full-suite gates.');
+            ? `AfterCommand: after the operator-approved command above completes, rerun ${result.navigator_command}; do not run compile, review, or task test gates before the approval evidence exists.`
+            : 'AfterCommand: inspect diagnostics only if needed, then wait for operator choice; do not run compile, review, or task test gates.');
     } else if (result.status !== 'DONE') {
         lines.push(`AfterCommand: rerun ${result.navigator_command} after the command above completes.`);
     }

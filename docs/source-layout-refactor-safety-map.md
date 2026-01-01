@@ -166,7 +166,7 @@ the current public contract.
 | Standalone CLI command splits | Command-specific tests for profile, stats, setup, update, repair, workspace maintenance, and dispatch. |
 | Gate runtime layout | `tests/node/gate-runtime/**`, review artifact/reuse tests, timeline/status tests. |
 | Lifecycle layout | `tests/node/lifecycle/**`, update/check-update tests, cleanup tests, protected-manifest tests. |
-| Validators/materialization/core | `tests/node/validators/**`, `tests/node/materialization/**`, `tests/node/core/**`, plus affected provider/materialization tests. For source-layout-only facade moves, keep the nearest domain tests path-targetable and rely on compile/full-suite gates for broad import compatibility. |
+| Validators/materialization/core | `tests/node/validators/**`, `tests/node/materialization/**`, `tests/node/core/**`, plus affected provider/materialization tests. For source-layout-only facade moves, keep the nearest domain tests path-targetable and rely on compile/task test gates for broad import compatibility. |
 
 Every child task must still finish through the normal orchestrator gates:
 compile, required reviews, doc-impact, full-suite when enabled, completion, and

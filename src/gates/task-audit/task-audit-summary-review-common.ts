@@ -115,7 +115,7 @@ export function safeReadJson(filePath: string): Record<string, unknown> | null {
     }
     try {
         if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return null;
-        return JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<string, unknown>;
+        return JSON.parse(readInvocationTextFile(filePath)) as Record<string, unknown>;
     } catch {
         return null;
     }
@@ -128,3 +128,4 @@ export function safeReviewArtifactFileSha256(filePath: string): string | null {
     }
     return fileSha256(filePath);
 }
+import { readInvocationTextFile } from '../../core/invocation-file-observation';

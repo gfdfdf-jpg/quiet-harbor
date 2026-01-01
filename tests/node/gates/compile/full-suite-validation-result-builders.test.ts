@@ -59,6 +59,48 @@ describe('gates/full-suite-validation', () => {
             assert.equal(detectOutOfScopeFailures(output, ['tests/module-debt.test.js']), false);
         });
 
+        it('attributes Maven surefire failures to their test class file and ignores log noise', context => {
+            const scratchRoot = fs.realpathSync.native(os.tmpdir());
+            const repoRoot = fs.mkdtempSync(path.join(scratchRoot, 'garda-maven-scope-'));
+            context.after(() => fs.rmSync(repoRoot, { recursive: true, force: true }));
+            const boundaryTest = 'backend/application/src/test/java/com/onlinestore/architecture/ModuleBoundaryTest.java';
+            const taskTest = 'backend/partners-module/src/test/java/com/onlinestore/partners/PartnerTest.java';
+            for (const file of [boundaryTest, taskTest]) {
+                fs.mkdirSync(path.dirname(path.join(repoRoot, file)), { recursive: true });
+                fs.writeFileSync(path.join(repoRoot, file), 'class Test {}\n');
+            }
+            assert.equal(spawnSync('git', ['init', '-q'], { cwd: repoRoot }).status, 0);
+            const output = [
+                '[INFO] T E S T S',
+                '14:19:54.151 [main] WARN com.onlinestore.common.event.ConsumerInbox -- Consumer inbox processing failed: reason=PROCESSING_FAILED',
+                '2026-11-06T14:20:14.207+01:00  WARN 61072 --- [main] c.o.common.event.OutboxPublisher : publication failed: status=FAILED',
+                'org.hibernate.tool.schema.spi.CommandAcceptanceException: Error executing DDL',
+                '[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.350 s -- in com.onlinestore.partners.PartnerTest',
+                '[ERROR] Tests run: 3, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 5.317 s <<< FAILURE! -- in com.onlinestore.architecture.ModuleBoundaryTest',
+                '[ERROR] com.onlinestore.architecture.ModuleBoundaryTest.productionModulesHaveOnlyTheExplicitCurrentDebt -- Time elapsed: 3.034 s <<< FAILURE!',
+                '[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.5.2:test (default-test) on project application',
+                '[INFO] BUILD FAILURE'
+            ];
+            const config = { ...loadFullSuiteValidationConfig('/nonexistent'), enabled: true };
+            const outside = buildValidationResult(config, 1, false, output, null, [taskTest], undefined, repoRoot);
+            assert.equal(outside.out_of_scope_failure_detected, true);
+            assert.deepEqual(outside.out_of_scope_failure_refs, [boundaryTest]);
+            // The same failure inside the task scope is never attributed outside it.
+            assert.equal(detectOutOfScopeFailures(output, [boundaryTest], repoRoot), false);
+            // An unresolvable class attributes nothing. Selection narrowing preserves the whole failure independently.
+            const unknown = [...output, '[ERROR] com.onlinestore.missing.GoneTest.case -- Time elapsed: 0.1 s <<< ERROR!'];
+            const unresolved = buildValidationResult(config, 1, false, unknown, null, [taskTest], undefined, repoRoot);
+            assert.equal(unresolved.out_of_scope_failure_detected, false);
+            assert.deepEqual(unresolved.out_of_scope_failure_refs, []);
+        });
+
+        it('does not treat log timestamps or dotted identifiers as failure files', () => {
+            assert.equal(detectOutOfScopeFailures([
+                '14:19:54.151 [main] WARN Consumer inbox processing failed',
+                'java.lang.RuntimeException: failed'
+            ], ['src/changed.ts']), false);
+        });
+
         it('returns true when failure references unrelated file', () => {
             assert.equal(
                 detectOutOfScopeFailures(['error at src/unrelated/bar.ts:5 something'], ['src/gates/foo.ts']),

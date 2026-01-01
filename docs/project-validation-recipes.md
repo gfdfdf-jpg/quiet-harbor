@@ -4,7 +4,7 @@ Garda uses the same source, execution and independent case-resolution mechanism 
 
 Expected-red admission uses the current authenticated test-only scope, including explicit declared test roles outside conventional directories. A literal command can name its changed test input without a recognized runner grammar; opaque selectors use the same explicit selected-case association as ordinary validation. Garda retains the exact source identities, complete nonzero execution and output before implementation. Opaque results remain unresolved. At the ordinary post-implementation review, the reviewer inspects the retained failure together with current GREEN for every unchanged selected case, distinguishing assertion failure from process or dependency failure, skipped cases and incomplete output. No separate early review is added. Timeout, cancellation, termination signals, truncation, changed sources and later failed or unfinished attempts cannot establish acceptance. Existing complete TAP reports remain supported.
 
-Updating an existing project replaces the exact historical built-in trust-boundary prompt with this source/execution guidance. Custom prompts, titles, disabled rules and explicit scope filters remain intact. Full-suite advice preserves the configured command and never substitutes an invented package-manager fallback.
+Updating an existing project replaces the exact historical built-in trust-boundary prompt with this source/execution guidance. Custom prompts, titles, disabled rules and explicit scope filters remain intact. Task test advice preserves the configured command and never substitutes an invented package-manager fallback.
 
 ## Ordinary project checks
 
@@ -36,8 +36,8 @@ these files against the actual attempt start. Reports remain opaque evidence for
 independent interpretation; declaring a report does not establish a passing case.
 Omitting this field preserves stdout/stderr-only behavior.
 
-For the configured full suite, the agent sets the same declarations through the
-audited `workflow set --full-suite-report-files '<JSON array>'` option before task
+For the configured task test command, the agent sets the same declarations through the
+audited `workflow set --task-test-report-files '<JSON array>'` option before task
 preflight. Use `[]` to clear them. Each actual attempt retains its own capture and
 native start binding. Clean-success stdout cleanup preserves these separate report
 artifacts; review, completion and navigation reject changed or unavailable captures.
@@ -99,7 +99,7 @@ When the navigator selects an admitted recipe, use its exact recipe route:
 node bin/garda.js gate run-intermediate-command --task-id "<task-id>" --recipe-id "project-check" --repo-root "."
 ```
 
-Recipe mode accepts task/root, recipe ID and an eligible expected-red request. It forbids raw command, command-source, timeout, preflight, coverage and artifact overrides. Add the `Test-first: expected-red` marker only after explicit operator approval. Changing a test after its RED was recorded (including a review finding fix) invalidates that RED. If retained RED is stale or predates task re-entry, record a fresh RED for the current test bytes when the implementation can still fail it, or with operator approval remove the `Test-first: expected-red` marker and continue the ordinary cycle; tests, compile, full suite and every required review remain mandatory. Do not use `task-reset` for this. `--expect-failure` remains subject to the existing task profile and exact changed test-only scope; expected failure is not terminal PASSED. Preserve current compile/full-suite gates and independent reviews rather than using a recipe as their blanket replacement.
+Recipe mode accepts task/root, recipe ID and an eligible expected-red request. It forbids raw command, command-source, timeout, preflight, coverage and artifact overrides. Add the `Test-first: expected-red` marker only after explicit operator approval. Changing a test after its RED was recorded (including a review finding fix) invalidates that RED. If retained RED is stale or predates task re-entry, record a fresh RED for the current test bytes when the implementation can still fail it, or with operator approval remove the `Test-first: expected-red` marker and continue the ordinary cycle; tests, compile, task test validation and every required review remain mandatory. Do not use `task-reset` for this. `--expect-failure` remains subject to the existing task profile and exact changed test-only scope; expected failure is not terminal PASSED. Preserve current compile/task test gates and independent reviews rather than using a recipe as their blanket replacement.
 
 ## Read the four phases
 

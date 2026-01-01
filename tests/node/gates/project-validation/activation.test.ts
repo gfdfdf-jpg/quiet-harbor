@@ -2,7 +2,6 @@ import { it } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { EXIT_GATE_FAILURE } from '../../../../src/cli/exit-codes';
 import { readValidationReviewObligations } from '../../../../src/gates/review/validation-obligations';
 import { getValidationTerminalViolations } from '../../../../src/gates/review/validation-terminal';
 import { activationFixture } from './fixtures/activation-fixture';
@@ -30,7 +29,8 @@ for (const layout of [{ name: 'root files without a conventional project manifes
             assert.deepEqual(JSON.parse(fs.readFileSync(f.configPath, 'utf8')), beforeConfig);
             f.publishQuality();
             const projected = readValidationReviewObligations(f);
-            assert.deepEqual(projected.semantic_review_lanes, ['code', 'test']);
+            // Case meaning belongs to the mandatory test lane; code is only the fallback without one.
+            assert.deepEqual(projected.semantic_review_lanes, ['test']);
             assert.equal(projected.obligations.length, 1);
             assert.equal(projected.obligations[0].source_identity.path, f.target);
             assert.equal(projected.obligations[0].execution, 'OBSERVED');
@@ -47,7 +47,7 @@ it('keeps an actual opaque successful process unresolved at the terminal boundar
     const f = activationFixture({ prefix: '', packageCwd: false }, 'opaque');
     try {
         const { response, attempt, result } = await f.execute();
-        assert.equal(attempt.exit_code, 0); assert.equal(response.exitCode, EXIT_GATE_FAILURE);
+        assert.equal(attempt.exit_code, 0); assert.equal(response.exitCode, 0);
         assert.equal(result.status, 'UNRESOLVED');
         f.publishQuality();
         const projected = readValidationReviewObligations(f);

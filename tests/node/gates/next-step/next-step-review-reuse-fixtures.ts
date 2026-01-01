@@ -1,4 +1,4 @@
-import { activateStartedFixtureTask, selectConfiguredTaskTests } from '../../task-test-selection-fixtures';
+import { activateStartedFixtureTask, selectConfiguredTaskTests, bindFixtureFullSuiteArtifact } from '../../task-test-selection-fixtures';
 import { afterEach } from 'node:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -113,6 +113,11 @@ export function makeTempRepo(): string {
         ''
     ].join('\n'), 'utf8');
     fs.writeFileSync(path.join(repoRoot, 'src', 'app.ts'), 'export const value = 1;\n', 'utf8');
+    // Existing regression input must be in the baseline before scope capture.
+    fs.mkdirSync(path.join(repoRoot, 'tests'), { recursive: true });
+    fs.writeFileSync(path.join(repoRoot, 'tests/fixture-task-validation.test.cjs'),
+        "require('node:test').test('fixture regression input', () => {});\n");
+
     writeJson(path.join(repoRoot, 'garda-agent-orchestrator', 'runtime', 'init-answers.json'), {
         SourceOfTruth: 'Codex'
     });
@@ -301,6 +306,8 @@ export function appendEvent(
     details: Record<string, unknown> = {},
     timestampUtc?: string
 ): { task_sequence: number; prev_event_sha256: string | null; event_sha256: string } {
+    if (['FULL_SUITE_VALIDATION_PASSED', 'FULL_SUITE_VALIDATION_WARNED', 'FULL_SUITE_VALIDATION_FAILED'].includes(eventType))
+        details = { ...bindFixtureFullSuiteArtifact(repoRoot, taskId), ...details };
     const timelinePath = path.join(eventsRoot(repoRoot), `${taskId}.jsonl`);
     const existingLines = fs.existsSync(timelinePath)
         ? fs.readFileSync(timelinePath, 'utf8').split('\n').filter((line) => line.trim())
@@ -1329,11 +1336,12 @@ export function seedFullSuiteValidation(
         ? workflowConfig.full_suite_validation as Record<string, unknown>
         : {};
     const placement = String(fullSuiteConfig.placement || 'before_test_review');
+    const command = String(fullSuiteConfig.command || 'npm test');
     writeJson(path.join(reviewsRoot(repoRoot), `${taskId}-full-suite-validation.json`), {
         task_id: taskId,
         status,
         enabled: true,
-        command: 'npm test',
+        command,
         placement,
         required: status === 'SKIPPED' ? false : undefined,
         skip_reason: status === 'SKIPPED' ? 'DOCS_ONLY_SCOPE_NOT_REQUIRED' : undefined,
@@ -1352,7 +1360,7 @@ export function seedFullSuiteValidation(
                 ? 'FULL_SUITE_VALIDATION_SKIPPED'
                 : 'FULL_SUITE_VALIDATION_FAILED',
         status === 'FAILED' ? 'FAIL' : 'PASS',
-        { cycle_binding: cycleBinding, command: 'npm test', placement },
+        { cycle_binding: cycleBinding, command, placement },
         timestampUtc
     );
 }

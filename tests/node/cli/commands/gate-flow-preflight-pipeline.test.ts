@@ -994,11 +994,12 @@ describe('review and full-suite shared preflight pipeline migration', () => {
             const workflowConfig = JSON.parse(
                 fs.readFileSync(workflowConfigPath, 'utf8')
             ) as Record<string, unknown>;
-            fs.writeFileSync(path.join(repoRoot, 'full-suite-fixture.cjs'), 'process.exit(0);\n', 'utf8');
+            fs.writeFileSync(path.join(repoRoot, 'full-suite-fixture.test.cjs'),
+                "require('node:test').test('fixture scope', () => require('node:assert/strict').equal(process.cwd(), __dirname));\n", 'utf8');
             workflowConfig.full_suite_validation = {
                 ...(workflowConfig.full_suite_validation as Record<string, unknown>),
                 enabled: true,
-                command: 'node full-suite-fixture.cjs'
+                command: 'node --test full-suite-fixture.test.cjs'
             };
             fs.writeFileSync(workflowConfigPath, JSON.stringify(workflowConfig, null, 2), 'utf8');
             initializeGitRepo(repoRoot);
@@ -1059,8 +1060,9 @@ describe('review and full-suite shared preflight pipeline migration', () => {
             const workflowConfig = JSON.parse(
                 fs.readFileSync(workflowConfigPath, 'utf8')
             ) as Record<string, unknown>;
-            fs.writeFileSync(path.join(repoRoot, 'full-suite-fixture.cjs'), 'process.exit(0);\n', 'utf8');
-            const command = 'node full-suite-fixture.cjs';
+            fs.writeFileSync(path.join(repoRoot, 'full-suite-fixture.test.cjs'),
+                "require('node:test').test('fixture scope', () => require('node:assert/strict').equal(process.cwd(), __dirname));\n", 'utf8');
+            const command = 'node --test full-suite-fixture.test.cjs';
             workflowConfig.full_suite_validation = {
                 ...(workflowConfig.full_suite_validation as Record<string, unknown>),
                 enabled: true,

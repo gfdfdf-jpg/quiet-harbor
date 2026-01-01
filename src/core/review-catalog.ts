@@ -1,3 +1,4 @@
+import { readInvocationTextFile } from './invocation-file-observation';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 
@@ -441,7 +442,7 @@ export function readReviewCatalogConfigFile(
         throw new Error(`Review catalog config at '${configPath}' exceeds the ${MAX_REVIEW_CATALOG_FILE_BYTES}-byte limit.`);
     }
 
-    const content = fs.readFileSync(configPath, 'utf8');
+    const content = readInvocationTextFile(configPath);
     if (Buffer.byteLength(content, 'utf8') > MAX_REVIEW_CATALOG_FILE_BYTES) {
         throw new Error(`Review catalog config at '${configPath}' exceeds the ${MAX_REVIEW_CATALOG_FILE_BYTES}-byte limit.`);
     }

@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { missingFocusedValidationTarget } from './missing-focused-validation-marker';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
@@ -75,8 +76,6 @@ interface ReviewCoverageLedgerEntry {
 const FINDING_ID_PATTERN = /^F-\d{3}$/u;
 const FINDING_ID_GLOBAL_PATTERN = /\[(F-\d{3})\]/gu;
 const EVIDENCE_ONLY_FINDING_ID = 'F-000';
-const EVIDENCE_ONLY_FINDING_PATTERN =
-    /^\[garda:evidence-only:missing-focused-validation\]\s+(?:test=tests\/[^\s;]+\.(?:test|spec)\.(?:c|m)?[jt]sx?;\s*action=run-and-record-focused-test|target=[^\s;]+;\s*action=run-and-record-focused-validation)$/iu;
 
 const REVIEW_CATEGORY_IDS: Record<string, readonly string[]> = {
     code: [
@@ -876,7 +875,7 @@ function collectFindingIds(reviewContent: string): { ids: string[]; violations: 
     const violations: string[] = [];
     for (const finding of Object.values(findingsBySeverity).flat()) {
         const findingIds = [...finding.matchAll(FINDING_ID_GLOBAL_PATTERN)].map((match) => match[1]);
-        if (findingIds.length === 0 && EVIDENCE_ONLY_FINDING_PATTERN.test(finding.trim())) {
+        if (findingIds.length === 0 && missingFocusedValidationTarget(finding.trim())) {
             ids.push(EVIDENCE_ONLY_FINDING_ID);
             continue;
         }
@@ -936,7 +935,7 @@ function collectJsonFindingIds(reviewContent: string): { ids: string[]; violatio
                     typeof record?.title === 'string' ? record.title.trim() : '',
                     typeof record?.description === 'string' ? record.description.trim() : ''
                 ].filter(Boolean);
-                if (!markerTextCandidates.some((candidate) => EVIDENCE_ONLY_FINDING_PATTERN.test(candidate))) {
+                if (!markerTextCandidates.some((candidate) => missingFocusedValidationTarget(candidate))) {
                     violations.push(
                         `Finding identifier '${EVIDENCE_ONLY_FINDING_ID}' is reserved for the exact canonical evidence-only marker.`
                     );

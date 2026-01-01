@@ -1,3 +1,4 @@
+import { readInvocationTextFile } from '../core/invocation-file-observation';
 import { normalizeUntrackedBuildOutputRegexes } from '../core/build-output-paths';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -498,7 +499,7 @@ function isZeroDiffNoReviewableScope(scopeCategory: string, options: ProfileGuar
 
 function readJsonFile<T>(filePath: string): T | null {
     if (!fs.existsSync(filePath)) return null;
-    const raw = fs.readFileSync(filePath, 'utf8');
+    const raw = readInvocationTextFile(filePath);
     return JSON.parse(raw) as T;
 }
 

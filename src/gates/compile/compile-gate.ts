@@ -1,3 +1,4 @@
+import { captureWorkspacePlannedFiles, assertWorkspacePlannedFilesCurrent } from '../../core/workspace-planned-files';
 import { filterBuildOutputScopePaths } from '../../core/build-output-paths';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -10,6 +11,7 @@ import {
     resolveValidationCommandDispatch as compileCommandParts
 } from '../../core/validation-command-dispatch';
 import { inspectValidationCommand, type ValidationCommandPurpose } from '../../core/validation-command-contract';
+import { isPlainRecord } from '../../core/records';
 import { countFileLines, stringSha256, normalizePath, joinOrchestratorPath } from '../shared/helpers';
 import { canonicalPathList, pathListSha256 } from '../shared/canonical-path-list';
 import { DEFAULT_GIT_TIMEOUT_MS, spawnSyncWithTimeout } from '../../core/subprocess';
@@ -105,6 +107,52 @@ export interface CompileCommandContractOptions {
     allowFullTestCompileCommand?: boolean;
     allowFullTestCompileCommandReason?: string | null;
     allowUnconfiguredSentinel?: boolean;
+}
+
+export type TaskCompileDeclaration = { kind: 'command'; command: string }
+    | { kind: 'not_applicable'; reason: string };
+
+/** Task-scoped input, captured in the ordinary authenticated compile evidence. */
+export function taskCompileDeclaration(command: unknown, notApplicableReason: unknown,
+    configuredCommand: string | null): TaskCompileDeclaration | null {
+    const declared = String(command ?? '').trim();
+    const reason = String(notApplicableReason ?? '').trim();
+    if (declared && reason) throw new Error('Declare a compile command or compile not-applicable, not both.');
+    if (reason) {
+        if (configuredCommand && configuredCommand !== UNCONFIGURED_COMPILE_GATE_COMMAND)
+            throw new Error('A configured mandatory compile command cannot be replaced by not-applicable. Run the required compile command.');
+        if (reason.length < 20 || /[\u0000-\u001f]/u.test(reason) || /^<[^>]+>$/u.test(reason))
+            throw new Error('Explain why this stack has no separate compile phase with --compile-not-applicable-reason.');
+        return { kind: 'not_applicable', reason };
+    }
+    if (!declared) return null;
+    if (configuredCommand && configuredCommand !== UNCONFIGURED_COMPILE_GATE_COMMAND && declared !== configuredCommand)
+        throw new Error(`A configured mandatory compile command cannot be replaced by a task-local command. Run compile-gate with --compile-command ${JSON.stringify(configuredCommand)}, or omit --compile-command to use it.`);
+    validateCompileGateCommand(declared, 'task-local compile declaration');
+    return { kind: 'command', command: declared };
+}
+
+/** Reuse only the declaration from authenticated native history, then execute it again.
+ * A coherent refresh keeps task intent; a reset/discard ends this authority. */
+export function retainedTaskCompileDeclaration(events: readonly Readonly<Record<string, unknown>>[],
+    configuredCommand: string | null = null): TaskCompileDeclaration | null {
+    for (let index = events.length - 1; index >= 0; index--) {
+        const event = events[index];
+        if (event.actor !== 'gate') continue;
+        if (event.event_type === 'TASK_RESET' || event.event_type === 'TASK_DISCARDED') return null;
+        if (event.event_type !== 'COMPILE_GATE_PASSED' && event.event_type !== 'COMPILE_GATE_FAILED') continue;
+        if (!isPlainRecord(event.integrity) || !Number.isSafeInteger(event.integrity.task_sequence)
+            || Number(event.integrity.task_sequence) < 1) return null;
+        const details = isPlainRecord(event.details) ? event.details : {};
+        const declaration = isPlainRecord(details.compile_declaration) ? details.compile_declaration : {};
+        if (details.compile_command_source !== 'task_local') return null;
+        if (declaration.kind === 'command' && typeof declaration.command === 'string')
+            return taskCompileDeclaration(declaration.command, undefined, configuredCommand);
+        if (declaration.kind === 'not_applicable' && typeof declaration.reason === 'string')
+            return taskCompileDeclaration(undefined, declaration.reason, configuredCommand);
+        return null;
+    }
+    return null;
 }
 
 export function getCompileInvocationProfile(tokens: readonly string[]) {
@@ -571,6 +619,7 @@ export function buildScopeContentFingerprint(
 
 export interface WorkspaceSnapshotGitGeneration {
     readonly repo_root: string;
+    readPlannedScope(): void;
     readClassification(explicitUntrackedPaths: readonly string[]): GitChangeClassificationResult;
     readNumstat(useStaged: boolean): readonly GitNumstatEntry[];
     readStagedBlobFingerprints(relativePaths: readonly string[]): StagedBlobFingerprints;
@@ -591,7 +640,7 @@ function runWorkspaceSnapshotGitNumstat(repoRoot: string, args: string[], failMs
     if (result.error) {
         throw new Error(`${failMsg} ${result.error.message || result.error}`);
     }
-    if (result.status !== 0) {
+    if (result.status !== 0 || result.signal || typeof result.stdout !== 'string') {
         const errText = String(result.stderr || '').trim();
         throw new Error(`${failMsg} git exited with code ${result.status}. ${errText}`);
     }
@@ -608,20 +657,25 @@ function normalizeGenerationPaths(relativePaths: readonly string[]): string[] {
 
 export function createWorkspaceSnapshotGitGeneration(repoRoot: string): WorkspaceSnapshotGitGeneration {
     const resolvedRepoRoot = path.resolve(repoRoot);
+    const plannedFiles = captureWorkspacePlannedFiles(resolvedRepoRoot);
+    const assertCurrent = () => assertWorkspacePlannedFilesCurrent(resolvedRepoRoot, plannedFiles);
     let classificationSnapshot: GitChangeClassificationSnapshot | null = null;
     const classifications = new Map<string, GitChangeClassificationResult>();
     const numstatByTarget = new Map<boolean, readonly GitNumstatEntry[]>();
 
     function readClassificationSnapshot(): GitChangeClassificationSnapshot {
+        assertCurrent();
         classificationSnapshot ??= collectGitChangeClassificationSnapshot(resolvedRepoRoot, {
-            timeoutMs: DEFAULT_GIT_TIMEOUT_MS
+            plannedFiles, timeoutMs: DEFAULT_GIT_TIMEOUT_MS
         });
         return classificationSnapshot;
     }
 
     const generation = Object.freeze({
         repo_root: normalizePath(resolvedRepoRoot),
+        readPlannedScope: assertCurrent,
         readClassification(explicitUntrackedPaths: readonly string[]): GitChangeClassificationResult {
+            assertCurrent();
             const normalizedPaths = normalizeGenerationPaths(explicitUntrackedPaths);
             const key = normalizedPaths.join('\0');
             const cached = classifications.get(key);
@@ -629,12 +683,13 @@ export function createWorkspaceSnapshotGitGeneration(repoRoot: string): Workspac
             const classification = deriveGitChangeClassification(
                 resolvedRepoRoot,
                 readClassificationSnapshot(),
-                normalizedPaths
+                normalizedPaths, plannedFiles
             );
             classifications.set(key, classification);
             return classification;
         },
         readNumstat(useStaged: boolean): readonly GitNumstatEntry[] {
+            assertCurrent();
             const cached = numstatByTarget.get(useStaged);
             if (cached) return cached;
             if (readClassificationSnapshot().classification.changes.length === 0) {
@@ -676,6 +731,7 @@ function authenticateWorkspaceSnapshotGitGeneration(
     ) {
         throw new Error('Workspace Git generation is not factory-authenticated for the requested repository root.');
     }
+    generation.readPlannedScope();
     return generation;
 }
 

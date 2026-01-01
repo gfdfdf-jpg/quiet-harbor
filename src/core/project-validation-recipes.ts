@@ -151,3 +151,11 @@ export function eligibleExpectedRedRecipes(recipes: readonly ValidationRecipe[],
     if (!changedFiles.every((file) => typeof file === 'string' && eligible.some((recipe) => recipe.targets.some((target) => recipe.argv.some((arg) => typeof arg !== 'string' && arg.target === target.id) && pathKey(file) === pathKey(target.source))))) throw new Error('Expected-red requires a recipe with an executed changed declared test target');
     return eligible;
 }
+
+/** Optional recipe discovery is distinct from strict recipe admission. An unrelated
+ * recipe cannot take ownership of a task's native RED/GREEN route. */
+export function applicableExpectedRedRecipes(recipes: readonly ValidationRecipe[], changedFiles: readonly unknown[]): ValidationRecipe[] {
+    if (!changedFiles.some(file => typeof file === 'string' && recipes.some(recipe => recipe.purpose === 'test'
+        && recipe.targets.some(target => pathKey(target.source) === pathKey(file))))) return [];
+    return eligibleExpectedRedRecipes(recipes, changedFiles);
+}

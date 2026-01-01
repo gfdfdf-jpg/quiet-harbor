@@ -3,28 +3,29 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { parseCommandChain } from '../../../core/command-line';
+import { buildTaskValidationPlan, parseTaskValidationDeclaration, type TaskValidationPlan, type TaskValidationDeclaration } from '../../../core/task-validation-plan';
+import { validationDigest } from '../../../core/project-validation-identity';
 import { joinOrchestratorPath, normalizePath } from '../../../core/orchestrator-paths';
 import { parseCanonicalActiveTaskQueue } from '../../../core/task-md-table';
 import { isTaskQueueActiveStatus, resolveActiveTaskIds } from '../../../core/task-queue/active-task-state';
-import { appendMandatoryTaskEvent, assertValidTaskId, inspectTaskEventFile, readTaskTimelineJsonlEntries, withTaskTimelineReadSnapshot } from '../../../gate-runtime/task-events';
+import { appendMandatoryTaskEvent, assertValidTaskId, inspectTaskEventFile, readTaskTimelineJsonlEntries, withTaskTimelineReadSnapshot, type TaskTimelineJsonlEntry } from '../../../gate-runtime/task-events';
 import { stringSha256 } from '../../../gate-runtime/hash';
 import { getTaskModeEvidence } from '../../../gates/task-mode/task-mode';
 import { createInvocationReadMemoKey, memoizeInvocationRead, isInvocationReadObservationActive } from '../../../core/invocation-read-observation';
 import { readInvocationPathObservation } from '../../../core/invocation-file-observation';
-import { computeSnapshotFingerprint, createWorkspaceSnapshotRequest, readHeadSha } from '../../../gates/workspace/workspace-snapshot-cache';
+import { readNativeRealpath } from '../../../core/paths';
+import { computeSnapshotFingerprint, readHeadSha, resolveWorkspaceSnapshotRequest, type WorkspaceSnapshotRequest } from '../../../gates/workspace/workspace-snapshot-cache';
 import { findOtherActiveImplementationOwners, findUnapprovedActiveImplementationOwners } from '../../../gates/workspace/active-implementation-ownership';
-import { inspectReviewerFocusedValidationCommand } from '../../../gates/review/review-findings-schema';
 import { getClassificationConfig } from '../../../gates/preflight/classify-change-config';
+import { isClassifiedProductCodePath } from '../../../gates/preflight/classify-change-scope-category';
 import { isSafeOrdinaryDocumentationPath } from '../../../gates/preflight/classify-change-doc-safety';
 import { buildScopeContentFingerprint } from '../../../gates/compile/compile-gate';
-import { isTestScopePath } from '../../../core/file-role-bindings';
+import { createTaskTestScopeMatcher } from '../../../core/file-role-bindings';
 import { validateFullSuiteCommandContract } from '../gate-flows/full-suite/full-suite-command-contract';
 import { readValidationFile } from '../../../core/project-validation-identity';
 import { isPlainRecord } from '../../../core/records';
 import { pathListSha256 } from '../../../gates/shared/canonical-path-list';
 import { parseSplitCheckpointDetectionSource, resolveAuthenticatedSplitCheckpointPreflightScope } from '../../../gates/split-required/split-checkpoint-scope';
-import { createTaskTestCommandContainerChecker } from '../../../gates/full-suite/task-test-command-inclusion';
-import { getFullSuiteTestSelectionViolations } from '../../../gates/full-suite/full-suite-test-selection';
 import type { ParsedOptionsRecord, WorkflowCommandRoots, WorkflowFileConfigData } from './workflow-command-types';
 
 export interface TaskTestSelectionAuthority {
@@ -45,11 +46,23 @@ export interface TaskTestSelectionAuthority {
     operator_confirmed_at_utc?: string;
     reason: string;
     targets: Array<{ path: string; sha256: string }>;
+    /** Files inspected to admit the command; older decisions retain the native validation path. */
+    command_inputs?: Array<{ path: string; sha256: string }>;
+    validation_plan?: TaskValidationPlan;
+    previous_selection_sha256?: string;
     recorded_out_of_scope_failures?: RecordedOutOfScopeFailure[];
 }
 
 function fail(reason: string): never {
     throw new Error(`Task-scoped test selection rejected: ${reason}`);
+}
+
+function latestEntry(entries: readonly TaskTimelineJsonlEntry[], matches: (entry: TaskTimelineJsonlEntry) => boolean,
+    afterIndex = -1): TaskTimelineJsonlEntry | undefined {
+    for (let index = entries.length - 1; index > afterIndex; index -= 1) {
+        if (matches(entries[index])) return entries[index];
+    }
+    return undefined;
 }
 
 function canonicalTarget(value: string): string {
@@ -107,7 +120,7 @@ function readCurrentTask(roots: WorkflowCommandRoots, taskId: string, requireAct
     return withTaskTimelineReadSnapshot(eventsRoot, taskId, () => {
         if (inspectTaskEventFile(timeline, taskId).status !== 'PASS') fail('current native task timeline is missing or invalid.');
         const entries = readTaskTimelineJsonlEntries(timeline);
-        const entry = [...entries].reverse().find(item => item.record?.event_type === 'TASK_MODE_ENTERED');
+        const entry = latestEntry(entries, item => item.record?.event_type === 'TASK_MODE_ENTERED');
         const evidence = getTaskModeEvidence(roots.targetRoot, taskId);
         if (entry?.record?.outcome !== 'PASS' || evidence.evidence_status !== 'PASS'
             || evidence.identity_backfilled_from_legacy || !evidence.evidence_hash
@@ -126,7 +139,8 @@ function readCurrentTask(roots: WorkflowCommandRoots, taskId: string, requireAct
 }
 
 /** Trust only the latest classified bytes in this task entry and an unchanged native scope. */
-function readCurrentPreflight(roots: WorkflowCommandRoots, taskId: string, entryHash: string, allowDocsOnlyExtension = false): {
+function readCurrentPreflight(roots: WorkflowCommandRoots, taskId: string, entryHash: string, allowDocsOnlyExtension = false,
+    selected?: Pick<TaskTestSelectionAuthority, 'preflight_sha256' | 'preflight_scope'>, workspaceSnapshotRequest?: WorkspaceSnapshotRequest): {
     hash: string; changedFiles: string[]; scope: TaskTestSelectionAuthority['preflight_scope'];
     classification?: ReturnType<typeof getClassificationConfig>;
 } {
@@ -143,8 +157,8 @@ function readCurrentPreflight(roots: WorkflowCommandRoots, taskId: string, entry
         if (modeIndex < 0 || classifiedIndex <= modeIndex || stringSha256(entries[modeIndex].rawLine.trim()) !== entryHash) {
             fail('a current authenticated preflight for this task-mode cycle is required.');
         }
-        const latestAttempt = [...entries.slice(classifiedIndex + 1)].reverse().find(item =>
-            ['PREFLIGHT_STARTED', 'PREFLIGHT_FAILED', 'PREFLIGHT_EVIDENCE_RESTORED'].includes(String(item.record?.event_type)));
+        const latestAttempt = latestEntry(entries, item =>
+            ['PREFLIGHT_STARTED', 'PREFLIGHT_FAILED', 'PREFLIGHT_EVIDENCE_RESTORED'].includes(String(item.record?.event_type)), classifiedIndex);
         if (latestAttempt && latestAttempt.record?.event_type !== 'PREFLIGHT_EVIDENCE_RESTORED') {
             fail('the latest preflight attempt is not classified; refresh preflight.');
         }
@@ -171,6 +185,11 @@ function readCurrentPreflight(roots: WorkflowCommandRoots, taskId: string, entry
         }
         const changedFiles = preflight.changed_files as string[];
         const metrics = preflight.metrics;
+        // A different authenticated scope already disproves the old selection. Reject before
+        // asking Git for live scope; successful admission still performs every freshness check.
+        if (selected && file.identity.sha256 !== selected.preflight_sha256
+            && !isDeepStrictEqual({ scope_sha256: metrics.scope_sha256, scope_content_sha256: metrics.scope_content_sha256 },
+                selected.preflight_scope)) fail('the authenticated preflight differs from the selected task scope.');
         const source = typeof preflight.detection_source === 'string' ? preflight.detection_source : '';
         const split = parseSplitCheckpointDetectionSource(source);
         if (!['git_auto', 'explicit_changed_files', 'git_staged_only', 'git_staged_plus_untracked'].includes(source) && !split) {
@@ -181,7 +200,7 @@ function readCurrentPreflight(roots: WorkflowCommandRoots, taskId: string, entry
             ? preflight.authorized_files as string[] : changedFiles;
         const candidates = source === 'git_staged_only' || split ? [false]
             : typeof preflight.include_untracked === 'boolean' ? [preflight.include_untracked] : [true, false];
-        const request = createWorkspaceSnapshotRequest(roots.targetRoot);
+        const request = resolveWorkspaceSnapshotRequest(roots.targetRoot, workspaceSnapshotRequest);
         let current: ReturnType<typeof request.read> | undefined;
         let classification: ReturnType<typeof getClassificationConfig> | undefined;
         for (const includeUntracked of candidates) {
@@ -220,49 +239,45 @@ function readCurrentPreflight(roots: WorkflowCommandRoots, taskId: string, entry
     });
 }
 
-function validateTargets(command: string, targets: string[], root: string, inspectConfiguration = true): void {
-    const direct = validateFullSuiteCommandContract(command);
-    if (!direct.supported) fail(direct.violation || 'unsupported direct argv command.');
-    const tokens = parseCommandChain(command)[0];
-    const containerIncludes = createTaskTestCommandContainerChecker(command, root, inspectConfiguration);
-    for (const target of targets) {
-        // The existing focused validator admits exactly one target. Validate each
-        // member against the same argv, removing only the other declared targets.
-        const singleTargetCommand = tokens.filter(token => {
-            const normalized = normalizePath(token);
-            return normalized === target || !targets.includes(normalized);
-        }).map(token => JSON.stringify(token)).join(' ');
-        const inspected = inspectReviewerFocusedValidationCommand(singleTargetCommand, root);
-        if ((!inspected.syntax_supported || inspected.target !== target)
-            && !containerIncludes(target)) {
-            fail(`command must execute the declared test target '${target}' through a supported native validation runner. ${inspected.violations.join(' ')}`);
-        }
-    }
+function validateTargets(command: string, targets: string[], root: string,
+    declaration: TaskValidationDeclaration = {}): TaskValidationPlan {
+    try { return buildTaskValidationPlan(command, targets.map(target => readTarget(root, target)), declaration); }
+    catch (error) { return fail(error instanceof Error ? error.message : String(error)); }
 }
 
-function validateRelevance(taskId: string, reason: string, targets: string[], taskFiles: string[]): void {
+/** Name the real reason a narrowed command was refused instead of a generic "in-scope failure". */
+function failCarriedTargets(error: unknown): never {
+    const reason = (error instanceof Error ? error.message : String(error))
+        .replace(/^Task-scoped test selection rejected: /u, '');
+    fail('every test target of the earlier failed selection must still run under the new command, and this command '
+        + 'could not be shown to run one of them: ' + reason
+        + ' Include each required target or declare its entrypoint mapping with --task-test-plan, then select again.');
+}
+
+function validateRelevance(taskId: string, reason: string, targets: string[], taskFiles: string[], declaration: TaskValidationDeclaration = {}): void {
     if (reason.length < 20 || !reason.includes(taskId) || /<[^>]+>/u.test(reason)
         || !/\b(?:asserts|covers|exercises|guards|validates|verifies)\b/iu.test(reason)) {
         fail('--reason must explain which current task behavior the selected tests cover.');
     }
     for (const target of targets) {
         if (taskFiles.includes(target)) continue;
-        const justified = reason.split(/[;\n]/u).some(clause => clause.includes(target)
+        const explanations = [reason, ...(declaration.targets ?? []).filter(claim => claim.path === target).map(claim => claim.reason ?? '')];
+        const justified = explanations.flatMap(explanation => explanation.split(/[;\n]/u)).some(clause => clause.includes(target)
             && taskFiles.some(file => clause.includes(file))
             && /\b(?:asserts|covers|exercises|guards|validates|verifies)\b/iu.test(clause));
         if (!justified) fail(`unchanged regression target '${target}' needs an explicit relationship to a declared or current changed task file in --reason.`);
     }
 }
 
-/** A failure stays unresolved until its original command passes or its authenticated outside finding is recorded. */
+/** A failed command stays unresolved until it passes or is retained with a valid replacement selection. */
 function unresolvedOutOfScopeCommand(roots: WorkflowCommandRoots, taskId: string): string | null {
     const timeline = path.join(roots.bundleRoot, 'runtime/task-events', `${taskId}.jsonl`);
     let blocked: string | null = null;
     let blockedEvent = '';
     for (const entry of readTaskTimelineJsonlEntries(timeline)) {
         const details = entry.record?.details;
-        if (!isPlainRecord(details) || typeof details.command !== 'string') continue;
-        if (entry.record?.event_type === 'FULL_SUITE_VALIDATION_FAILED' && details.out_of_scope_audit_verdict === 'BLOCKED') {
+        if (entry.record?.actor !== 'gate' || !isPlainRecord(details) || typeof details.command !== 'string') continue;
+        if (entry.record?.event_type === 'FULL_SUITE_VALIDATION_FAILED') {
             blocked = details.command;
             blockedEvent = stringSha256(entry.rawLine.trim()) || '';
         } else if (['FULL_SUITE_VALIDATION_PASSED', 'FULL_SUITE_VALIDATION_WARNED'].includes(String(entry.record?.event_type))
@@ -276,12 +291,12 @@ export function resolveTaskTestSelectionAuthority(
     options: ParsedOptionsRecord, roots: WorkflowCommandRoots,
     current: WorkflowFileConfigData, next: WorkflowFileConfigData, requestedFields: readonly string[]
 ): TaskTestSelectionAuthority | null {
-    const selectionRequested = ['taskId', 'taskTestSelectionReason', 'focusedRequiredTestPath']
+    const selectionRequested = ['taskId', 'taskTestSelectionReason', 'focusedRequiredTestPath', 'taskTestPlan']
         .some(key => options[key] !== undefined);
     if (!selectionRequested) return null;
     if (typeof options.taskId !== 'string' || typeof options.taskTestSelectionReason !== 'string'
         || (options.focusedRequiredTestPath !== undefined && !Array.isArray(options.focusedRequiredTestPath))) {
-        fail('--task-id and --reason are required; a task-scoped override also requires --focused-required-test-path.');
+        fail('--task-id and --reason are required; declare task targets with --focused-required-test-path or --task-test-plan.');
     }
     if (requestedFields.length !== 1 || requestedFields[0] !== 'full_suite_validation.command'
         || options.mutationSource && options.mutationSource !== 'cli') {
@@ -296,44 +311,78 @@ export function resolveTaskTestSelectionAuthority(
         fail('the enabled test gate must be preserved.');
     }
     const taskId = assertValidTaskId(options.taskId);
-    const targets = (options.focusedRequiredTestPath ?? []).map(canonicalTarget);
-    if (new Set(targets).size !== targets.length) fail('duplicate test targets are not allowed.');
+    let declaration: TaskValidationDeclaration = {};
+    let declarationInput: { path: string; sha256: string } | undefined;
+    if (options.taskTestPlan !== undefined) {
+        if (typeof options.taskTestPlan !== 'string' || Buffer.byteLength(options.taskTestPlan) > 1024 * 1024)
+            fail('--task-test-plan requires a bounded JSON declaration.');
+        try {
+            let text = options.taskTestPlan;
+            if (text.startsWith('@')) {
+                const relative = canonicalTarget(text.slice(1));
+                const file = readValidationFile(root, relative, 1024 * 1024);
+                declarationInput = { path: relative, sha256: file.identity.sha256 };
+                text = file.bytes.toString('utf8');
+            }
+            declaration = parseTaskValidationDeclaration(JSON.parse(text));
+            declaration = { ...(declaration.targets ? { targets: declaration.targets.map(target => ({ ...target, path: canonicalTarget(target.path) })) } : {}),
+                ...(declaration.support ? { support: declaration.support.map(support => ({ ...support, path: canonicalTarget(support.path), targets: support.targets.map(canonicalTarget) })) } : {}) };
+        }
+        catch (error) { fail(`--task-test-plan: ${error instanceof Error ? error.message : String(error)}`); }
+    }
+    const explicitTargets = (options.focusedRequiredTestPath ?? []).map(canonicalTarget);
+    if (new Set(explicitTargets).size !== explicitTargets.length) fail('duplicate test targets are not allowed.');
+    const targets = [...new Set([...explicitTargets, ...(declaration.targets ?? []).map(target => canonicalTarget(target.path))])];
     const bound = readCurrentTask(roots, taskId);
     for (const target of targets) readTarget(root, target);
     const preflight = readCurrentPreflight(roots, taskId, bound.entryHash);
     const classification = getClassificationConfig(root);
-    if (targets.some(target => !isTestScopePath(target, classification.test_trigger_regexes, classification.file_roles))) {
-        fail('every selected target must be classified as a repository test.');
+    for (const target of targets) {
+        if (isClassifiedProductCodePath(target, classification))
+            fail(`product code '${target}' cannot be selected as a test target. Declare the real regression test with --focused-required-test-path <test-path> or --task-test-plan.`);
     }
     const reason = options.taskTestSelectionReason.trim();
-    validateRelevance(taskId, reason, targets, [...new Set([...bound.plannedFiles, ...preflight.changedFiles])]);
+    validateRelevance(taskId, reason, targets, [...new Set([...bound.plannedFiles, ...preflight.changedFiles])], declaration);
+    const supportPaths = (declaration.support ?? []).map(item => canonicalTarget(item.path));
+    const isTaskTest = createTaskTestScopeMatcher(classification.test_trigger_regexes, classification.file_roles, targets, supportPaths);
     const changedTests = preflight.changedFiles.map(canonicalTarget)
-        .filter(target => isTestScopePath(target, classification.test_trigger_regexes, classification.file_roles)
+        .filter(target => isTaskTest(target)
             && fs.existsSync(path.join(root, target))).sort();
     // A repeated selection cannot erase regression coverage while a run is failing.
     // Carry every target from failed selections until that command actually passes.
     const entries = readTaskTimelineJsonlEntries(path.join(roots.bundleRoot, 'runtime/task-events', `${taskId}.jsonl`));
     const requiredByCommand = new Map<string, string[]>();
     let selected: TaskTestSelectionAuthority | null = null;
+    let selectedIdentity: string | null = null;
+    const legacySelections = new Map(readLegacyAuditCandidates(roots, taskId, entries)
+        .filter(item => item.authority.task_mode_entry_sha256 === bound.entryHash)
+        .map(item => [item.entry, item.authority]));
     for (const entry of entries) {
         const details = entry.record?.details;
         if (!isPlainRecord(details)) continue;
-        if (entry.record?.event_type === 'TASK_TEST_SELECTION_RECORDED' && isPlainRecord(details.task_test_selection_authority)) {
+        if (entry.record?.event_type === 'TASK_TEST_SELECTION_RECORDED' && entry.record.actor === 'task-selection-command'
+            && entry.record.outcome === 'PASS' && isPlainRecord(details.task_test_selection_authority)) {
             selected = details.task_test_selection_authority as unknown as TaskTestSelectionAuthority;
-        } else if (entry.record?.event_type === 'FULL_SUITE_VALIDATION_FAILED' && typeof details.command === 'string') {
+            selectedIdentity = validationDigest(selected);
+        } else if (legacySelections.has(entry)) {
+            const legacyAuthority = legacySelections.get(entry)!;
+            selectedIdentity = validationDigest(legacyAuthority);
+            selected = { ...legacyAuthority, command: current.full_suite_validation.command } as unknown as TaskTestSelectionAuthority;
+        } else if (entry.record?.event_type === 'FULL_SUITE_VALIDATION_FAILED' && entry.record.actor === 'gate'
+            && entry.record.outcome === 'FAIL' && typeof details.command === 'string') {
             requiredByCommand.set(details.command, [...new Set([...(requiredByCommand.get(details.command) ?? []),
                 ...(selected?.targets?.map(target => target.path) ?? [])])]);
         } else if (['FULL_SUITE_VALIDATION_PASSED', 'FULL_SUITE_VALIDATION_WARNED'].includes(String(entry.record?.event_type))
-            && typeof details.command === 'string') requiredByCommand.delete(details.command);
+            && entry.record?.actor === 'gate' && typeof details.command === 'string') requiredByCommand.delete(details.command);
     }
     const requiredTargets = [...new Set([...requiredByCommand.values()].flat())];
     const allTargets = [...new Set([...targets, ...changedTests, ...requiredTargets])];
-    for (const target of allTargets) readTarget(root, target);
+    for (const target of [...allTargets, ...supportPaths]) readTarget(root, target);
     const command = next.full_suite_validation.command;
     const retargetedRequirements = [...new Set([...requiredByCommand]
         .filter(([failedCommand]) => failedCommand !== command).flatMap(([, required]) => required))];
-    try { validateTargets(command, retargetedRequirements, root); }
-    catch { fail('an unresolved in-scope failing test cannot be dropped by narrowing.'); }
+    try { if (retargetedRequirements.length) validateTargets(command, [...new Set([...allTargets, ...supportPaths])], root, declaration); }
+    catch (error) { failCarriedTargets(error); }
     const blockedCommand = unresolvedOutOfScopeCommand(roots, taskId);
     let recordedFailures = readRecordedOutOfScopeFailures(root, taskId);
     if (blockedCommand && command !== blockedCommand) {
@@ -342,70 +391,83 @@ export function resolveTaskTestSelectionAuthority(
             && isPlainRecord(entry.record.details) && entry.record.details.command === blockedCommand);
         const details = failure?.record?.details;
         if (failure?.record?.actor !== 'gate' || failure.record.outcome !== 'FAIL'
-            || !isPlainRecord(details) || !Array.isArray(details.out_of_scope_failure_refs)
-            || !details.out_of_scope_failure_refs.length || typeof details.artifact_path !== 'string') {
-            fail(`the unresolved failure of '${blockedCommand}' has no authenticated out-of-scope failure references `
-                + '(for example it was recorded by an older Garda), so narrowing cannot prove that only unrelated tests are dropped. '
-                + `Select '${blockedCommand}' again for this task and rerun full-suite-validation through next-step: the current run `
-                + 'records which failures are outside the task, after which a narrowed selection is accepted and those failures '
-                + 'go to the grouped follow-up task. Use repair or approved scope widening only for failures inside the task.');
+            || !isPlainRecord(details) || typeof details.artifact_path !== 'string') {
+            fail(`the unresolved failure of '${blockedCommand}' lacks authenticated failure artifact evidence.`);
         }
         const failureIndex = entries.indexOf(failure!);
         const cycle = [...entries.slice(0, failureIndex)].reverse().find(entry => entry.record?.event_type === 'TASK_MODE_ENTERED');
-        if (!cycle || stringSha256(cycle.rawLine.trim()) !== bound.entryHash) fail('AUDIT_AND_BLOCK unresolved failure belongs to another task cycle.');
-        const previous = [...entries.slice(0, failureIndex)].reverse().find(entry => entry.record?.event_type === 'TASK_TEST_SELECTION_RECORDED');
+        if (!cycle || stringSha256(cycle.rawLine.trim()) !== bound.entryHash) fail('the unresolved failure belongs to another task cycle.');
+        const previous = [...entries.slice(entries.indexOf(cycle) + 1, failureIndex)].reverse()
+            .find(entry => entry.record?.event_type === 'TASK_TEST_SELECTION_RECORDED' && entry.record.actor === 'task-selection-command');
         const previousDetails = previous?.record?.details;
         const previousAuthority = isPlainRecord(previousDetails) ? previousDetails.task_test_selection_authority : null;
         const previousTargets = isPlainRecord(previousAuthority) && Array.isArray(previousAuthority.targets)
             ? previousAuthority.targets.flatMap(target => isPlainRecord(target) && typeof target.path === 'string' ? [target.path] : []) : [];
-        const scopeKey = (file: string) => process.platform === 'win32' ? normalizePath(file).toLowerCase() : normalizePath(file);
-        const protectedTests = new Set([...bound.plannedFiles, ...preflight.changedFiles, ...previousTargets].map(scopeKey));
-        const refs = details.out_of_scope_failure_refs.map(String);
-        if (refs.some(ref => protectedTests.has(scopeKey(ref)))) fail('an in-scope failing test cannot be dropped by narrowing.');
         // Explicit regression relationships survive narrowing as well as current changed tests.
-        validateTargets(command, [...new Set([...allTargets, ...previousTargets])], root);
+        validateTargets(command, [...new Set([...allTargets, ...previousTargets, ...supportPaths])], root, declaration);
         const artifactFile = readValidationFile(root, normalizePath(path.relative(root, details.artifact_path)), 8 * 1024 * 1024);
         if (artifactFile.identity.sha256 !== details.artifact_sha256) fail('the failed full-suite artifact differs from its authenticated event.');
         const artifact: unknown = JSON.parse(artifactFile.bytes.toString('utf8'));
         if (!isPlainRecord(artifact) || artifact.status !== 'FAILED' || !isPlainRecord(artifact.cycle_binding) || artifact.cycle_binding.task_id !== taskId || artifact.command !== blockedCommand
-            || artifact.out_of_scope_audit_verdict !== 'BLOCKED'
-            || !isDeepStrictEqual(artifact.out_of_scope_failure_refs, refs)) fail('invalid failed full-suite artifact binding.');
+            || !isDeepStrictEqual(artifact.cycle_binding, details.cycle_binding)) fail('invalid failed full-suite artifact binding.');
+        // Attribution is optional information, never authority to discard a required target.
+        // Older events may omit it even when their authenticated artifact contains it.
+        const optionalRefs = details.out_of_scope_failure_refs ?? artifact.out_of_scope_failure_refs;
+        const refs = Array.isArray(optionalRefs) ? optionalRefs.filter((ref): ref is string => typeof ref === 'string') : [];
         recordedFailures = [...recordedFailures, { task_id: taskId, task_mode_entry_sha256: bound.entryHash,
             failure_event_sha256: stringSha256(failure!.rawLine.trim())!, command: blockedCommand,
-            failing_tests: refs, artifact_path: details.artifact_path, artifact_sha256: artifactFile.identity.sha256, artifact }];
+            failing_tests: refs, attribution: refs.length ? 'attributed' : 'not attributed',
+            artifact_path: details.artifact_path, artifact_sha256: artifactFile.identity.sha256, artifact }];
     }
     if (!blockedCommand) {
         const entries = readTaskTimelineJsonlEntries(path.join(roots.bundleRoot, 'runtime/task-events', `${taskId}.jsonl`));
-        const latest = [...entries].reverse().find(entry => ['FULL_SUITE_VALIDATION_FAILED', 'FULL_SUITE_VALIDATION_PASSED',
-            'FULL_SUITE_VALIDATION_WARNED'].includes(String(entry.record?.event_type)));
+        const latest = [...entries].reverse().find(entry => entry.record?.actor === 'gate' && ['FULL_SUITE_VALIDATION_FAILED', 'FULL_SUITE_VALIDATION_PASSED',
+            'FULL_SUITE_VALIDATION_WARNED'].includes(String(entry.record.event_type)));
         if (latest?.record?.event_type === 'FULL_SUITE_VALIDATION_FAILED') {
             const previous = [...entries.slice(0, entries.indexOf(latest))].reverse()
-                .find(entry => entry.record?.event_type === 'TASK_TEST_SELECTION_RECORDED');
+                .find(entry => entry.record?.event_type === 'TASK_TEST_SELECTION_RECORDED' && entry.record.actor === 'task-selection-command');
             const previousDetails = previous?.record?.details;
             const previousAuthority = isPlainRecord(previousDetails) ? previousDetails.task_test_selection_authority : null;
             if (isPlainRecord(previousAuthority) && previousAuthority.command !== command && Array.isArray(previousAuthority.targets)) {
                 const protectedTargets = previousAuthority.targets.flatMap(target => isPlainRecord(target) && typeof target.path === 'string' ? [target.path] : []);
-                try { validateTargets(command, protectedTargets, root); }
-                catch { fail('an unresolved in-scope failing test cannot be dropped by narrowing.'); }
+                try { validateTargets(command, [...new Set([...allTargets, ...protectedTargets, ...supportPaths])], root, declaration); }
+                catch (error) { failCarriedTargets(error); }
             }
         }
     }
     const direct = validateFullSuiteCommandContract(command);
     if (!direct.supported) fail(direct.violation || 'unsupported direct argv command.');
-    const violations = getFullSuiteTestSelectionViolations(root, command, preflight.changedFiles);
-    if (violations.length) fail(violations.join(' '));
-    if (command !== current.full_suite_validation.command) {
-        if (!targets.length) fail('a task-scoped override requires at least one --focused-required-test-path.');
-        validateTargets(command, allTargets, root);
+    const commandInputs = new Map<string, string>();
+    if (declarationInput) commandInputs.set(declarationInput.path, declarationInput.sha256);
+    if (!allTargets.length) fail('declare at least one --focused-required-test-path or a target in --task-test-plan for this task.');
+    const validationPlan = validateTargets(command, [...new Set([...allTargets, ...supportPaths])], root, declaration);
+    // Capture command files once, including opaque wrappers and configuration operands.
+    // Re-reading a stored selection compares these bytes and never walks a manifest.
+    for (const token of parseCommandChain(command).flat()) {
+        for (const operand of [token, ...(token.includes('=') ? [token.slice(token.indexOf('=') + 1)] : [])]) {
+            if (!operand || operand.startsWith('-')) continue;
+            try {
+                const input = readTarget(root, canonicalTarget(operand.replace(/^\.\//u, '')));
+                commandInputs.set(input.path, input.sha256);
+            } catch { /* Literal non-file selectors are not input paths. */ }
+        }
     }
+    for (const support of validationPlan.support) commandInputs.set(support.path, support.sha256);
+    validationPlan.inputs = [...commandInputs].map(([path, sha256]) => ({ path, sha256 }));
     const workspace = computeSnapshotFingerprint(root, 'explicit_changed_files', true, allTargets);
     if (!workspace.headSha) fail('a real Git worktree is required.');
-    return { schema_version: 1, origin: 'task_scoped_test_selection', decision_utc: new Date().toISOString(),
+    const decisionUtc = new Date().toISOString();
+    validationPlan.binding = { task_id: taskId, workspace_root: root, task_mode_entry_sha256: bound.entryHash,
+        preflight_sha256: preflight.hash, ...preflight.scope, selected_at: decisionUtc };
+    return { schema_version: 1, origin: 'task_scoped_test_selection', decision_utc: decisionUtc,
         task_id: taskId, workspace_root: root, workspace_fingerprint: workspace.fingerprint, head_sha: workspace.headSha,
         task_mode_entry_sha256: bound.entryHash, task_mode_artifact_sha256: bound.artifactHash,
         preflight_sha256: preflight.hash, preflight_scope: preflight.scope, changed_tests: changedTests, command,
         require_operator_confirmation: current.task_test_selection?.require_operator_confirmation === true,
-        reason, targets: allTargets.map(target => readTarget(root, target)),
+        reason, targets: allTargets.map(target => readTarget(root, target)), validation_plan: validationPlan,
+        ...(selectedIdentity ? { previous_selection_sha256: selectedIdentity } : {}),
+        ...(commandInputs.size > 0
+            ? { command_inputs: [...commandInputs].map(([path, sha256]) => ({ path, sha256 })) } : {}),
         ...(recordedFailures.length ? { recorded_out_of_scope_failures: recordedFailures } : {}) };
 }
 
@@ -416,6 +478,7 @@ export function assertTaskTestSelectionCurrent(roots: WorkflowCommandRoots, auth
     if (current.entryHash !== authority.task_mode_entry_sha256 || current.artifactHash !== authority.task_mode_artifact_sha256
         || preflight.hash !== authority.preflight_sha256
         || workspace.fingerprint !== authority.workspace_fingerprint || workspace.headSha !== authority.head_sha
+        || (authority.command_inputs && !isDeepStrictEqual(authority.command_inputs.map(input => readTarget(roots.targetRoot, input.path)), authority.command_inputs))
         || !isDeepStrictEqual(authority.targets.map(target => readTarget(roots.targetRoot, target.path)), authority.targets)) {
         fail('task cycle, worktree or test target content changed before publication.');
     }
@@ -434,38 +497,172 @@ export interface CurrentTaskTestSelection {
     status: 'missing' | 'current' | 'stale';
     command: string | null;
     targets: string[];
+    plan?: TaskValidationPlan;
+    /** Pure projection of authenticated old declaration facts, never a claimed new execution. */
+    legacyPlan?: TaskValidationPlan;
+    reason?: string;
     /** Authenticated decision for recording an already-finished review of this exact preflight. */
-    reviewedPreflight?: { sha256: string; command: string; targets: string[] };
+    reviewedPreflight?: { sha256: string; command: string; targets: string[]; plan?: TaskValidationPlan; legacyPlan?: TaskValidationPlan };
+}
+
+function projectLegacyPlan(authority: TaskTestSelectionAuthority): TaskValidationPlan {
+    if (!Number.isFinite(Date.parse(authority.decision_utc))
+        || !/^[a-f0-9]{64}$/u.test(authority.preflight_scope?.scope_sha256)
+        || !/^[a-f0-9]{64}$/u.test(authority.preflight_scope?.scope_content_sha256))
+        throw new Error('Legacy selection lacks authenticated time/scope identity. Select current own tests and rerun task-test-validation.');
+    const plan = buildTaskValidationPlan(authority.command, authority.targets, {}, authority.command_inputs ?? []);
+    plan.binding = { task_id: authority.task_id, workspace_root: authority.workspace_root,
+        task_mode_entry_sha256: authority.task_mode_entry_sha256, preflight_sha256: authority.preflight_sha256,
+        ...authority.preflight_scope, selected_at: authority.decision_utc };
+    return plan;
 }
 
 const TASK_TEST_SELECTION_READ = createInvocationReadMemoKey<CurrentTaskTestSelection>('task-test-selection');
+interface AuthenticatedTaskTestSelection {
+    selection: CurrentTaskTestSelection;
+    authority?: TaskTestSelectionAuthority;
+}
+const TASK_TEST_SELECTION_AUTHORITY = createInvocationReadMemoKey<AuthenticatedTaskTestSelection>('task-test-selection-authority');
+interface LegacyAuditSelection {
+    entry: TaskTimelineJsonlEntry;
+    entryIndex: number;
+    record: Record<string, unknown>;
+    authority: Record<string, unknown>;
+}
+const LEGACY_AUDIT_SELECTIONS = createInvocationReadMemoKey<LegacyAuditSelection[]>('legacy-audit-selections');
 
-export function readTaskTestSelection(roots: WorkflowCommandRoots, taskId: string): CurrentTaskTestSelection {
-    const current = memoizeInvocationRead(TASK_TEST_SELECTION_READ, JSON.stringify([roots, taskId]),
-        () => readTaskTestSelectionUncached(roots, taskId)).value;
+/** 9cc selections live in the audit, authenticated by a committed task event. */
+function readLegacyAuditCandidates(roots: WorkflowCommandRoots, taskId: string, entries: readonly TaskTimelineJsonlEntry[]):
+    LegacyAuditSelection[] {
+    return memoizeInvocationRead(LEGACY_AUDIT_SELECTIONS, selectionReadKey(roots, taskId),
+        () => readLegacyAuditCandidatesUncached(roots, taskId, entries)).value
+        .map(item => ({ ...item, entry: entries[item.entryIndex] }));
+}
+
+function readLegacyAuditCandidatesUncached(roots: WorkflowCommandRoots, taskId: string, entries: readonly TaskTimelineJsonlEntry[]):
+    LegacyAuditSelection[] {
+    const auditEvents = entries.flatMap((entry, entryIndex) => entry.record?.event_type === 'WORKFLOW_CONFIG_MUTATION_AUDITED'
+        && entry.record.outcome === 'PASS' && entry.record.actor === 'workflow-config-set' ? [{ entry, entryIndex }] : []);
+    if (!auditEvents.length) return [];
+    const auditPath = normalizePath(path.relative(roots.targetRoot, path.join(roots.bundleRoot, 'runtime/workflow-config-audit.jsonl')));
+    const audit = readValidationFile(roots.targetRoot, auditPath, 32 * 1024 * 1024);
+    const records = new Map(audit.bytes.toString('utf8').split(/\r?\n/u).filter(Boolean).map(line => [stringSha256(line), line]));
+    const candidates: LegacyAuditSelection[] = [];
+    for (const { entry, entryIndex } of auditEvents) {
+        const details = entry.record?.details;
+        if (!isPlainRecord(details) || typeof details.audit_record_sha256 !== 'string'
+            || path.resolve(roots.targetRoot, String(details.audit_path)) !== path.resolve(roots.targetRoot, auditPath)
+            || path.resolve(roots.targetRoot, String(details.config_path)) !== path.resolve(roots.configPath)) continue;
+        const line = records.get(details.audit_record_sha256);
+        if (!line) throw new Error('Legacy selection audit digest is missing or invalid. Select current own tests again.');
+        const record: unknown = JSON.parse(line);
+        if (!isPlainRecord(record) || record.actor !== 'task_selection_command'
+            || record.event_source !== 'workflow-config-set' || record.schema_version !== 1
+            || !isPlainRecord(record.task_test_selection_authority)) continue;
+        const authority = record.task_test_selection_authority;
+        if (authority.task_id !== taskId || details.task_mode_entry_sha256 !== authority.task_mode_entry_sha256
+            || !Array.isArray(record.changed_fields) || record.changed_fields.length !== 1
+            || record.changed_fields[0] !== 'full_suite_validation.command') continue;
+        if (Array.isArray(authority.targets) && authority.targets.every(target => isPlainRecord(target)
+            && typeof target.path === 'string' && typeof target.sha256 === 'string')) candidates.push({ entry, entryIndex, record, authority });
+    }
+    return candidates;
+}
+
+function readLegacyAuditSelection(roots: WorkflowCommandRoots, taskId: string, entries: readonly TaskTimelineJsonlEntry[]):
+    { entry: TaskTimelineJsonlEntry; authority: TaskTestSelectionAuthority } | null {
+    const latest = readLegacyAuditCandidates(roots, taskId, entries).at(-1);
+    if (!latest) return null;
+    const { entry, record, authority, entryIndex } = latest;
+    const config = readValidationFile(roots.targetRoot, normalizePath(path.relative(roots.targetRoot, roots.configPath)));
+    if (config.identity.sha256 !== record.after_sha256) {
+        throw new Error('Legacy selection configuration binding changed. Select current own tests again.');
+    }
+    const configRecord: unknown = JSON.parse(config.bytes.toString('utf8'));
+    if (!isPlainRecord(configRecord) || !isPlainRecord(configRecord.full_suite_validation)
+        || typeof configRecord.full_suite_validation.command !== 'string') return null;
+    const preflightEntry = latestEntry(entries.slice(0, entryIndex), item => item.record?.event_type === 'PREFLIGHT_CLASSIFIED');
+    const preflightDetails = preflightEntry?.record?.details;
+    if (!isPlainRecord(preflightDetails) || typeof preflightDetails.output_path !== 'string') return null;
+    const preflightFile = readValidationFile(roots.targetRoot,
+        normalizePath(path.relative(roots.targetRoot, path.resolve(roots.targetRoot, preflightDetails.output_path))), 8 * 1024 * 1024);
+    if (preflightFile.identity.sha256 !== preflightDetails.output_sha256) {
+        throw new Error('Legacy selection preflight integrity mismatch. Refresh preflight and select current own tests again.');
+    }
+    const preflight: unknown = JSON.parse(preflightFile.bytes.toString('utf8'));
+    if (!isPlainRecord(preflight) || preflight.task_id !== taskId || !Array.isArray(preflight.changed_files)
+        || !preflight.changed_files.every(file => typeof file === 'string') || !Array.isArray(authority.targets)) return null;
+    const targets = authority.targets as Array<{ path: string; sha256: string }>;
+    if (!targets.every(target => isPlainRecord(target) && typeof target.path === 'string')) return null;
+    const classification = getClassificationConfig(roots.targetRoot);
+    const isTest = createTaskTestScopeMatcher(classification.test_trigger_regexes, classification.file_roles, targets.map(target => target.path));
+    // These are projections of signed audit/preflight facts, never a new receipt.
+    return { entry, authority: { ...authority,
+        command: configRecord.full_suite_validation.command,
+        preflight_sha256: preflightFile.identity.sha256,
+        preflight_scope: { scope_sha256: preflightDetails.scope_sha256, scope_content_sha256: preflightDetails.scope_content_sha256 },
+        changed_tests: preflight.changed_files.map(canonicalTarget).filter(isTest).sort()
+    } as TaskTestSelectionAuthority };
+}
+
+function selectionReadKey(roots: WorkflowCommandRoots, taskId: string): string {
+    return JSON.stringify([path.resolve(roots.targetRoot), path.resolve(roots.bundleRoot), path.resolve(roots.configPath), taskId]);
+}
+
+export function readTaskTestSelection(roots: WorkflowCommandRoots, taskId: string, workspaceSnapshotRequest?: WorkspaceSnapshotRequest): CurrentTaskTestSelection {
+    const current = memoizeInvocationRead(TASK_TEST_SELECTION_READ,
+        selectionReadKey(roots, taskId),
+        () => readTaskTestSelectionUncached(roots, taskId, workspaceSnapshotRequest)).value;
     return { ...current, targets: [...current.targets], ...(current.reviewedPreflight ? {
         reviewedPreflight: { ...current.reviewedPreflight, targets: [...current.reviewedPreflight.targets] }
     } : {}) };
 }
 
-function readTaskTestSelectionUncached(roots: WorkflowCommandRoots, taskId: string): CurrentTaskTestSelection {
+/** The existing reviewed-preflight exception does not authorize executing tests on the current worktree. */
+export function readReviewedTaskTestSelection(roots: WorkflowCommandRoots, taskId: string, preflightSha256: string): CurrentTaskTestSelection | null {
+    const reviewed = readAuthenticatedTaskTestSelection(roots, taskId).selection.reviewedPreflight;
+    return reviewed?.sha256 === preflightSha256
+        ? { status: 'current', command: reviewed.command, targets: [...reviewed.targets], ...(reviewed.plan ? { plan: reviewed.plan } : {}),
+            ...(reviewed.legacyPlan ? { legacyPlan: reviewed.legacyPlan } : {}) } : null;
+}
+
+function readAuthenticatedTaskTestSelection(roots: WorkflowCommandRoots, taskId: string): AuthenticatedTaskTestSelection {
+    return memoizeInvocationRead(TASK_TEST_SELECTION_AUTHORITY, selectionReadKey(roots, taskId),
+        () => captureTaskTestSelectionAuthority(roots, taskId)).value;
+}
+
+/** A task's role declaration survives coherent refreshes; execution authority does not. */
+export function readDeclaredTaskTestPaths(roots: WorkflowCommandRoots, taskId: string): string[] {
+    return readDeclaredTaskTestSelection(roots, taskId)?.targets.map(target => target.path) ?? [];
+}
+
+export function readDeclaredTaskTestSelection(roots: WorkflowCommandRoots, taskId: string): TaskTestSelectionAuthority | undefined {
+    return captureTaskTestSelectionAuthority(roots, taskId, true).authority;
+}
+
+function captureTaskTestSelectionAuthority(roots: WorkflowCommandRoots, taskId: string, declarationOnly = false): AuthenticatedTaskTestSelection {
     const missing: CurrentTaskTestSelection = { status: 'missing', command: null, targets: [] };
     let staleTargets: string[] = [];
-    let reviewedPreflight: CurrentTaskTestSelection['reviewedPreflight'];
-    if (!taskId) return missing;
+    if (!taskId) return { selection: missing };
     try {
         assertValidTaskId(taskId);
         const eventsRoot = path.join(roots.bundleRoot, 'runtime/task-events');
         const timeline = path.join(eventsRoot, `${taskId}.jsonl`);
         return withTaskTimelineReadSnapshot(eventsRoot, taskId, () => {
             const entries = readTaskTimelineJsonlEntries(timeline);
-            const entry = [...entries].reverse().find(item => item.record?.event_type === 'TASK_TEST_SELECTION_RECORDED');
-            if (!entry) return missing;
+            const nativeEntry = latestEntry(entries, item => item.record?.event_type === 'TASK_TEST_SELECTION_RECORDED');
+            if (!nativeEntry && !entries.some(item => item.record?.event_type === 'WORKFLOW_CONFIG_MUTATION_AUDITED')) {
+                return { selection: missing };
+            }
+            if (inspectTaskEventFile(timeline, taskId).status !== 'PASS') return { selection: { ...missing, status: 'stale' } };
+            const legacy = nativeEntry ? null : readLegacyAuditSelection(roots, taskId, entries);
+            const entry = nativeEntry ?? legacy?.entry;
+            if (!entry) return { selection: missing };
             const details = entry.record?.details;
-            const candidate = isPlainRecord(details) ? details.task_test_selection_authority : null;
+            const candidate = legacy?.authority ?? (isPlainRecord(details) ? details.task_test_selection_authority : null);
             const stale: CurrentTaskTestSelection = { status: 'stale', command: null, targets: [] };
-            if (inspectTaskEventFile(timeline, taskId).status !== 'PASS' || entry.record?.outcome !== 'PASS'
-                || entry.record.actor !== 'task-selection-command'
+            if (entry.record?.outcome !== 'PASS'
+                || (!legacy && entry.record.actor !== 'task-selection-command')
                 || !isPlainRecord(candidate) || candidate.schema_version !== 1
                 || candidate.origin !== 'task_scoped_test_selection' || candidate.task_id !== taskId
                 || typeof candidate.command !== 'string' || !candidate.command.trim()
@@ -473,46 +670,93 @@ function readTaskTestSelectionUncached(roots: WorkflowCommandRoots, taskId: stri
                 || typeof candidate.require_operator_confirmation !== 'boolean'
                 || !Array.isArray(candidate.changed_tests) || !candidate.changed_tests.every(item => typeof item === 'string')
                 || !Array.isArray(candidate.targets) || !candidate.targets.every(item => isPlainRecord(item)
-                    && typeof item.path === 'string' && typeof item.sha256 === 'string' && /^[a-f0-9]{64}$/u.test(item.sha256))) return stale;
+                    && typeof item.path === 'string' && typeof item.sha256 === 'string' && /^[a-f0-9]{64}$/u.test(item.sha256))) return { selection: stale };
             const authority = candidate as unknown as TaskTestSelectionAuthority;
+            const reset = latestEntry(entries, item => ['TASK_RESET', 'TASK_DISCARDED'].includes(String(item.record?.event_type)));
+            if (reset && entries.indexOf(reset) > entries.indexOf(entry)) return { selection: missing };
             stale.targets = authority.targets.map(target => target.path);
             staleTargets = stale.targets;
-            if (authority.workspace_root !== fs.realpathSync.native(roots.targetRoot)
-                || (authority.require_operator_confirmation === true && !authority.operator_confirmed_at_utc)) return stale;
-            const current = readCurrentTask(roots, taskId, false);
-            if (current.entryHash !== authority.task_mode_entry_sha256 || current.artifactHash !== authority.task_mode_artifact_sha256
-                || readHeadSha(roots.targetRoot) !== authority.head_sha) return stale;
+            if (authority.workspace_root !== readNativeRealpath(roots.targetRoot)
+                || (authority.require_operator_confirmation === true && !authority.operator_confirmed_at_utc)) return { selection: stale };
+            if (declarationOnly) {
+                // A coherent refresh changes execution identity, not the task's declared file roles.
+                // Explicit reset/discard ends the declaration; no execution evidence is projected here.
+                return { selection: stale, authority };
+            }
+            // Admission already validated task-mode semantics. Bind its exact authenticated bytes
+            // through the invocation's contained-file observation instead of opening another ACL snapshot.
+            const modeEntry = latestEntry(entries, item => item.record?.event_type === 'TASK_MODE_ENTERED');
+            const entryHash = modeEntry ? stringSha256(modeEntry.rawLine.trim()) : null;
+            if (entryHash !== authority.task_mode_entry_sha256) return { selection: missing };
+            const modePath = normalizePath(path.relative(roots.targetRoot,
+                path.join(roots.bundleRoot, 'runtime/reviews', `${taskId}-task-mode.json`)));
+            if (modeEntry?.record?.outcome !== 'PASS'
+                || readTarget(roots.targetRoot, modePath).sha256 !== authority.task_mode_artifact_sha256
+                || readHeadSha(roots.targetRoot) !== authority.head_sha) return { selection: stale };
             // A later edit expires execution authority, but does not erase the decision on the tree a
             // completed reviewer saw. Keep its signed preflight pin without additional filesystem reads.
-            reviewedPreflight = { sha256: authority.preflight_sha256, command: authority.command, targets: [...stale.targets] };
-            stale.reviewedPreflight = reviewedPreflight;
-            if (!isDeepStrictEqual(authority.targets.map(target => readTarget(roots.targetRoot, target.path)), authority.targets)) return stale;
-            const preflight = readCurrentPreflight(roots, taskId, current.entryHash, true);
+            stale.reviewedPreflight = { sha256: authority.preflight_sha256, command: authority.command, targets: [...stale.targets],
+                ...(authority.validation_plan ? { plan: authority.validation_plan } : { legacyPlan: projectLegacyPlan(authority) }) };
+            return { selection: stale, authority };
+        });
+    } catch (error) { return { selection: { status: 'stale', command: null, targets: staleTargets,
+        reason: error instanceof Error ? error.message : String(error) } }; }
+}
+
+function readTaskTestSelectionUncached(roots: WorkflowCommandRoots, taskId: string, workspaceSnapshotRequest?: WorkspaceSnapshotRequest): CurrentTaskTestSelection {
+    let stale: CurrentTaskTestSelection = { status: 'stale', command: null, targets: [] };
+    if (!taskId) return { status: 'missing', command: null, targets: [] };
+    try {
+        assertValidTaskId(taskId);
+        const eventsRoot = path.join(roots.bundleRoot, 'runtime/task-events');
+        return withTaskTimelineReadSnapshot(eventsRoot, taskId, () => {
+            const captured = readAuthenticatedTaskTestSelection(roots, taskId);
+            stale = captured.selection;
+            const authority = captured.authority;
+            if (!authority) return stale;
+            const targetMismatch = authority.targets.find(target => readTarget(roots.targetRoot, target.path).sha256 !== target.sha256);
+            if (targetMismatch) return { ...stale, reason: `Selected target '${targetMismatch.path}' changed after selection. Refresh preflight and select current own tests again.` };
+            const preflight = readCurrentPreflight(roots, taskId, authority.task_mode_entry_sha256, true, authority, workspaceSnapshotRequest);
             if (preflight.hash !== authority.preflight_sha256
-                && !isDeepStrictEqual(preflight.scope, authority.preflight_scope)) return stale;
+                && !isDeepStrictEqual(preflight.scope, authority.preflight_scope)) return { ...stale, reason: 'The selected preflight scope binding is stale. Refresh preflight and select current own tests again.' };
             const classification = preflight.classification ?? getClassificationConfig(roots.targetRoot);
+            const boundTargets = new Set(authority.targets.map(item => item.path));
+            const isTaskTest = createTaskTestScopeMatcher(classification.test_trigger_regexes, classification.file_roles,
+                [...boundTargets], authority.validation_plan?.support.map(item => item.path));
             const changedTests = preflight.changedFiles.map(canonicalTarget)
-                .filter(target => isTestScopePath(target, classification.test_trigger_regexes, classification.file_roles)
+                .filter(target => isTaskTest(target)
                     && (() => {
                         const absolute = path.join(roots.targetRoot, target);
                         const observed = readInvocationPathObservation(absolute);
                         return observed ? 'value' in observed.targetStat : fs.existsSync(absolute);
                     })()).sort();
-            const workspace = computeSnapshotFingerprint(roots.targetRoot, 'explicit_changed_files', true, stale.targets);
-            if (current.entryHash !== authority.task_mode_entry_sha256 || current.artifactHash !== authority.task_mode_artifact_sha256
-                || readHeadSha(roots.targetRoot) !== authority.head_sha
-                || !isDeepStrictEqual(changedTests, authority.changed_tests)
-                || workspace.fingerprint !== authority.workspace_fingerprint || workspace.headSha !== authority.head_sha
-                || !isDeepStrictEqual(authority.targets.map(target => readTarget(roots.targetRoot, target.path)), authority.targets)) return stale;
-            const config = JSON.parse(readValidationFile(roots.targetRoot,
-                normalizePath(path.relative(roots.targetRoot, roots.configPath))).bytes.toString('utf8')) as WorkflowFileConfigData;
+            // HEAD, target content and current native preflight scope were checked above. A second
+            // explicit-path workspace fingerprint only re-probes those same inputs.
+            if (!isDeepStrictEqual(changedTests, authority.changed_tests)) return { ...stale, reason: 'Changed test obligations differ from the selection. Select every current changed test and carried regression target again.' };
+            if (changedTests.some(target => !boundTargets.has(target))) return { ...stale,
+                reason: 'A changed test is absent from the authenticated target bindings. Select current own tests again.' };
             const blockedCommand = unresolvedOutOfScopeCommand(roots, taskId);
             if (blockedCommand && authority.command !== blockedCommand) return stale;
-            if (getFullSuiteTestSelectionViolations(roots.targetRoot, authority.command, preflight.changedFiles).length) return stale;
-            if (authority.command !== config.full_suite_validation.command) {
-                validateTargets(authority.command, [...new Set([...stale.targets, ...changedTests])], roots.targetRoot, false);
+            if (authority.command_inputs !== undefined && !Array.isArray(authority.command_inputs)) return stale;
+            if (authority.command_inputs?.length) {
+                if (!Array.isArray(authority.command_inputs) || !authority.command_inputs.every(input => isPlainRecord(input)
+                    && typeof input.path === 'string' && typeof input.sha256 === 'string' && /^[a-f0-9]{64}$/u.test(input.sha256))
+                    || !isDeepStrictEqual(authority.command_inputs.map(input => readTarget(roots.targetRoot, input.path)), authority.command_inputs)) return { ...stale, reason: 'A selected runner/config/support input binding changed. Refresh preflight and select current own tests again.' };
             }
-            return { status: 'current', command: authority.command, targets: stale.targets };
+            if (authority.validation_plan) {
+                const stored = authority.validation_plan;
+                const rebuilt = buildTaskValidationPlan(authority.command, [...authority.targets,
+                    ...(stored.support ?? []).map(item => ({ path: item.path, sha256: item.sha256 }))], {
+                    targets: stored.targets.map(target => ({ path: target.path, invocation: target.invocation,
+                        ...(target.association === 'symbolic' ? { entrypoint: target.selector, reason: target.reason } : { selector: target.selector, ...(target.reason ? { reason: target.reason } : {}) }) })),
+                    support: stored.support.map(({ path, role, targets }) => ({ path, role, targets })) }, authority.command_inputs ?? []);
+                if (stored.binding) rebuilt.binding = { task_id: authority.task_id, workspace_root: authority.workspace_root,
+                    task_mode_entry_sha256: authority.task_mode_entry_sha256, preflight_sha256: authority.preflight_sha256,
+                    ...authority.preflight_scope, selected_at: authority.decision_utc };
+                if (validationDigest(stored) !== validationDigest(rebuilt)) return { ...stale, reason: 'Stored task validation plan binding is invalid; select current own tests again.' };
+            }
+            return { status: 'current', command: authority.command, targets: stale.targets,
+                ...(authority.validation_plan ? { plan: authority.validation_plan } : { legacyPlan: stale.reviewedPreflight?.legacyPlan ?? projectLegacyPlan(authority) }) };
         });
-    } catch { return { status: 'stale', command: null, targets: staleTargets, ...(reviewedPreflight ? { reviewedPreflight } : {}) }; }
+    } catch (error) { return { ...stale, reason: error instanceof Error ? error.message : String(error) }; }
 }

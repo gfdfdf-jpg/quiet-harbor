@@ -1,3 +1,4 @@
+import { recordFixtureFullSuiteArtifact } from '../../../../task-test-selection-fixtures';
 import { materializeReusedReviewEvidence } from '../../../../../../src/gates/review-reuse/review-reuse-materialization';
 import { normalizeReviewReceiptReviewerProvenance, type ReviewReceipt } from '../../../../../../src/gate-runtime/review-context';
 import { hasAuthenticatedIntermediateGroupedReceiptSource } from '../../../../../../src/gates/review/review-grouped-receipt-source';
@@ -430,12 +431,7 @@ function writeFullSuitePassEvidence(
         warnings: [],
         cycle_binding: cycleBinding
     }, null, 2)}\n`, 'utf8');
-    appendTaskEvent(getOrchestratorRoot(repoRoot), taskId, 'FULL_SUITE_VALIDATION_PASSED', 'PASS', 'Full suite validation passed.', {
-        command: 'npm test',
-        placement: 'after_compile_before_reviews',
-        cycle_binding: cycleBinding,
-        artifact_path: artifactPath.replace(/\\/g, '/')
-    });
+    recordFixtureFullSuiteArtifact(repoRoot, taskId);
     return artifactPath;
 }
 
@@ -1414,7 +1410,8 @@ describe('cli/commands/gates - review reuse upstream reuse', () => {
         // Even identical claimed facts are insufficient when the replacement bytes no longer match the event.
         const authenticated = fs.readFileSync(suitePath, 'utf8');
         fs.writeFileSync(suitePath, authenticated + ' ');
-        assert.match(getReviewContextFullSuiteValidationViolations(suiteOptions).join(' '), /sha256 does not match/u);
+        assert.match(getReviewContextFullSuiteValidationViolations(suiteOptions).join(' '),
+            /Task test artifact integrity: hash or authenticated execution binding is missing or differs/u);
         fs.writeFileSync(suitePath, authenticated);
         const build = await runBuildReviewContextCommand({ reviewType: 'code', depth: '2', preflightPath,
             outputPath: contextPath, repoRoot });
@@ -1535,7 +1532,7 @@ describe('cli/commands/gates - review reuse upstream reuse', () => {
         assert.equal(secondBuild.reusedReviewEvidence, true, secondOutput);
         assert.ok(secondBuild.outputLines.includes('CurrentPassReviewEvidence: rejected'), secondOutput);
         assert.ok(
-            secondBuild.outputLines.some((line) => line.includes('review context full-suite validation binding is stale')),
+            secondBuild.outputLines.some((line) => line.includes('review context task test validation binding is stale')),
             secondOutput
         );
         assert.ok(secondBuild.outputLines.includes('ReviewReuseDecision: accepted'), secondOutput);
@@ -1989,14 +1986,6 @@ describe('cli/commands/gates - review reuse upstream reuse', () => {
             assert.ok(validation.every(entry => entry.validation_binding?.snapshot_sha256 === currentPreflightSha256));
         };
         for (const [reviewType] of reviewTypes) {
-            if (reviewType === 'test') {
-                await assert.rejects(() => runBuildReviewContextCommand({ repoRoot, reviewType, depth: 2, preflightPath,
-                    outputPath: path.join(reviewsRoot, `${taskId}-${reviewType}-review-context.json`) }),
-                /ReviewType 'test' is blocked until upstream reviews pass for the current cycle: code/u);
-                const { contract } = buildDeclaredReviewCoverageContract({ reviewType, repoRoot, preflight, preflightPath });
-                assertCurrentSemanticCoverage(reviewType, contract);
-                continue;
-            }
             const build = await runBuildReviewContextCommand({
                 repoRoot,
                 reviewType,
@@ -2007,11 +1996,15 @@ describe('cli/commands/gates - review reuse upstream reuse', () => {
             const context = JSON.parse(fs.readFileSync(path.join(reviewsRoot, `${taskId}-${reviewType}-review-context.json`), 'utf8')) as {
                 coverage_contract: ReviewCoverageContract;
             };
-            const semantic = reviewType === 'code';
+            const semantic = reviewType === 'test';
             assert.equal(build.reusedReviewEvidence, !semantic, `${reviewType}: ${build.outputLines.join('\n')}`);
             assert.ok(build.outputLines.includes(`ReviewReuseDecision: ${semantic ? 'rejected' : 'accepted'}`));
             if (semantic) {
                 assertCurrentSemanticCoverage(reviewType, context.coverage_contract);
+                const { contract } = buildDeclaredReviewCoverageContract({ reviewType, repoRoot, preflight, preflightPath });
+                assertCurrentSemanticCoverage(reviewType, contract);
+            } else {
+                assert.equal(context.coverage_contract.contract_sha256, priorCoverage.get(reviewType));
             }
         }
 

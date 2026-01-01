@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
+import { normalizeTaskValidationConfigNames } from './task-validation-names';
 import { resolveBundleNameForTarget, UNCONFIGURED_COMPILE_GATE_COMMAND,
     UNCONFIGURED_FULL_SUITE_VALIDATION_COMMAND } from './constants';
 import { bindContainedDestination } from './contained-filesystem';
@@ -59,8 +60,8 @@ function assertManagedDefaultsMigration(
     repoRoot: string, before: MigrationFile, after: MigrationFile, setup?: ProjectCommandSetupMigration
 ): void {
     if (!before.path.includes('/live/')) return;
-    const previous = JSON.parse(before.text) as WorkflowConfigData;
-    const current = JSON.parse(after.text) as WorkflowConfigData;
+    const previous = normalizeTaskValidationConfigNames(JSON.parse(before.text)) as WorkflowConfigData;
+    const current = normalizeTaskValidationConfigNames(JSON.parse(after.text)) as WorkflowConfigData;
     const bundle = resolveBundleNameForTarget(repoRoot);
     const template = readConfig(repoRoot, `${bundle}/template/config/workflow-config.json`);
     if (!template) throw new Error('Workflow migration requires the installed configuration template.');

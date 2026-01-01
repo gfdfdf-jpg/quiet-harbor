@@ -1,17 +1,20 @@
 import * as fs from 'node:fs';
 import { getFullSuiteTestSelectionViolations } from '../full-suite/full-suite-test-selection';
 import { loadTaskFullSuiteConfig, MISSING_TASK_TEST_SELECTION, STALE_TASK_TEST_SELECTION } from '../full-suite/task-full-suite-config';
-import { taskTestExecutionProofSatisfied } from '../full-suite/task-test-execution-proof';
+import { taskTestProcessEvidenceViolations } from '../full-suite/task-test-execution-proof';
 import * as path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { inspectFullSuiteReports, type FullSuiteReportAttempt } from '../full-suite/full-suite-report-evidence';
 import { readBoundedTaskPlanFile } from '../../core/task-plan-read';
 import { type FullSuiteValidationPlacement } from '../../core/workflow-config';
+import { loadFullSuiteValidationConfig } from '../../core/full-suite-validation-config';
 import { isFullSuiteNotRequiredForDocsOnlyScope } from '../full-suite/full-suite-validation-results';
-import { collectOrderedTimelineEvents } from '../completion/completion-evidence';
+import { collectOrderedTimelineEvents, type TimelineEventEntry } from '../completion/completion-evidence';
 import { inspectTaskEventFile } from '../../gate-runtime/task-events';
 import { readAuthenticatedCompileReplay } from '../review/review-artifact-recovery';
 import { readReviewValidationBytes } from './review-validation-invocation';
+import type { TaskValidationPlan, TaskValidationProcessEvidence } from '../../core/task-validation-plan';
+import type { ValidationReportCapture } from '../../core/validation-report-contract';
 import {
     type FullSuiteValidationResult
 } from '../full-suite/full-suite-validation';
@@ -48,6 +51,10 @@ export interface ReviewContextFullSuiteValidationEvidence {
     output_artifact_path: string | null;
     output_retention: Record<string, unknown> | null;
     report_attempts?: FullSuiteReportAttempt[];
+    validation_plan?: TaskValidationPlan;
+    validation_plan_origin?: 'task_selection' | 'authenticated_legacy_projection';
+    task_test_process_evidence?: TaskValidationProcessEvidence;
+    task_test_adapter_reports?: ValidationReportCapture[];
     compact_summary: string[];
     violations: string[];
     warnings: string[];
@@ -68,6 +75,7 @@ export interface CurrentCompileGateEvidence {
     timeline_timestamp_utc: string | null;
     status: string | null;
     cycle_binding: TaskCycleBindingSnapshot | null;
+    full_suite_event?: TimelineEventEntry;
 }
 
 interface FullSuiteValidationEvidenceOptions {
@@ -263,6 +271,7 @@ export function readCurrentCompileGateEvidence(repoRoot: string, taskId: string 
         repoRoot,
         path.dirname(compileGateArtifactPath)
     );
+    const fullSuiteEvent = [...timelineEvents].reverse().find(entry => /^FULL_SUITE_VALIDATION_(?:PASSED|WARNED|FAILED|SKIPPED)$/u.test(entry.event_type));
     if (!fs.existsSync(compileGateArtifactPath) || !fs.statSync(compileGateArtifactPath).isFile()) {
         return {
             artifact_path: normalizedArtifactPath,
@@ -273,12 +282,13 @@ export function readCurrentCompileGateEvidence(repoRoot: string, taskId: string 
         };
     }
     try {
-        const raw = asPlainRecord(JSON.parse(fs.readFileSync(compileGateArtifactPath, 'utf8'))) || {};
+        const raw = asPlainRecord(JSON.parse(readInvocationTextFile(compileGateArtifactPath))) || {};
         return {
             artifact_path: normalizedArtifactPath,
             artifact_timestamp_utc: String(raw.timestamp_utc || '').trim() || null,
             timeline_timestamp_utc: latestCompileGatePassedTimestamp,
             status: String(raw.status || '').trim() || null,
+            full_suite_event: fullSuiteEvent,
             cycle_binding: currentCycle || {
                 preflight_path: normalizeNullablePath(raw.preflight_path),
                 preflight_sha256: typeof raw.preflight_hash_sha256 === 'string' ? raw.preflight_hash_sha256 : null,
@@ -344,7 +354,8 @@ export function getReviewContextFullSuiteValidationViolations(options: {
         preflightSha256: options.preflightSha256,
         reviewedPreflightSha256
     });
-    const currentConfig = loadTaskFullSuiteConfig(options.repoRoot, options.taskId, reviewedPreflightSha256).config;
+    const currentTaskFullSuite = loadTaskFullSuiteConfig(options.repoRoot, options.taskId, reviewedPreflightSha256);
+    const currentConfig = currentTaskFullSuite.config;
     const currentRequiresPreReviewBinding = currentEvidence?.required_for_review === true;
     if (!currentEvidence && !rawContextEvidence) {
         return [];
@@ -380,7 +391,7 @@ export function getReviewContextFullSuiteValidationViolations(options: {
     }
     if (currentEvidenceFailures.length > 0) {
         return [
-            'review context full-suite validation binding cannot be trusted because current full-suite evidence is not a valid pre-review PASS/WARNED binding ' +
+            'review context task test validation binding cannot be trusted because current full-suite evidence is not a valid pre-review PASS/WARNED binding ' +
             `(${currentEvidenceFailures.join('; ')}; ${
                 currentEvidence
                     ? formatFullSuiteEvidenceReference('current', currentEvidence)
@@ -392,7 +403,7 @@ export function getReviewContextFullSuiteValidationViolations(options: {
     if (!rawContextEvidence) {
         if (currentRequiresPreReviewBinding) {
             return [
-                'review context full-suite validation binding is missing even though full-suite validation is required before this review ' +
+                'review context task test validation binding is missing even though task test validation is required before this review ' +
                 `(${formatFullSuiteEvidenceReference('current', currentEvidence)}).`
             ];
         }
@@ -474,7 +485,8 @@ export function getReviewContextFullSuiteValidationViolations(options: {
             `context full-suite enabled flag '${contextEvidence.enabled == null ? 'missing' : String(contextEvidence.enabled)}' does not match workflow-config enabled flag '${String(currentConfig.enabled)}'`
         );
     }
-    if (contextEvidence.command !== currentConfig.command) {
+    if (contextEvidence.command !== currentConfig.command && (currentRequiresPreReviewBinding
+        || !isAuthenticatedNonGatingTaskTestCommand(options.repoRoot, contextEvidence.command, currentTaskFullSuite.selection))) {
         staleReasons.push(
             `context full-suite command '${contextEvidence.command || 'missing'}' does not match effective task command '${currentConfig.command || 'missing'}'`
         );
@@ -489,15 +501,27 @@ export function getReviewContextFullSuiteValidationViolations(options: {
     }
 
     return [
-        'review context full-suite validation binding is stale ' +
+        'review context task test validation binding is stale ' +
         `(${staleReasons.join('; ')}; ${formatFullSuiteEvidenceReference('context', contextEvidence)}; ` +
         `${currentEvidence ? formatFullSuiteEvidenceReference('current', currentEvidence) : `current workflow-config enabled=${String(currentConfig.enabled)}, placement='${currentConfig.placement}', command='${currentConfig.command || 'missing'}'`}). ` +
-        'Rebuild the review context after the latest full-suite validation evidence before launching the reviewer.'
+        'Rebuild the review context after the latest task test validation evidence before launching the reviewer.'
     ];
+}
+
+/**
+ * A lane that does not wait for task tests may keep a context built before the task narrowed its
+ * selection. Its command still stays bound: only the configured workflow command or the latest
+ * authenticated task selection is accepted, never an arbitrary context value.
+ */
+function isAuthenticatedNonGatingTaskTestCommand(repoRoot: string, command: string | null,
+    selection: ReturnType<typeof loadTaskFullSuiteConfig>['selection']): boolean {
+    if (command !== null && command === selection.reviewedPreflight?.command) return true;
+    return command === loadFullSuiteValidationConfig(repoRoot).command;
 }
 
 export function buildFullSuiteValidationEvidence(options: FullSuiteValidationEvidenceOptions): ReviewContextFullSuiteValidationEvidence | null {
     const taskFullSuite = loadTaskFullSuiteConfig(options.repoRoot, options.taskId, options.reviewedPreflightSha256);
+    const validationPlan = taskFullSuite.selection.plan ?? taskFullSuite.selection.legacyPlan;
     const fullSuiteValidationConfig = taskFullSuite.config;
     const shouldRenderEvidence = fullSuiteValidationConfig.enabled === true || options.reviewType === 'test';
     if (!shouldRenderEvidence) {
@@ -548,7 +572,7 @@ export function buildFullSuiteValidationEvidence(options: FullSuiteValidationEvi
             matches_current_compile_gate: null,
             cycle_binding_valid: null,
             mismatch_reason: requiredForReview
-                ? 'Task id is unavailable, so full-suite validation evidence cannot be resolved.'
+                ? 'Task id is unavailable, so task test validation evidence cannot be resolved.'
                 : null
         };
     }
@@ -583,13 +607,14 @@ export function buildFullSuiteValidationEvidence(options: FullSuiteValidationEvi
             matches_current_compile_gate: null,
             cycle_binding_valid: null,
             mismatch_reason: requiredForReview
-                ? 'Full-suite validation evidence artifact is missing.'
+                ? 'Task test validation evidence artifact is missing.'
                 : null
         };
     }
 
     try {
-        const raw = asPlainRecord(JSON.parse(fs.readFileSync(artifactPath, 'utf8'))) || {};
+        const raw = asPlainRecord(JSON.parse(readInvocationTextFile(artifactPath))) || {};
+        const artifactHash = fileSha256(artifactPath);
         const artifactPlacement = normalizeFullSuiteValidationPlacementEvidence(raw.placement);
         const cycleBinding = asPlainRecord(raw.cycle_binding) as FullSuiteValidationResult['cycle_binding'] | null;
         let matchesCurrentPreflight: boolean | null = null;
@@ -631,32 +656,41 @@ export function buildFullSuiteValidationEvidence(options: FullSuiteValidationEvi
                 mismatchReasons.push('compile gate cycle');
             }
             if (mismatchReasons.length > 0) {
-                mismatchReason = `Full-suite validation cycle binding does not match the current ${mismatchReasons.join(', ')}.`;
+                mismatchReason = `Task test validation cycle binding does not match the current ${mismatchReasons.join(', ')}.`;
             }
         } else {
             matchesCurrentPreflight = false;
             matchesCurrentCompileGate = false;
             cycleBindingValid = false;
-            mismatchReason = 'Full-suite validation artifact is missing cycle_binding.';
+            mismatchReason = 'Task test validation artifact is missing cycle_binding.';
         }
 
         if (cycleBindingValid && !docsOnlyExemption) {
             const preflight = asPlainRecord(JSON.parse(readReviewValidationBytes(options.preflightPath).toString('utf8')));
             const tests = Array.isArray(preflight?.changed_files) ? preflight.changed_files.map(String) : [];
-            const exclusions = taskFullSuite.selection.status === 'stale' ? [STALE_TASK_TEST_SELECTION]
+            const exclusions = taskFullSuite.selection.status === 'stale' ? [taskFullSuite.selection.reason || STALE_TASK_TEST_SELECTION]
                 : taskFullSuite.selection.status === 'missing' ? [MISSING_TASK_TEST_SELECTION]
                 : String(raw.command || '').trim() !== fullSuiteValidationConfig.command
                     ? ['Full-suite artifact command does not match the current task command.']
-                    : getFullSuiteTestSelectionViolations(options.repoRoot, fullSuiteValidationConfig.command, tests);
+                    : validationPlan ? [] : getFullSuiteTestSelectionViolations(options.repoRoot, fullSuiteValidationConfig.command, tests);
             if (exclusions.length) { cycleBindingValid = false; mismatchReason = exclusions.join(' '); }
-            if (!taskTestExecutionProofSatisfied(fullSuiteValidationConfig.command, taskFullSuite.selection.targets, raw.task_test_execution_proof)) {
-                cycleBindingValid = false; mismatchReason = 'Maven target execution proof is missing or invalid; rerun full-suite validation for fresh Surefire/Failsafe reports.';
+            const processViolations = taskTestProcessEvidenceViolations(taskFullSuite.selection.plan, raw, taskFullSuite.selection.legacyPlan);
+            const native = compileGateEvidence.full_suite_event;
+            if (native?.actor !== 'gate' || native.details?.artifact_sha256 !== artifactHash
+                || native.details?.command !== raw.command) processViolations.push('Task test artifact integrity: hash or authenticated execution binding is missing or differs. Select current own tests and rerun full-suite-validation.');
+            if (processViolations.length) {
+                cycleBindingValid = false; mismatchReason = processViolations.join(' ');
             }
         }
-        const reports = ['PASSED', 'WARNED'].includes(String(raw.status))
-            ? inspectFullSuiteReports({ repoRoot: options.repoRoot, taskId: String(options.taskId),
-                reviewsRoot: path.dirname(artifactPath), artifact: raw, declarations: fullSuiteValidationConfig.report_files })
-            : null;
+        let reports: ReturnType<typeof inspectFullSuiteReports> | null = null;
+        if (['PASSED', 'WARNED'].includes(String(raw.status))) {
+            try { reports = inspectFullSuiteReports({ repoRoot: options.repoRoot, taskId: String(options.taskId),
+                reviewsRoot: path.dirname(artifactPath), artifact: raw, declarations: fullSuiteValidationConfig.report_files }); }
+            catch (error) {
+                if (!validationPlan) throw error;
+                raw.warnings = [...toStringArray(raw.warnings), `Optional report adapter finding: ${String(error)}`];
+            }
+        }
         const artifactFreshness = cycleBindingValid === true
             ? 'current'
             : cycleBindingValid === false
@@ -668,7 +702,7 @@ export function buildFullSuiteValidationEvidence(options: FullSuiteValidationEvi
             required_for_review: requiredForReview,
             placement: docsOnlyExemption ? fullSuiteValidationConfig.placement : artifactPlacement,
             artifact_path: normalizedArtifactPath,
-            artifact_sha256: fileSha256(artifactPath),
+            artifact_sha256: artifactHash,
             artifact_freshness: artifactFreshness,
             available: true,
             status: normalizeFullSuiteValidationStatus(raw.status),
@@ -682,6 +716,10 @@ export function buildFullSuiteValidationEvidence(options: FullSuiteValidationEvi
             output_artifact_path: normalizeNullablePath(raw.output_artifact_path),
             output_retention: asPlainRecord(raw.output_retention),
             ...(reports?.attempts.length ? { report_attempts: reports.attempts } : {}),
+            ...(validationPlan ? { validation_plan: validationPlan, validation_plan_origin: taskFullSuite.selection.plan
+                ? 'task_selection' as const : 'authenticated_legacy_projection' as const } : {}),
+            ...(asPlainRecord(raw.task_test_process_evidence) ? { task_test_process_evidence: raw.task_test_process_evidence as unknown as TaskValidationProcessEvidence } : {}),
+            ...(Array.isArray(raw.task_test_execution_proof) ? { task_test_adapter_reports: raw.task_test_execution_proof as ValidationReportCapture[] } : {}),
             compact_summary: toStringArray(raw.compact_summary, { trimValues: true }),
             violations: toStringArray(raw.violations, { trimValues: true }),
             warnings: toStringArray(raw.warnings, { trimValues: true }),
@@ -723,7 +761,7 @@ export function buildFullSuiteValidationEvidence(options: FullSuiteValidationEvi
             matches_current_compile_gate: null,
             cycle_binding_valid: null,
             mismatch_reason: requiredForReview
-                ? 'Full-suite validation evidence artifact could not be parsed.'
+                ? 'Task test validation evidence artifact could not be parsed.'
                 : null,
             parse_error: error instanceof Error ? error.message : String(error)
         };
@@ -763,6 +801,20 @@ export function buildFullSuiteValidationEvidenceMarkdown(evidence: ReviewContext
         lines.push(`- Retained report attempt ${attempt.attempt}: ${attempt.output_path} (sha256=${attempt.output_sha256}). `
             + 'Inspect report_capture.reports content_base64; these are retained bytes, independent of later mutable output files.');
     }
+    if (evidence.validation_plan) {
+        if (evidence.validation_plan_origin === 'authenticated_legacy_projection')
+            lines.push('- Selection facts are projected from authenticated legacy evidence. This projection alone does not claim a new execution.');
+        lines.push('- Task-local validation plan (process identity is mechanical; relevance and assertions require this lane\'s independent review):');
+        for (const [index, invocation] of evidence.validation_plan.descriptor.invocations.entries()) {
+            lines.push(`  - Command ${index + 1}: ${JSON.stringify([invocation.executable, ...invocation.argv])}`);
+            for (const target of evidence.validation_plan.targets.filter(target => target.invocation === index))
+                lines.push(`    - ${target.path} (sha256=${target.sha256}; ${target.association} mapping=${JSON.stringify(target.selector)}${target.reason ? `; ${target.reason}` : ''})`);
+        }
+        for (const support of evidence.validation_plan.support)
+            lines.push(`  - ${support.role}: ${support.path} (sha256=${support.sha256}) supports ${support.targets.join(', ')}`);
+        lines.push('- Review every invocation and target against the task criteria, runner/config and changed tests. A zero exit or a recognized adapter is not a semantic verdict. Resolve missing/skipped/zero-case adapter findings in this existing review lane.');
+    }
+    if (evidence.task_test_adapter_reports?.length) lines.push(`- Optional adapter captures: ${evidence.task_test_adapter_reports.length}. Inspect task_test_adapter_reports retained content_base64 and findings, including skipped/failed/zero-case observations; process success is checked separately.`);
     if (
         evidence.required_for_review === true
         && (evidence.status === 'PASSED' || evidence.status === 'WARNED')
@@ -801,7 +853,7 @@ export function buildFullSuiteValidationEvidenceMarkdown(evidence: ReviewContext
     ) {
         lines.push(
             '- Reviewer note: before_completion placement does not require pre-review full-suite evidence; do not demand or run a suite rerun ' +
-            `for this review because completion still enforces full-suite validation later. ${REVIEWER_FOCUSED_VALIDATION_REMINDER}`
+            `for this review because completion still enforces task test validation later. ${REVIEWER_FOCUSED_VALIDATION_REMINDER}`
         );
     }
     if (evidence.mismatch_reason) {
@@ -838,3 +890,4 @@ export function buildFullSuiteValidationEvidenceMarkdown(evidence: ReviewContext
     }
     return lines;
 }
+import { readInvocationTextFile } from '../../core/invocation-file-observation';

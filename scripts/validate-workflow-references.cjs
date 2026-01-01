@@ -18,6 +18,10 @@ const VERIFIED_PINS = new Map([
         sha: '043fb46d1a93c77aae656e7c1c64a875d1fc6a0a', version: 'v7.0.1',
         release: 'https://github.com/actions/upload-artifact/releases/tag/v7.0.1'
     }],
+    ['actions/download-artifact', {
+        sha: '9000827ccba6bdab643e8b6fd33ac0654aef8333', version: 'v8.0.2',
+        release: 'https://github.com/actions/download-artifact/releases/tag/v8.0.2'
+    }],
     ['google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml', {
         sha: 'b77c075a1235514558f0eb88dbd31e22c45e0cd2', version: 'v2.3.0',
         release: 'https://github.com/google/osv-scanner-action/releases/tag/v2.3.0'

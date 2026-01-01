@@ -1,6 +1,6 @@
 import { writeFileAtomically } from './filesystem';
 import { ensureTrailingLineEnding } from './line-endings';
-import * as fs from 'node:fs';
+import { readInvocationTextFile } from './invocation-file-observation';
 
 export interface FormatJsonOptions {
     indent?: number;
@@ -17,7 +17,7 @@ export function parseJsonText(text: string, sourceLabel: string = 'JSON input'):
 }
 
 export function readJsonFile(filePath: string): unknown {
-    return parseJsonText(fs.readFileSync(filePath, 'utf8'), filePath);
+    return parseJsonText(readInvocationTextFile(filePath), filePath);
 }
 
 export function formatJson(value: unknown, options: FormatJsonOptions = {}): string {

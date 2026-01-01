@@ -22,7 +22,8 @@ import {
 } from './project-memory-impact-routing';
 import {
     normalizeMaintenanceMode,
-    resolveProjectMemoryRuntime
+    resolveProjectMemoryRuntime,
+    type ProjectMemoryImpactRuntime
 } from './project-memory-impact-runtime';
 import {
     buildUpdateEvidence,
@@ -56,15 +57,46 @@ export type {
 } from './project-memory-impact-types';
 export { routeProjectMemoryImpact } from './project-memory-impact-routing';
 
-export function getProjectMemoryImpactLifecycleEvidence(input: {
+/**
+ * Resolves whether lifecycle impact evidence is required and where it lives from workflow config only.
+ * Matches `required` and `artifact_path` of getProjectMemoryImpactLifecycleEvidence without reading memory documents.
+ */
+export function resolveProjectMemoryImpactArtifactRequirement(input: {
+    repoRoot: string;
+    taskId: string;
+    preflightPath?: string | null;
+}): { required: boolean; artifact_path: string; update_artifact_path: string } {
+    const runtime = resolveProjectMemoryRuntime(input.repoRoot, input.taskId, input);
+    return { required: runtime.required, artifact_path: normalizePath(runtime.artifactPath),
+        update_artifact_path: normalizePath(runtime.updateArtifactPath) };
+}
+
+type ProjectMemoryLifecycleInput = {
     repoRoot: string;
     taskId: string;
     preflightPath?: string | null;
     changedFiles?: string[];
     artifactPath?: string | null;
     updateArtifactPath?: string | null;
-}): ProjectMemoryImpactLifecycleEvidence {
+};
+
+/** A task audit resolves config once, then assesses evidence only if its route needs it. */
+export function createProjectMemoryImpactLifecycleReader(input: ProjectMemoryLifecycleInput): {
+    required: boolean; artifact_path: string; update_artifact_path: string;
+    read: () => ProjectMemoryImpactLifecycleEvidence;
+} {
     const runtime = resolveProjectMemoryRuntime(input.repoRoot, input.taskId, input);
+    return { required: runtime.required, artifact_path: normalizePath(runtime.artifactPath),
+        update_artifact_path: normalizePath(runtime.updateArtifactPath),
+        read: () => readProjectMemoryImpactLifecycleEvidence(input, runtime) };
+}
+
+export function getProjectMemoryImpactLifecycleEvidence(input: ProjectMemoryLifecycleInput): ProjectMemoryImpactLifecycleEvidence {
+    return readProjectMemoryImpactLifecycleEvidence(input, resolveProjectMemoryRuntime(input.repoRoot, input.taskId, input));
+}
+
+function readProjectMemoryImpactLifecycleEvidence(input: ProjectMemoryLifecycleInput,
+    runtime: ProjectMemoryImpactRuntime): ProjectMemoryImpactLifecycleEvidence {
     if (!runtime.required) {
         const status = runtime.mode === 'off' ? 'OFF' : null;
         return {

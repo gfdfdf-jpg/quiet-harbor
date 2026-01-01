@@ -214,9 +214,8 @@ describe('gates/workspace-snapshot-cache', () => {
             assert.match(sha, /^[0-9a-f]{40}$/);
         });
 
-        it('returns null for non-repo directory', () => {
-            const sha = readHeadSha(tempDir);
-            assert.equal(sha, null);
+        it('rejects unavailable HEAD authority for a non-repo directory', () => {
+            assert.throws(() => readHeadSha(tempDir), /git rev-parse HEAD failed/u);
         });
     });
 
@@ -1583,14 +1582,20 @@ describe('gates/workspace-snapshot-cache', () => {
             assert.deepEqual(cached.changed_files, ['file.ts']);
         });
 
-        it('fails closed when staged-plus-untracked cache status fingerprint git probes fail', () => {
+        it('fails closed when staged-plus-untracked cache status fingerprint git probes fail', t => {
             fs.writeFileSync(path.join(repoRoot, 'file.ts'), 'export const a = 2;\n', 'utf8');
             execFileSync('git', ['-C', repoRoot, 'add', 'file.ts'], { stdio: 'ignore' });
             const first = getWorkspaceSnapshotCached(repoRoot, 'git_staged_plus_untracked', true, []);
             assert.equal(first.cache_hit, false);
 
             fs.writeFileSync(path.join(repoRoot, 'untracked.ts'), 'export const u = 1;\n', 'utf8');
-            fs.renameSync(path.join(repoRoot, '.git'), path.join(repoRoot, '.git-offline'));
+            const native = require('node:child_process') as typeof import('node:child_process');
+            const original = native.spawnSync;
+            t.mock.method(native, 'spawnSync', (...args: Parameters<typeof original>) => {
+                const result = original(...args);
+                if (args[1]?.includes('--porcelain=v1')) Object.assign(result, { status: 128, stderr: 'status authority unavailable' });
+                return result;
+            });
             assert.throws(
                 () => getWorkspaceSnapshotCached(repoRoot, 'git_staged_plus_untracked', true, []),
                 /git --no-pager status .* failed/

@@ -167,7 +167,8 @@ export function isRepairQualifiedFullSuiteArtifact(
     const timeoutPolicy = isPlainRecord(artifact.timeout_policy)
         ? artifact.timeout_policy
         : null;
-    return isBlockingOutOfScopeFullSuiteFailure(artifact)
+    return (artifact.status === 'FAILED' && artifact.timed_out !== true)
+        || isBlockingOutOfScopeFullSuiteFailure(artifact)
         || (artifact.timed_out === true && isRepairQualifiedTimeoutPolicy(timeoutPolicy));
 }
 
@@ -189,7 +190,8 @@ function latestFullSuiteLifecycleRequiresRepair(eventsRoot: string, parentTaskId
         const timeoutPolicy = details && isPlainRecord(details.timeout_policy)
             ? details.timeout_policy
             : null;
-        return isBlockingOutOfScopeFullSuiteFailure(details)
+        return (event.event_type === 'FULL_SUITE_VALIDATION_FAILED' && event.outcome === 'FAIL' && details?.timed_out !== true)
+            || isBlockingOutOfScopeFullSuiteFailure(details)
             || (details?.timed_out === true && isRepairQualifiedTimeoutPolicy(timeoutPolicy));
     }
     return false;

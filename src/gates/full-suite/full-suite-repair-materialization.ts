@@ -105,17 +105,17 @@ function readRepairTaskProposal(fullSuiteArtifactPath: string, parentTaskId: str
         return {
             proposal: null,
             violations: [
-                `Current full-suite artifact is not a repair-qualified out-of-scope failure or exhausted timeout for ${parentTaskId}; `
-                + 'expected matching task_id, timed_out=true, timeout_blocker=true, attempts_exhausted=true, '
-                + 'and a structured repair_task_proposal.'
+                `Current full-suite artifact is not a repair-qualified failed validation or exhausted timeout for ${parentTaskId}; `
+                + 'expected matching task identity and a failed non-timeout run, or an exhausted blocking timeout '
+                + 'with a structured repair_task_proposal.'
             ]
         };
     }
     const timeoutPolicy = isPlainRecord(artifact?.timeout_policy) ? artifact.timeout_policy : null;
-    const proposal = isBlockingOutOfScopeFullSuiteFailure(artifact) ? {
-        suggested_task_id: `${parentTaskId}-F1`, title: 'Repair out-of-scope full-suite failures',
+    const proposal = isBlockingOutOfScopeFullSuiteFailure(artifact) || (artifact?.status === 'FAILED' && artifact.timed_out !== true) ? {
+        suggested_task_id: `${parentTaskId}-F1`, title: 'Repair selected task test failures',
         area: 'workflow/full-suite-repair',
-        rationale: 'AUDIT_AND_BLOCK requires repairing failures outside the parent task scope before DONE.'
+        rationale: 'Selected task validation must pass before DONE; a declared bounded repair child preserves parent WIP.'
     } : isPlainRecord(timeoutPolicy?.repair_task_proposal)
         ? timeoutPolicy.repair_task_proposal
         : null;

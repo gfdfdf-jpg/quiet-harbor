@@ -13,6 +13,8 @@ import { loadTaskFullSuiteConfig } from '../../../../src/gates/full-suite/task-f
 import { taskTestExecutionProofSatisfied } from '../../../../src/gates/full-suite/task-test-execution-proof';
 import { runGit } from '../../cli/commands/gate-test-helpers';
 import type { WalkScenario } from './navigator-walk';
+import { LEGACY_TASK_TARGET, executeLegacyLiteralSelection, legacyRepairFixture, legacyTaskFixture } from './walk-legacy-task-contract';
+import { NODE_WALK_FIXTURE } from './walk-fixture';
 
 const CONFIG = 'garda-agent-orchestrator/live/config/workflow-config.json';
 const TARGET = 'backend/application/src/test/java/example/StatusTest.java';
@@ -22,12 +24,13 @@ function outOfScopeRepairScenario(): WalkScenario {
     const parent = 'T-WALK', child = parent + '-F1', repairPath = 'src/module-boundary.cjs';
     const lanes = ['code', 'security', 'performance', 'test'];
     const parentPath = 'tests/app.test.ts', parentEdit = '// Task-only regression.\n';
+    const childFixture = legacyRepairFixture(repairPath, 'tests/module-boundary.test.cjs', 'module boundary repair');
     let currentTask = parent, declared = false, restored = false, implemented = false;
     const committed = new Set<string>();
     return {
         id: 'coverage-full-suite-out-of-scope',
         preferredOutOfScopeRepair: true,
-        counterState: 'full-suite-child-tree',
+        counterState: 'task-local-full-suite-child-tree',
         fullSuitePlacement: 'after_compile_before_reviews',
         edits: [{ path: parentPath, append: parentEdit }],
         expectedGates: ['task-test-selection', 'full-suite-validation', 'materialize-full-suite-repair-task',
@@ -36,11 +39,17 @@ function outOfScopeRepairScenario(): WalkScenario {
         expectedReviews: { code: 1, security: 1, performance: 1, test: 2 },
         expectedModes: [...lanes.map(lane => lane + ':FULL'), 'test:FULL'],
         inspectTask: () => currentTask,
+        get fixture() { return currentTask === parent ? NODE_WALK_FIXTURE : childFixture; },
+        get taskTitle() { return currentTask === parent ? 'Change the status renderer' : 'tests/module-boundary.test.cjs verifies the repair in src/module-boundary.cjs'; },
+        get selectionTargets() { return currentTask === parent ? [parentPath] : ['tests/module-boundary.test.cjs']; },
+        get testSelectionCommand() { return currentTask === parent ? 'node scripts/full-suite-check.cjs' : childFixture.taskTestCommand; },
         setup: root => {
             fs.writeFileSync(path.join(root, repairPath), 'module.exports = false;\n');
+            fs.writeFileSync(path.join(root, 'tests/module-boundary.test.cjs'),
+                'require("node:test")("module boundary repair", () => require("node:assert/strict").equal(require("../src/module-boundary.cjs"), true));\n');
             fs.writeFileSync(path.join(root, 'scripts/full-suite-check.cjs'),
                 'if (!require("../src/module-boundary.cjs")) { console.error("FAIL tests/unrelated.test.cjs:1 ModuleBoundaryTest: pre-existing production module debt"); process.exitCode = 1; }\n');
-            runGit(root, ['add', repairPath, 'scripts/full-suite-check.cjs']);
+            runGit(root, ['add', repairPath, 'scripts/full-suite-check.cjs', 'tests/module-boundary.test.cjs']);
             runGit(root, ['commit', '-qm', 'Seed unrelated module debt in disposable fixture']);
         },
         prepare: async (root, steps, run) => {
@@ -104,13 +113,18 @@ function outOfScopeRepairScenario(): WalkScenario {
     };
 }
 
-function narrowingScenario(profile: 'balanced' | 'fast' | 'strict'): WalkScenario {
+function narrowingScenario(profile: 'balanced' | 'fast' | 'strict', unattributed = false): WalkScenario {
     let narrowAfterFailure = false;
     return {
-        id: 'coverage-full-suite-out-of-scope-narrow' + (profile === 'balanced' ? '' : '-' + profile),
+        id: 'coverage-full-suite-out-of-scope-narrow' + (profile === 'balanced' ? '' : '-' + profile) + (unattributed ? '-unattributed' : ''),
         profile,
-        expectedDoneGuidance: /Task completed with recorded out-of-scope failures: tests\/unrelated.test.cjs/u,
-        get testSelectionCommand() { return narrowAfterFailure ? 'node --test tests/app.test.ts' : undefined; },
+        fixture: { ...legacyTaskFixture(), selectionReason: 'tests/app.test.ts verifies the status regression in src/app.ts' },
+        expectedDoneGuidance: unattributed ? /Task completed with recorded out-of-scope failures: not attributed/u
+            : /Task completed with recorded out-of-scope failures: tests\/unrelated.test.cjs/u,
+        get testSelectionCommand() { return narrowAfterFailure ? 'node --test tests/app.test.ts'
+            : profile === 'fast' ? 'node scripts/full-suite-check.cjs tests/app.test.ts' : undefined; },
+        selectionTargets: [LEGACY_TASK_TARGET],
+        execute: async (root, step) => profile === 'fast' && executeLegacyLiteralSelection(root, step),
         counterState: 'full-suite-out-of-scope-narrow',
         fullSuitePlacement: 'after_compile_before_reviews',
         edits: [{ path: profile === 'fast' ? 'src/app.ts' : 'tests/app.test.ts', append: '// task-only regression\n' }],
@@ -120,7 +134,9 @@ function narrowingScenario(profile: 'balanced' | 'fast' | 'strict'): WalkScenari
         expectedModes: profile === 'fast' ? ['code:FULL'] : ['test:FULL'],
         setup: root => {
             fs.writeFileSync(path.join(root, 'scripts/full-suite-check.cjs'),
-                'console.error("FAIL tests/unrelated.test.cjs:1 ModuleBoundaryTest: production module debt"); process.exitCode = 1;\n');
+                unattributed
+                    ? 'console.error("14:19:54.151 [main] WARN Consumer inbox processing failed\\norg.hibernate.tool.schema.spi.CommandAcceptanceException: Error executing DDL\\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.5.2:test"); process.exitCode = 1;\n'
+                    : 'console.error("FAIL tests/unrelated.test.cjs:1 ModuleBoundaryTest: production module debt"); process.exitCode = 1;\n');
             runGit(root, ['add', 'scripts/full-suite-check.cjs']);
             runGit(root, ['commit', '-qm', 'Seed unrelated failure in disposable fixture']);
         },
@@ -146,7 +162,12 @@ function narrowingScenario(profile: 'balanced' | 'fast' | 'strict'): WalkScenari
                 if (last?.gate === 'materialize-review-follow-up-tasks' && last.exitCode === 0) {
                     const queue = fs.readFileSync(path.join(root, 'TASK.md'), 'utf8');
                     assert.match(queue, /T-WALK-1.*Resolve recorded out-of-scope test failures/u);
-                    assert.deepEqual(readRecordedOutOfScopeFailures(root, 'T-WALK')[0].failing_tests, ['tests/unrelated.test.cjs']);
+                    const record = readRecordedOutOfScopeFailures(root, 'T-WALK')[0];
+                    assert.deepEqual(record.failing_tests, unattributed ? [] : ['tests/unrelated.test.cjs']);
+                    if (unattributed) {
+                        assert.equal(record.attribution, 'not attributed');
+                        assert.match(queue, /Tests: not attributed/u);
+                    }
                     assert.deepEqual(recordedOutOfScopeFollowUpViolations(root, 'T-WALK'), []);
                     const preflight = JSON.parse(fs.readFileSync(path.join(root,
                         'garda-agent-orchestrator/runtime/reviews/T-WALK-preflight.json'), 'utf8'));
@@ -229,5 +250,6 @@ export const TEST_SELECTION_WALK_SCENARIOS: readonly WalkScenario[] = [
     narrowingScenario('balanced'),
     narrowingScenario('fast'),
     narrowingScenario('strict'),
+    narrowingScenario('balanced', true),
     outOfScopeRepairScenario()
 ];

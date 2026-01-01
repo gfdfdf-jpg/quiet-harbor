@@ -959,7 +959,7 @@ describe('gates/full-suite-validation', () => {
             fs.rmSync(tempDir, { recursive: true, force: true });
         });
 
-        it('rejects compound shell syntax before launch and records command provenance', async () => {
+        it('rejects shell pipes before launch and records command provenance', async () => {
             const repoRoot = path.resolve(process.cwd());
             const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'garda-fsv-cli-compound-command-'));
             const configDir = path.join(tempDir, 'garda-agent-orchestrator', 'live', 'config');
@@ -977,7 +977,7 @@ describe('gates/full-suite-validation', () => {
             const command = [
                 `"${process.execPath.replace(/\\/g, '/')}"`,
                 `"${firstScript.replace(/\\/g, '/')}"`,
-                '&&',
+                '|',
                 `"${process.execPath.replace(/\\/g, '/')}"`,
                 `"${secondScript.replace(/\\/g, '/')}"`
             ].join(' ');
@@ -1019,7 +1019,7 @@ describe('gates/full-suite-validation', () => {
                 execution_mode: 'DIRECT_ARGV',
                 validation_status: 'REJECTED',
                 rejection_reason: 'SHELL_CONTROL_OPERATOR',
-                detected_syntax: '&&'
+                detected_syntax: '|'
             });
             assert.ok(artifact.violations.some((line: string) => line.includes('source-file runner or trusted wrapper script')));
             fs.rmSync(tempDir, { recursive: true, force: true });

@@ -9,6 +9,7 @@ import { isPlainRecord } from '../../core/records';
 import * as path from 'node:path';
 import { resolveNodeFoundationFailureSource } from '../../core/validation/node-foundation-source-attribution';
 import { MAX_BOUNDARY_SOURCE_REFERENCES } from '../../core/trust-boundary-source-evidence';
+import { runGit } from '../../core/git-helpers';
 
 function hasTrueFlag(record: Record<string, unknown>, key: string): boolean {
     return record[key] === true;
@@ -486,9 +487,28 @@ function inspectFailureScope(outputLines: string[], taskChangedFiles: string[], 
     const result = { outside: false, inside: false, unresolved: false, outsideRefs: [] as string[] };
     if (!taskChangedFiles.length) return result;
     const changed = new Set(taskChangedFiles.map(failurePathKey));
-    const references = collectFailureFileRefs(outputLines);
+    const mavenClasses = collectMavenFailedTestClasses(outputLines);
+    let references: string[];
+    if (mavenClasses) {
+        // Maven names failed tests by class. Only classes that each resolve to one repository test file are evidence;
+        // otherwise nothing is attributed, so narrowing can never drop an unidentified (possibly in-scope) failure.
+        const resolved = resolveJavaTestClassFiles(mavenClasses, repoRoot);
+        if (!mavenClasses.length || resolved === null) {
+            result.unresolved = true;
+            return result;
+        }
+        references = resolved;
+    } else {
+        references = collectFailureFileRefs(outputLines);
+    }
     result.unresolved = references.length > MAX_BOUNDARY_SOURCE_REFERENCES;
     for (const ref of references.slice(0, MAX_BOUNDARY_SOURCE_REFERENCES)) {
+        // A bare filename may identify a nested task test or several repository files.
+        // Without a path, only an exact task-file match is known; never infer an outside failure.
+        if (!ref.includes('/') && !changed.has(failurePathKey(ref))) {
+            result.unresolved = true;
+            continue;
+        }
         let source = ref;
         if (repoRoot) {
             source = normalizePath(path.relative(path.resolve(repoRoot), path.resolve(repoRoot, ref)));
@@ -508,6 +528,44 @@ export function detectOutOfScopeFailures(outputLines: string[], taskChangedFiles
     return inspectFailureScope(outputLines, taskChangedFiles, repoRoot).outside;
 }
 
+const MAVEN_OUTPUT = /^\[(?:INFO|ERROR|WARNING)\]\s+(?:Tests run:|T E S T S|BUILD (?:SUCCESS|FAILURE)|Building\s)/u;
+const MAVEN_FAILED_METHOD = /^\[ERROR\]\s+([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+)\.[\w$]+\s+--\s+Time elapsed:.*<<<\s+(?:FAILURE|ERROR)!/u;
+const MAVEN_FAILED_CLASS = /<<<\s+(?:FAILURE|ERROR)!\s+--\s+in\s+([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+)\s*$/u;
+const SOURCE_EXTENSION = /^[A-Za-z_][\w.-]*\.(?:[cm]?[jt]sx?|py|java|kt|kts|groovy|scala|go|rs|rb|cs|php|swift|c|cc|cpp|h|hpp|vue|svelte)$/iu;
+
+/** Failed surefire/failsafe test classes, or null when the output is not Maven test output. */
+function collectMavenFailedTestClasses(outputLines: string[]): string[] | null {
+    if (!outputLines.some(line => MAVEN_OUTPUT.test(line))) return null;
+    const classes = new Set<string>();
+    for (const line of outputLines) {
+        const match = MAVEN_FAILED_METHOD.exec(line) ?? MAVEN_FAILED_CLASS.exec(line);
+        if (match) classes.add(match[1].replace(/\$.*$/u, ''));
+    }
+    return [...classes].sort();
+}
+
+/** The single repository file of each fully qualified test class, or null when any class is missing or ambiguous. */
+function resolveJavaTestClassFiles(classes: readonly string[], repoRoot?: string): string[] | null {
+    if (!repoRoot || classes.length > MAX_BOUNDARY_SOURCE_REFERENCES) return null;
+    const suffixes = classes.map(name => '/' + name.replace(/\./gu, '/') + '.java');
+    let listed: string[];
+    try {
+        listed = runGit(path.resolve(repoRoot), ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--',
+            ...suffixes.map(suffix => ':(glob)**' + suffix)]).split('\0').filter(Boolean).map(normalizePath);
+    } catch { return null; }
+    const files: string[] = [];
+    for (const suffix of suffixes) {
+        const matches = [...new Set(listed.filter(file => ('/' + file).endsWith(suffix)))];
+        if (matches.length !== 1) return null;
+        files.push(matches[0]);
+    }
+    return files;
+}
+
+function isPathLikeFailureRef(value: string): boolean {
+    return /[\\/]/u.test(value) || SOURCE_EXTENSION.test(value);
+}
+
 function collectFailureFileRefs(outputLines: string[]): string[] {
     const failureFileRefs: string[] = [];
     let failedTapTest = false;
@@ -525,8 +583,9 @@ function collectFailureFileRefs(outputLines: string[]): string[] {
             continue;
         }
         const fileRefMatch = line.match(/\b(?:at|in|file)\s+(.+?):\d+(?::\d+)?(?:\s|$)/u)
-            ?? line.match(/(?:at\s+|in\s+|file\s+)?([^\s:()[\]]+\.[^\s:()[\]]+)[\s:(\]]/u);
-        if (fileRefMatch) {
+            ?? line.match(/(?:at\s+|in\s+|file\s+)?([^\s:()[\]"'{},]+\.[^\s:()[\]"'{},]+)[\s:(\]]/u);
+        // A log timestamp, version or dotted identifier is no file: require a path separator or a source extension.
+        if (fileRefMatch && isPathLikeFailureRef(fileRefMatch[1])) {
             failureFileRefs.push(normalizePath(fileRefMatch[1]));
         }
     }

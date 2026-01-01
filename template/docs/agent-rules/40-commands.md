@@ -8,14 +8,14 @@ In installed projects, never edit, stage or commit Garda's own bundle files (cod
 Primary entry point: selected source-of-truth entrypoint for this workspace.
 
 IMPORTANT: Prefer orchestrator-managed validation over ad-hoc validation.
-During orchestrated task execution, run builds, tests, type-checks, and full-suite validation through the mandatory gate flow whenever possible. Use `next-step` to choose the next lifecycle command, `compile-gate` for build/type-check validation, and `full-suite-validation` for the configured full test suite.
+During orchestrated task execution, run builds, tests, type-checks, and task test validation through the mandatory gate flow whenever possible. Use `next-step` to choose the next lifecycle command, `compile-gate` for build/type-check validation, and `task-test-validation` for the selected task tests and required regressions.
 Avoid standalone ad-hoc build, test, or lint commands outside the gate pipeline unless the prompt explicitly asks for them, a focused local debug pass is needed before mandatory gates, or a mandatory gate requires the underlying command.
 For focused manual validation, prefer `gate run-intermediate-command` before direct targeted test invocations; use the bounded Manual Validation Logs pattern below only when the command is not eligible for that gate.
 User preferences such as "do not run rebuild" or "skip tests" never waive mandatory gate validation. If a required gate wraps a build, test, or type-check command, run the gate and let the gate manage the command and output filtering.
 Canonical gate surface is `node garda-agent-orchestrator/bin/garda.js gate <name>`.
 Default task loop: run `node garda-agent-orchestrator/bin/garda.js next-step "<task-id>" --repo-root "."` before the first gate, after every suggested command, and after any gate failure. Follow its single recommended command instead of guessing from defaults, stale artifacts, or the static gate list.
 
-For a full-suite repair handoff, declare one meaningful linked repair task with independent
+For a task test repair handoff, declare one meaningful linked repair task with independent
 `Repair scope paths`; add more only for independent repairs. Create these Garda-instructed
 rows without asking the operator, then run the printed materialization command. Parent WIP
 must be preserved and restored after all repair children reach DONE. Strict decomposition
@@ -26,7 +26,7 @@ keeps its separate two-child minimum; AUDIT_AND_BLOCK keeps DONE blocked until r
 ### Ad-Hoc vs Mandatory Gate Commands
 Ad-hoc command restraint and mandatory gate execution are separate concerns:
 - **Ad-hoc commands** (project build, test, or lint commands executed directly) - avoid as routine task validation. Use them only when requested, when doing a focused local debug pass, or when there is an explicit technical reason before returning to the gate flow.
-- **Mandatory gate commands** (`node garda-agent-orchestrator/bin/garda.js gate compile-gate`, `full-suite-validation`, etc.) - always execute when required by the workflow. A gate wrapping a build/test command is not ad-hoc execution; it is lifecycle-required validation with controlled output.
+- **Mandatory gate commands** (`node garda-agent-orchestrator/bin/garda.js gate compile-gate`, `task-test-validation`, etc.) - always execute when required by the workflow. A gate wrapping a build/test command is not ad-hoc execution; it is lifecycle-required validation with controlled output.
 - **Intermediate validation commands** (`gate run-intermediate-command`) - use for scoped, auditable manual probes while investigating one localized issue. The gate stores full raw output as an artifact and shows only compact status or a bounded failure tail in the transcript.
 - **Known producer-consumer validation chains** (a generator, build or compile step followed by a command that consumes its output (for example tests over generated or compiled artifacts)) - do not fan these out through raw shell sidecars. Use the guarded workflow path, the project's configured test command, or run producer then consumer strictly sequentially.
 
@@ -74,7 +74,7 @@ Rules:
   then return to `next-step`. Current passing evidence routes a fresh review
   cycle without source mutation; foreign, stale, failed, mismatched, or
   modified evidence remains fail-closed.
-- This command never replaces `compile-gate`, `full-suite-validation`, required
+- This command never replaces `compile-gate`, `task-test-validation`, required
   reviews, or completion evidence.
 - Test-first expected-red is an explicit exception to ordinary passing focused
   validation: only after explicit operator approval may the agent add the exact marker `Test-first: expected-red` in the task's
@@ -84,9 +84,9 @@ Rules:
   bounded output; an unexpected pass, timeout, cancellation, unrelated test,
   foreign task, stale preflight, or modified artifact fails closed. After the
   evidence is recorded, `next-step` exposes implementation and still requires
-  refreshed preflight, compile, full-suite, reviews, and completion after the
+  refreshed preflight, compile, task tests, reviews, and completion after the
   production change.
-- Changing a test after its RED was recorded (including a review finding fix) invalidates that RED. If retained RED is stale or predates task re-entry, record a fresh RED for the current test bytes when the implementation can still fail it, or with operator approval remove the `Test-first: expected-red` marker and continue the ordinary cycle; tests, compile, full suite and every required review remain mandatory. Do not use `task-reset` for this.
+- Changing a test after its RED was recorded (including a review finding fix) invalidates that RED. If retained RED is stale or predates task re-entry, record a fresh RED for the current test bytes when the implementation can still fail it, or with operator approval remove the `Test-first: expected-red` marker and continue the ordinary cycle; tests, compile, task tests and every required review remain mandatory. Do not use `task-reset` for this.
 - If the command is not eligible for `run-intermediate-command`, use the Manual
   Validation Logs pattern below so chat output remains bounded and auditable.
 
@@ -95,7 +95,7 @@ Rules:
 ### Manual Validation Logs
 Manual validation outside the gate pipeline must keep the agent transcript bounded.
 Use this pattern only for focused debug or split-repair validation before returning
-to `next-step`; it does not replace `compile-gate`, `full-suite-validation`, or
+to `next-step`; it does not replace `compile-gate`, `task-test-validation`, or
 any gate-owned artifact.
 
 PowerShell:
@@ -221,7 +221,7 @@ node garda-agent-orchestrator/bin/garda.js skills validate --target-root "."
 
 Rules:
 - Use the command detected in `garda-agent-orchestrator/live/project-discovery.md` or explicitly configured in `garda-agent-orchestrator/live/config/workflow-config.json`.
-- If no deterministic command is detected, keep full-suite validation unconfigured until the operator sets a project-specific command.
+- If no deterministic command is detected, keep task test validation unconfigured until the operator sets a project-specific command.
 - Test commands from this section must not be copied into `### Compile Gate (Mandatory)`; compile-gate is for compile/build/type-check only.
 - Direct generated-artifact test consumers are producer-consumer flows: refresh the generated artifacts first with the owning producer command, then run the consumer.
 - Do not launch the producer and direct generated-artifact consumer as parallel raw shell commands; that bypasses the guarded validation-chain path.
@@ -250,7 +250,7 @@ Rules:
 - This markdown block is a human-visible project hint only; compile-gate does not use it as a fallback when workflow config is unconfigured.
 - `__COMPILE_GATE_COMMAND_UNCONFIGURED__` is a blocking sentinel. Replace it during init/agent-init with a project-specific compile/build/type-check command or set `compile_gate.command` with `workflow set`.
 - Command must be non-interactive, must return non-zero exit code on compile failure, and must be a compile/build/type-check command.
-- Do not use full-suite test commands here (`npm test`, `mvn test`, `gradle test`, `go test`, `cargo test`, `dotnet test`, `pytest`, or equivalent). Put full repository tests in `full-suite-validation` instead.
+- Do not use test commands here (`npm test`, `mvn test`, `gradle test`, `go test`, `cargo test`, `dotnet test`, `pytest`, or equivalent). Select only the task tests and required regressions, then run them through `task-test-validation`.
 - Examples by stack (use the project's own wrapper or script when it has one): Maven `./mvnw compile`; Gradle `./gradlew assemble`; Go `go build ./...`; Rust `cargo check`; .NET `dotnet build`; Python `python -m compileall -q <package>`; Node/TypeScript `npm run build` or `npx tsc --noEmit`.
 - If the repository truly has no separate compile/build/type-check command, stop for operator approval before using the compile-gate override flags.
 - This command is executed by `node garda-agent-orchestrator/bin/garda.js gate compile-gate` before review phase.
@@ -265,11 +265,11 @@ node garda-agent-orchestrator/bin/garda.js workflow set --optional-check-rule-de
 ```
 
 Rules:
-- Optional quality checks are advisory self-check rules that `next-step` routes after implementation changes and before compile/review/full-suite work when current checklist evidence is missing.
+- Optional quality checks are advisory self-check rules that `next-step` routes after implementation changes and before compile/review/task tests work when current checklist evidence is missing.
 - Default rules cover simplification, project style fit, unnecessary abstraction, growth, hardcoded values or contracts, duplication, and verification scope.
 - When `next-step` materializes an answers template, fill every active `status` and `answer` (plus any rule-specific required fields), then rerun `next-step`. The executable `quality-checklist` command is printed only after those answers are complete and valid; never run a blank scaffold as evidence.
 - `ACTION_REQUIRED` means return to implementation/refactor work and address the listed follow-up before continuing to expensive gates.
-- Disabling the mode skips only `quality-checklist`; it does not replace or weaken compile-gate, full-suite validation, or independent review.
+- Disabling the mode skips only `quality-checklist`; it does not replace or weaken compile-gate, task test validation, or independent review.
 - Rule edits must go through the audited workflow-setting path or the guarded local UI settings controls, not direct JSON edits.
 
 <!-- garda:rule-section:optional-quality-checks:end -->

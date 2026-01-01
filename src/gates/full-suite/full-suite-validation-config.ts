@@ -285,18 +285,18 @@ export function formatFullSuiteTimeoutForecast(forecast: FullSuiteTimeoutForecas
     const exclusionSummary = formatFullSuiteForecastExclusionSummary(forecast);
     if (forecast.recommendation_source === 'history' && forecast.average_duration_seconds !== null) {
         const excludedFragment = exclusionSummary ? `; ${exclusionSummary}` : '';
-        return `Recommended full-suite command timeout: ${forecast.recommended_timeout_seconds}s `
+        return `Recommended task test command timeout: ${forecast.recommended_timeout_seconds}s `
             + `(target sample ${FULL_SUITE_DURATION_HISTORY_LIMIT} recent run(s); eligible ${forecast.sample_count} run(s) avg ${forecast.average_duration_seconds}s; `
             + `max ${forecast.high_watermark_duration_seconds}s; `
             + `safety margin over max +${forecast.safety_margin_seconds}s = 20% but at least 30s${excludedFragment}).`;
     }
     const suffix = forecast.warning ? ` ${forecast.warning}` : '';
     if (exclusionSummary) {
-        return `Recommended full-suite command timeout: ${forecast.recommended_timeout_seconds}s `
-            + `(no eligible recent matching full-suite duration history; ${exclusionSummary}; using configured timeout).${suffix}`;
+        return `Recommended task test command timeout: ${forecast.recommended_timeout_seconds}s `
+            + `(no eligible recent matching task test duration history; ${exclusionSummary}; using configured timeout).${suffix}`;
     }
-    return `Recommended full-suite command timeout: ${forecast.recommended_timeout_seconds}s `
-        + `(no recent matching full-suite duration history; using configured timeout).${suffix}`;
+    return `Recommended task test command timeout: ${forecast.recommended_timeout_seconds}s `
+        + `(no recent matching task test duration history; using configured timeout).${suffix}`;
 }
 
 function formatFullSuiteForecastExclusionSummary(forecast: FullSuiteTimeoutForecast): string | null {

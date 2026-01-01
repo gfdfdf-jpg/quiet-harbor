@@ -1,6 +1,224 @@
-# Synthetic review stand
+# Garda reference stand: four pillars
+
+Document map and the continuous testing cycle: [docs/stand](../../../docs/stand/README.md).
 
 The stand checks that Garda spends review work only where the review contract requires it, and never less. The path, policy and remediation layers run in-process without real agents or network. The navigator walk drives the real task and gate flows in disposable repositories with a synthetic agent.
+
+## One entry point
+
+Run from the repository root. This is local developer tooling; it never dispatches CI. The entry point clears inherited
+`GIT_CONFIG_*` and puts System32 first on Windows PATH. It uses the existing build lock and does not install dependencies.
+
+```powershell
+node tests/node/synthetic/stand.cjs short --jobs 2 --report "$env:TEMP\reference-short"
+node tests/node/synthetic/stand.cjs full --jobs 6 --report "$env:TEMP\reference-full"
+node tests/node/synthetic/stand.cjs sweep --jobs 6 --report "$env:TEMP\reference-sweep"
+```
+
+| Level | Use | Selection |
+|---|---|---|
+| `short` (`sample` alias) | Every fix; minutes on the reserved stand machine | Stand units, whole unknown-stack product contract (including rename and negative controls), fixture contract, walk-economy, one policy-reuse walk (`a policy change finishes and reuses an already-started reviewer`); four representative walks (clean, source fix, opaque RED/GREEN/finding tour, polyglot A3); sampled policy and corpus layers |
+| `full` | Every merge; coordinator owns the whole matrix | Ordinary walk scenarios, all 198 primary matrix walks, 57 compact stack review/error cases, A8 variants and opaque tours; exhaustive policy/corpus layers and the same contract/economy checks |
+| `sweep` | Before release | Full plus checkpoint disturbances/controls and seeded deep review/error families on unknown and N other stacks |
+
+The entry is `stand.cjs`; the older individual test commands below remain useful for an exact failed check.
+The product contract is split into three exact name selections (ordinary cases, original full tour, renamed full tour),
+with at most two contract processes at once. All 13 cases remain required; `contract.json` aggregates their checksums/logs.
+`--only id1,id2` is an explicitly partial walk selection, never full-level acceptance. `--seed` defaults to `1785881697`.
+The worker count may change on resume. The full matrix and sweep must be reserved separately from other heavy work.
+
+### Shards and the CI verdict
+
+`--shard i/n` uses 1-based indices. Stable navigator-step estimates feed longest-first packing with lexical scenario-ID
+tie breaks, independently of discovery order. Parent/aggregate cases estimate 160 steps, tours/edits/resets 120,
+deep/compact review cases 90, documentation 12 and other walks 60. A checkpoint family includes its restored control
+and all variants and stays on one shard. Sweep shards first replay the six native planning baselines to derive the same
+checkpoint manifest; these planning copies do not duplicate records in the merged union.
+
+```powershell
+node tests/node/synthetic/stand.cjs full --shard 1/2 --review-stacks all --jobs 2 --report "$env:TEMP\stand-parts\one"
+node tests/node/synthetic/stand.cjs full --shard 2/2 --review-stacks all --jobs 2 --report "$env:TEMP\stand-parts\two"
+node tests/node/synthetic/stand.cjs merge --inputs "$env:TEMP\stand-parts" --report "$env:TEMP\stand-merged"
+```
+
+Each shard writes `shard-result.json`, `summary.json` and `summary.md` marked **partial / PARTIAL**, with source,
+level, seed, provider, scenario-set hash, shard index and total. A completed shard exits **2**, never 0; it is never a
+verdict. Only shard 1 runs shared contracts/units/policy-reuse; merge requires their evidence along with every walk.
+Keep every report intact, including logs, checksummed scenario records and family completion markers. Resume uses
+the same `--shard`, level, review selection, seed, provider and source bytes; worker count may change.
+
+Merge requires each index exactly once, matching identities and an exact disjoint union of the independently
+reconstructed plan. It refuses omitted, duplicated, altered and mixed inputs. It recomputes route coverage, budgets,
+adapter parity, review economy, field cases, property trace and all four pillars from raw records, using the same
+reducer as a single run. Each shard's `walk/results.json` names its records and their content digests; merge reads every
+record from the checksummed store one at a time and requires its digest to match. For the union it keeps only the raw
+work keys a reducer reads (`verdictResult` in `walk-metrics.ts`); the copied records stay complete.
+Coverage obligations run once on the union. The output directory must be new and outside
+the inputs. `--only` (or `GARDA_SYNTHETIC_WALK_ONLY`) remains a selected-scenario diagnostic after merging.
+
+`.github/workflows/reference-stand.yml` is **workflow_dispatch only**. After separately authorizing the project run
+and checking shared hosted-minute allowance, dispatch on the exact prepared ref:
+
+```bash
+gh workflow run reference-stand.yml --repo OWNER/TEST_REPO --ref PREPARED_REF \
+  -f level=full -f linux_shards=10 -f windows_shards=16 -f seed=1785881697 -f os=both \
+  -f linux_review_stacks=all -f windows_review_stacks=seeded -f provider=Codex
+```
+
+Each OS has its own shard count and deep review selection (defaults above). Review logic is OS independent, so Linux
+runs every deep family on every stack, while Windows, about four times slower on ACL subprocesses and process start-up,
+runs the complete full level with the seeded deep rotation (about 44% of the `all` navigator steps on seed `1785881697`)
+on more shards. ACL, path and process handling are exercised by every Windows scenario. Each OS merges its own verdict.
+Each OS has one job per shard (`fail-fast: false`, two workers, 330-minute limit) and one 45-minute merge job.
+Windows uses Git Bash with native System32/`icacls`, just like local execution. Partial artifacts upload even after
+failure. Only **Verdict / linux** and **Verdict / windows** are acceptance results; their artifacts contain both
+summary formats, raw union and linked shard evidence. Missing or crashed shards fail merge. The job summary displays
+`summary.md`. Read failed logs before retrying; `only_shard=<index>` with `os=linux|windows` can diagnose the exact failed
+shard on a new fixed ref. That filtered run cannot certify the complete stand and its merge reports missing shards.
+
+`--review-stacks all` runs all 13 deep families (including their variants) on all 19 stacks at **full** and **sweep**.
+`--review-stacks seeded` runs the default seeded rotation (unknown-quartz, three seeded known stacks and permanent pairs)
+at **full** as well as **sweep**. `--review-stacks rotation` preserves the default local behavior (full has compact
+cases; sweep has the seeded rotation).
+`--provider Codex|Claude` selects the synthetic provider identity, not a live agent.
+
+Windows budgets remain byte-for-byte in `walk-counter-baseline.json`. Other platforms must have explicit measured
+entries in `walk-counter-platforms.json`; none inherit Windows budgets. Linux could not be measured locally, so its
+entries are unset and the first CI run must show **NEEDS_CALIBRATION**, not green. Retain raw route/state/counter evidence
+for independent calibration, especially POSIX permission probes versus Windows ACL subprocesses. Record calibration
+through `baseline --kind counter-platforms` with the existing reason/release/commit/hash protocol. Do not raise Windows
+limits. On CI, step timing is always **INCONCLUSIVE**, never a failure and never eligible as a baseline source. Correctness,
+coverage and deterministic budgets still decide acceptance. Local full/sweep timing requirements remain unchanged.
+
+### Review depth on every stack
+
+Every one of the 19 fixtures has three compact `full` scenarios (generic mode):
+
+- `stack-<fixture>-review-edit`: after all four reviews pass, edit existing production code by one line, then by 241 lines after the affected reviews pass again. Code/test repeat in DELTA, then FULL; security/refactor remain passed.
+- `stack-<fixture>-lost-evidence`: lose the security receipt and validation artifact after the reviews. Only security and its explicitly declared test dependent repeat, once. Every declared task test command rebuilds validation, including both technologies of polyglot fixtures.
+- `stack-<fixture>-reset-and-wrong-gate`: an operator-authorized native reset, one mistaken completion-gate at the checkpoint, native re-entry, a direct missing-selection assertion (T-457), fresh selection and FULL reviews. The wrong gate adds no review cycle.
+
+Counts and mode allowances come from `reviewEconomyBound`, independently of the product's classification. An ambiguous receipt-loss mode accepts the rule's FULL/DELTA alternatives; a code edit has an exact mode. The fixture execution oracle checks current source/target hashes and each declared command. Every compact case must reach DONE; a recovery handoff remains a failure.
+
+The loop guard distinguishes stable semantic classifications and finite scripted fault phases. A task's initial role declaration can refine `code` to `mixed` without changing source bytes; that permits the new checklist pass. Repeated metadata, timestamps and oscillation back to an old classification cannot reset the guard. A lost context requires FULL because it has no DELTA base.
+
+In `sweep`, 13 deep families cover policy adoption at four lifecycle positions, post-review small/large edits, lost/corrupt receipts, contexts and reports, four report-correction variants, all 35 wrong-gate/checkpoint combinations, repeated commands and stale locks at three checkpoints, and resets. They always run on `unknown-quartz`. Each family also runs on N known fixtures (`GARDA_SYNTHETIC_REVIEW_STACKS`, default 3, range 3..18), chosen deterministically from `GARDA_SYNTHETIC_SEED`. Each family's selection contains a multi-module project, a multi-technology project and an available adapter; adapter fixtures use auto mode in the deep families. Existing Node families and checkpoint sweeps remain intact.
+
+`review-rotation.json`, `run-manifest.json` and `navigator-walk.json` retain the seed, N, permanent cases and exact family/stack IDs. `review_logic.stacks` in the consolidated summary shows each stack's outcomes, lane counts and FULL/DELTA sequence; stacks absent from a partial run are INCOMPLETE. Cross-stack deep-family differences appear in `stackReviewDifferences`.
+
+Small replay (three compact cases at a time; no full matrix). Repeat for `unknown-quartz`, `spring-maven`, `polyglot-maven-ts` and `python`. On the shared Windows machine, splitting the 12 cases keeps each native run near the 15-minute budget:
+
+```powershell
+$stack = 'unknown-quartz'
+$env:GARDA_SYNTHETIC_WALK_ONLY = (@('review-edit','lost-evidence','reset-and-wrong-gate') | ForEach-Object { "stack-$stack-$_" }) -join ','
+$env:GARDA_SYNTHETIC_WALK_LEVEL = 'full'
+$env:GARDA_SYNTHETIC_SEED = '1785881697'
+$env:GARDA_SYNTHETIC_WALK_PROVIDER = 'Codex'
+$env:GARDA_SYNTHETIC_WALK_JOBS = '3'
+node scripts/node-foundation/build-scripts.cjs test.js tests/node/synthetic/synthetic-navigator-walk.test.ts
+```
+
+For one deep replay, set ONLY to `deep-stack-unknown-quartz-report-correction` (explicit selections work at `full` as well as `sweep`). It runs that complete family only, without unrelated sweep baselines.
+
+When a family differs between stacks, retain the affected stack/family pair in a candidate JSON `{"schema_version":1,"cases":[{"stack":"<fixture>","family":"<family>"}]}` and accept it explicitly:
+
+```powershell
+node tests/node/synthetic/stand.cjs baseline --kind review-cases --candidate "$env:TEMP\review-cases-candidate.json" --reason "Observed difference, scenario IDs and evidence path" --release 1.4.4 --source-commit (git rev-parse HEAD) --expected-sha256 (Get-FileHash tests/node/synthetic/stack-review-cases.json -Algorithm SHA256).Hash.ToLowerInvariant()
+```
+
+Permanent pairs run on every subsequent sweep in addition to the rotation. The command validates pairs and records previous bytes and a written reason. It never changes review expectations or accepts a defect as passing; normal runs never update this file.
+
+```powershell
+node tests/node/synthetic/stand.cjs short --jobs 2 --resume "$env:TEMP\reference-short"
+```
+
+Resume requires identical source/dirty bytes, fixtures, expectations, baseline policy, seed, provider, level and selection.
+Finished test stages are retained with log checksums; walks use their checksummed scenario records. Finished failures are
+retained too. To verify a fix, start a fresh report on the fixed source; changing source never reuses old acceptance.
+Stop the entire previous process tree before resuming. Keep the report directory and its linked artifacts together.
+
+## Reading the single report
+
+Open **`summary.md`** or **`summary.json`** in the printed report directory. They are atomically replaced while stages and
+walks proceed, and marked `final` when the invocation ends. Each of the four pillars has binary `PASS`/`FAIL`, an
+assessment (`PASS`, `FAIL`, `INCOMPLETE`, `INCONCLUSIVE` or `UNBASELINED`), reasons and relative links to evidence.
+Known open findings remain red in this summary. A successful child test that permits an existing finding cannot erase it.
+Coverage, review counts/FULL/DELTA/economy, counter anomalies, outcome counts and ETA are aggregated there; full raw records
+remain in `walk/`, stage logs, `policy.json` and `timing/`. The parent refreshes during long scenarios and prints a
+30-second heartbeat. A worker crash, unfinished stage or absent detail report cannot become a pillar PASS.
+
+Speed has two independent assessments: deterministic **work budgets** and **step timing**. Short permits timing
+`INCONCLUSIVE` (omitted or busy-machine measurement) when work budgets pass; its Speed verdict and exit status agree.
+This makes no timing acceptance claim. Measured timing failures still fail short. Full/sweep require both assessments
+to pass, including complete checkpoint coverage. A partial selection or an empty baseline never proves timing acceptance.
+
+## Step timing on a reserved machine
+
+The machine is currently shared/busy. This diagnostic exercises the refusal mechanism without claiming performance:
+
+```powershell
+node tests/node/synthetic/stand.cjs timing --jobs 1 --machine-busy --timing-routes startup/history-short,selection/history-short --report "$env:TEMP\reference-timing-busy"
+```
+
+For actual measurement, first reserve an otherwise idle machine, stop other executors/builds/CI/indexing, then set
+`$env:GARDA_TIMING_MACHINE_RESERVED = '1'`. Use `short --jobs 1 --step-timing` to add timing after correctness checks, or
+`timing --jobs 1` for timing alone. The latter leaves the other pillars incomplete. `--timing-routes` selects checkpoint
+keys from `step-timing-manifest.json`; a subset never proves complete timing coverage.
+For full acceptance in one command use `full --jobs 6 --step-timing` (or `sweep`): correctness workers finish first,
+then the separate timing worker always uses `JOBS=1` after its quiet check. Only the correctness prefix uses `--jobs 6`.
+
+Preflight samples host CPU for 30 seconds (<10% average), inventories heavy processes and records machine/OS build,
+exact Node/arch, CPU/RAM/disk, power plan, Defender, coverage/cache mode and source/package/harness/checkpoint hashes.
+Unavailable monitoring, an absent operator reservation, busy CPU/processes or a changed power plan gives `INCONCLUSIVE`.
+The environment is monitored during each series too; invalid series retain their raw samples and are never retried until
+a convenient number appears. Compile cache and Defender are not disabled. `cli-cold` is not mixed into this series.
+
+The timing worker uses the actual compiled `resolveNextStep`, with a fresh native observation on every call. It disables
+source-route instrumentation and `GARDA_NEXT_STEP_TIMING`; counters are captured in a separate pass. Five warmups precede
+exactly 100 sequential calls. Only the call is between the two `process.hrtime.bigint()` reads, including native dependency
+validation and snapshot/barrier closure; fixture setup, hashing, comparison, output and writes stay outside. Returned
+gate/status/commands and semantic inputs must remain unchanged. Undeclared writes invalidate the series; the manifest
+currently allows no advisory writes. Raw and semantic manifests are retained; only explicitly listed runtime fields and
+fixture-root/native Git bindings are normalized. Target bytes, commands, roles, lanes, settings and history size remain
+significant. Conservative identity mismatches are reported, never silently normalized away.
+
+Short/long checkpoints share the same scope and commands; long adds 50 authenticated inert history events, outside the
+timer, then restores the checkpoint in place. Fixed work and subprocess ceilings cannot grow; per-event parsing/visits
+may grow linearly, at most once per added event. Canonical timeline-byte work is retained in raw counters. This is the
+operator's reasonable-growth rule, not a zero-history-growth requirement.
+
+Median averages the central pair; p95 is nearest-rank `ceil(.95*N)-1`. Both show baseline/candidate, Δms and Δ%; baseline
+zero gives null %. FAIL means growth exceeds `max(absolute, relative*baseline)`: initially median 10%/20ms, p95 15%/50ms,
+sealed before the candidate. Baseline machine/OS/Node/mode/protocol/checkpoint/semantic identities must match. New or missing
+checkpoints are unbaselined/incomplete. Raw accepted release inputs/samples stay embedded/linked in evidence. A paired
+previous-release control can be retained as a separate timing run; it is not fabricated by this harness.
+
+`timing/step-timing.json` is written after each checkpoint, including progress/ETA and counters. Resume runs a new idle
+check and rebuilds navigation prefixes; only completed, unchanged timing series survive, while interrupted series start
+from the beginning. Source/package/environment/checkpoint/protocol mismatches refuse resume. There is deliberately no
+accepted timing baseline in the initial stand: the busy machine cannot supply one.
+
+## Deliberate baseline decisions
+
+Normal runs never write budgets, timing baselines or expectations. `baseline-policy.json` seals their bytes; editing
+them (or the expectation source manifests) without a recorded decision makes the report red. Prepare and review the
+candidate first, then use the same entry point with a written reason and exact release/full source commit:
+
+```powershell
+node tests/node/synthetic/stand.cjs baseline --kind timing --candidate "$env:TEMP\quiet-release\timing\step-timing.json" --reason 'Accept independently measured release on reserved perf machine' --release 1.4.4 --source-commit <40-hex-sha> --expected-sha256 <current-baseline-sha256>
+```
+
+Kinds: `counters`, `timing`, `timing-manifest`, `expectations`. `--expected-sha256` prevents overwriting an intervening
+decision. `expectations --candidate current` seals the reviewed current review/scenario/oracle source hashes without
+changing expectations. Other candidates are JSON files. Timing requires complete quiet 100-sample records, and counter
+updates cannot raise/remove existing subprocess ceilings. A timing-manifest change (including normalization or limits)
+also needs its own reason. Evidence under `baseline-decisions/` retains the previous and accepted JSON, hashes, reason,
+release and commit; it is written before replacement. Review and commit that evidence with the proposed baseline.
+A red report never invokes this command, and raising a budget to hide a red result is not an acceptable decision.
+
+`--format-only` records serialization repairs through the same baseline command and durable receipt. The candidate
+must retain every existing JSON value; it cannot introduce timing samples, change limits or accept a measurement.
+This also keeps an unmeasured timing placeholder sealed across a CRLF-to-LF checkout.
 
 Code lives in `scripts/node-foundation/synthetic/`:
 
@@ -62,22 +280,113 @@ Set `GARDA_SYNTHETIC_WALK_LEVEL` to:
 
 | Level | Work | What it proves |
 |---|---|---|
-| `sample` (default) | Clean pass and a production fix following a failed review | Representative task liveness and review modes, measured work budgets and timing flags. It reports coverage gaps without requiring complete coverage. A discovery run of the whole repository sets no walk variable and therefore walks only this level, with a 30-minute test timeout (`engine/walk-plan.ts`). |
-| `full` | Every declared scenario, including profiles, declared graphs, full-suite placements and project sizes | Scenario expectations, counters, timing and source-derived route accounting. Every unexplained gate or BLOCKED route point fails. |
-| `sweep` | Full plus applicable disturbances on clean-production, document-only and `security`/`refactor` baselines, wrong gates at fixed checkpoints, and seeded combinations | Recovery, explicit refusals, uncaught exceptions and loops under the enumerated mutations. This is exhaustive over the emitted manifest, not over every possible project or corruption. |
+| `sample` (default) | Existing clean pass and failed-review source fix, opaque gate tour, Maven/TypeScript A3 | Representative liveness, review economy, opaque case evidence and multiple commands. It reports incomplete coverage. The default timeout remains 30 minutes. |
+| `full` | All old scenarios, all 198 primary matrix walks, 15 A8 review variants and two opaque tours | Exact outcomes/review modes, counters and source-derived route accounting. Every unexplained gate or BLOCKED route point fails. |
+| `sweep` | Full plus existing disturbances and bounded unknown/Maven/polyglot recovery families | The three additional A1 baselines receive observed artifact loss/corruption/staleness, repeated/wrong commands, criteria/policy changes, resets and seeded combinations. Node-specific source edits and failure flags are excluded from these extra families. The emitted manifest defines coverage. |
 
 `GARDA_SYNTHETIC_WALK_JOBS=1..24` controls processes for all levels and sweep families. Use 20 on the 24-core stand machine. A process runs one scenario at a time because cwd, the shifted clock and the observer are process scoped. The parent merges worker results and enforces coverage only after aggregation; an absent or crashed worker is a finding. A checkpoint family executes its prefix once, requires an undisturbed restored control to reach DONE, then restores the same fixture path and native identities for each variant. Unchanged evidence timestamps are preserved. Shared prefix traces are marked and excluded from duplicate measurement/coverage counts. Build entrypoints still use the existing single-build lock.
 
 The existing normal-suite sample remains `tests/node/cli/commands/gates/review-cycle/gates-review-cycle-synthetic-walk.test.ts`. The short stand-contract tests are `tests/node/policy/synthetic-walk-contract.test.ts`. Neither normal test path dispatches a full or sweep run. Output capture belongs to the gate's asynchronous context and forwards Node's test protocol; a sentinel regression checks that an earlier failed test remains visible and its child process exits nonzero.
+
+### Project descriptors and stack matrix (1.4.4)
+
+`engine/walk-fixture.ts` owns project files, compile/project-reference commands, native case claims,
+trust-boundary evidence and the reviewer output contract. Its default Node descriptor preserves the old
+fixture bytes and commands. A fixture does not need `package.json`, `src/app.ts`, `tests/app.test.ts` or TAP.
+Garda's own package/runtime inputs are still required to install the real native gates in a disposable project.
+
+`tests/fixtures/stacks/catalog.json` lists 19 projects. Each `fixture.json` names its sources, test groups,
+technology-specific argv, helper/data inputs and optional adapter identity; `project/` contains its manifests
+and source tree. `tasks.json` specifies nine distinct tasks. The shared `runner.cjs` is copied into each project,
+behind executable-name-preserving `.cmd` and POSIX wrappers. It checks exact cwd/argv/module/filter/targets,
+reads the actual test and production patches, and emits realistic output plus optional XML/TRX. Its log is
+only an independent harness oracle in `.git/stand-invocations.jsonl`; it never creates Garda artifacts.
+The modeled reviewer reads current source hashes and the retained native output before resolving a case.
+
+| Projects | Shape |
+|---|---|
+| `spring-maven`, `java-gradle`, `kotlin-gradle` | External Spring Boot parent, three-module reactor, unrelated JaCoCo excludes, `-pl` lists and `-Dtest`; Java/Kotlin multi-project Gradle |
+| `dotnet`, `go`, `rust`, `python`, `node` | Solution/two test projects with same-named classes; Go packages; Cargo workspace; pytest packages/helpers/data; Node modules/TAP |
+| `php-phpunit`, `php-laravel` | Composer/PHPUnit and Laravel feature/unit tests |
+| `vite-playwright`, `pnpm-nx` | Vitest and browser invocations; pnpm/Nx projects with Jest targets |
+| `ruby`, `elixir`, `swift`, `cmake` | RSpec, ExUnit umbrella, XCTest targets, separate CMake build and CTest filtering |
+| `unknown-quartz` | Invented `.qz` production, `.case` tests, opaque output, helper/data operands, no known manifest |
+| `polyglot-maven-ts`, `polyglot-python-go` | A single task owns targets in two technologies and needs both invocations |
+
+Every project has A1 production/regression, A2 test-only boundary, A3 two components, A4 docs-only,
+A5 own failure/fix, A6 retained broad failure/narrowing/follow-up, A7 RED before implementation/GREEN,
+A8 security/refactor lanes and A9 native parent/two children/aggregate audit. A9 checks review modes
+per child task ID and accepts native SOURCE only in the disposable Git repository. A4 requires zero
+reviewer launches and no compile/test subprocess. Ordinary agents choose only their task's targets,
+one invocation per technology; A6 is an explicit mistaken or inherited broad attempt, performed once.
+
+IDs are `stack-<fixture>-a<N>-generic` and `stack-<fixture>-a<N>-auto`. There are **171 generic + 27 auto =
+198 primary walks**: Node, Maven and Maven/TypeScript have adapter peers. Auto supplies additional reports;
+generic omits them. Both use identical native gate handlers. An admitted generic result must retain its
+outcome, reviews and modes in auto. A partial adapter-only selection reports its missing generic peer.
+Representative opaque/Maven/polyglot A8 variants append `-test-fix`, `-protected-fix` or `-scope-expansion`;
+their independent oracle requires test DELTA, protected security FULL, or expanded-scope FULL respectively.
+
+`engine/walk-unknown-stack-contract.ts` declares the long opaque gate tour and its executable/extension/layout
+rename control. Compile and test commands start unconfigured; the agent attempts task-local compile declaration.
+`UNKNOWN_GATE_OBLIGATIONS` requires actual native routes, including RED, two targets, checklist, focused
+validation, reviews, follow-up and completion. Unknown-stack refusal is never a declared successful handoff.
+The product contract and source-derived route inventory remain separate acceptance checks.
+
+The short opaque tour preserves its original TDD test bytes through the finding fix, like the independent product
+contract: code FULL then code DELTA, followed by security/refactor/test FULL once each (five launches total).
+The runner obtains implementation files from its manifest; unused `--implementation` operands are omitted, while
+the task plan declares the data-to-target mapping. Native RED/GREEN use identical explicit case IDs; the runner's
+receipt and execution oracle retain pre/post implementation hashes. Initial test-role refresh uses the existing
+ordered diagnostic prefix without task re-entry, and missing current GREEN has an executable navigator route.
+
+The small runner contract suite is `synthetic-stack-fixtures.test.ts`. Negative controls include no-op,
+ignored selectors, wrong module/filter, stale XML, exit zero with zero cases, skipped cases, dropped second
+module and stdout/report disagreement. Partial polyglot GREEN and source changes after execution fail the oracle.
+These controls test the simulator/reviewer contract; they are not native toolchain acceptance or a substitute
+for the product's authenticated-evidence integrity controls.
+
+The run manifest seals fixture manifests, every project/runner byte, task specifications, adapter identity/mode
+and oracle version in addition to the existing source-input identity. Changing any refuses resume. Completed
+PASS and FAIL records retain the same atomic/checksum semantics; changing worker count remains allowed.
+Old review expectations and counter budgets are unchanged. New route/state calibration stays pending until
+an undisturbed native route is reached and independently measured; an early blocked walk is not calibration.
+
+Small local smoke selection (PowerShell, after putting System32 first and removing `GIT_CONFIG_*`):
+
+```powershell
+$env:GARDA_SYNTHETIC_WALK_LEVEL = 'full'
+$env:GARDA_SYNTHETIC_SEED = '1785881697'
+$env:GARDA_SYNTHETIC_WALK_PROVIDER = 'Codex'
+$env:GARDA_SYNTHETIC_WALK_JOBS = '4'
+$env:GARDA_SYNTHETIC_WALK_ONLY = 'stack-unknown-quartz-a1-generic,stack-unknown-quartz-a6-generic,stack-spring-maven-a1-generic,stack-spring-maven-a6-generic,stack-polyglot-maven-ts-a1-generic,stack-polyglot-maven-ts-a6-generic'
+node scripts/node-foundation/build-scripts.cjs test.js tests/node/synthetic/synthetic-navigator-walk.test.ts
+```
+
+For adapter smoke, append the four corresponding `-auto` IDs for Maven and Maven/TypeScript to this selection;
+keep their generic peers in the same report so parity can be assessed. This is ten walks, not the full matrix.
+
+Do not run the whole matrix as an ordinary local check. Current product failures stay red and are reported by
+their native gate; neither a fixture-specific handoff nor a wider counter budget hides them.
+
+Planning estimates, not new benchmark claims: sample at two workers 5–20 minutes; the 198-walk matrix at
+20 workers about 1–3 hours, with old scenarios and extra controls added separately. At four workers allow
+roughly 3–6 hours for the matrix, especially A9. Full costs matrix + old scenarios + controls. Sweep needs
+its emitted manifest and observed checkpoint durations before an ETA is meaningful; it must not be estimated
+by multiplying every old disturbance by every stack. These Windows simulator measurements do not certify
+real Maven/Gradle/browser toolchains or native Linux/macOS behavior.
 
 ### Durable progress and resume
 
 Each finished scenario, including each restored sweep control and variant, is immediately written to
 `scenarios/<id-hash>.json` using a temporary file and atomic rename. Records contain the complete
 result and its per-scenario findings, a run identity and a checksum. Temporary, corrupt or mismatched
-records are unfinished. The parent prints one `Walk finished/total id outcome elapsed=... counts ETA=...`
+records are unfinished. JSON files and digests are written as a stream with bytes identical to `JSON.stringify`, so no
+whole shard or union has to fit in one string. Per-file work counters aggregate to `<counter>:file` under a Windows drive
+and a POSIX root alike; otherwise each Linux fixture root became its own counter and the report grew quadratically. The parent prints one `Walk finished/total id outcome elapsed=... counts ETA=...`
 line per completion (parallel workers are polled every 250 ms). `progress.json` and
-`partial-findings.json` are replaced atomically after every observed completion. Partial findings judge
+`partial-findings.json` are replaced atomically after every observed completion. A parent heartbeat refreshes
+them and prints progress every 30 seconds, including while a long A9 has not completed a scenario. Partial findings judge
 outcomes, handoff/guidance, review counts/modes, expected gates/source routes, loops and review economy;
 coverage and cross-scenario counter budgets are explicitly incomplete until final aggregation.
 During sweep planning the total grows to include generated variants and controls. ETA uses this
@@ -114,7 +423,7 @@ The ordinary discovery sample retains its 30-minute Node test limit.
 
 `walk-routes.ts` parses the TypeScript AST of every source file in `src/gates/next-step/` and the explicitly listed external native route builder `src/gates/parent-audit/parent-audit-navigation.ts`. Both are instrumented and retained as run inputs. It inventories executable `nextGate`/`next_gate` assignments, including conditional alternatives, and objects whose status expression can produce BLOCKED. Comments, interface types and timeline events merely labelled BLOCKED do not count. Source IDs are file:line:column; source edits deliberately invalidate old exemptions. Tests pin a minimum source inventory and representative unusual routes, and exercise conditional extraction and negative cases. An imported or computed gate/status expression that cannot be resolved causes an explicit `unresolved-source-*` accounting failure even if no scenario reaches it; extend the extractor before claiming coverage of that syntax.
 
-A test-only module loader instruments source expressions in memory. Object identity follows the selected route through property reads, spreads, result builders and the output renderer. Evaluating a candidate does not count as reaching it, even if its text equals the selected candidate. No source or built production file is rewritten. Each step records status, gate, lane-qualified route and source point IDs. Effect-command returns are recorded too; coverage counts each gate/source point once per physical step. Atomic `scenarios/*.json` records and the final merged `results.json` retain commands, outcomes, artifact inputs, measurements and task event counts. Each report scenario retains its terminal route, full refusal/error detail and replay. `run-inputs.json` hashes all stand, production, template and fixture inputs (tracked files, deletions and untracked source files); `run-inputs/` retains their source and baseline bytes alongside the original source commit.
+A test-only module loader instruments source expressions in memory. Object identity follows the selected route through property reads, spreads, result builders and the output renderer. Evaluating a candidate does not count as reaching it, even if its text equals the selected candidate. No source or built production file is rewritten. Each step records status, gate, lane-qualified route and source point IDs. Effect-command returns are recorded too; coverage counts each gate/source point once per physical step. Atomic `scenarios/*.json` records retain commands, outcomes, artifact inputs, complete raw measurements and task event counts; the walk and merged `results.json` (schema 2) index each record by ID and content digest, with the findings, instead of repeating every result in one JSON text. Each report scenario retains its terminal route, full refusal/error detail and replay. `run-inputs.json` hashes all stand, production, template and fixture inputs (tracked files, deletions and untracked source files); `run-inputs/` retains their source and baseline bytes alongside the original source commit.
 
 `navigator-walk.json` and `navigator-walk.md` contain reached and unreached gates and BLOCKED points, with step counts. `known-uncovered-routes.json` is an array of `{ "id": "gate:... or source:line:column", "reason": "concrete external prerequisite" }`. A removed/unknown ID, empty explanation or "hard to reach" explanation fails. A full/sweep run fails for every uncovered entry without an explanation. The current 24 exemptions retain 14 dormant native-graph entries, nine historical-format entries, and one interrupted correction state that additionally needs unavailable reviewer identity. Each proof and native producer is audited in `coverage-exemption-audit.md`. Current native review gates produce schema 4 and reject downgrades; current JSON findings still use their real dispositions. The dead `startup-readiness` string fallback's containing BLOCKED source point still needs coverage. Remaining unexplained gaps are failures. Read `coverage.unaccounted` for the exact outstanding list. `known-walk-findings.json` also stays empty.
 
@@ -228,6 +537,27 @@ Growth with event history means the same inputs cost more as history grows. Coun
 
 Every in-process navigation call uses `withNextStepMeasurement`. Reports retain subprocess counts by program, file probes, hashes, payload reads, timeline events/bytes and inclusive phase timings. Paths and command digests are normalized out of aggregate counter keys; raw measurements remain in traces. `walk-counter-baseline.json` holds explicit per-route counter expectations, tolerances and declarations of which counters must stay constant with event history. The runner never rewrites that file. Missing routes/counters, counters above their budgets, and positive fitted growth above the declared tolerance for a constant counter fail. An initial baseline needs a measured, reviewed calibration; do not populate it from disturbed results merely to turn a run green.
 
+File-probe budgets are independent of where TMP points. The product authenticates every ancestor of each invocation
+input, at initial capture and again at each dependency validation: per directory above the disposable root, one
+navigation call costs `1 + V` JS `realpathSync` and `2 × (1 + V)` `lstatSync` calls, where `V` is its
+`invocation.dependency_validation` count. That cost is real work, but its size follows the TMP depth. `engine/walk-root-chain.ts`
+installs a thin probe label beneath the product's measurement wrappers. It labels each probe of the temp directory or one
+of its lexical/canonical ancestors as `root_chain_probe:<api>:<level>/<directories>` in the call's measurement. A
+complete walk is the minimum count over all chain directories. The budgeted counter is `raw − walks × (directories − 7)`.
+Seven directories is the reference chain of the 1.4.4 counter calibrations (`C:/Users/<user>/AppData/Local/Temp/garda-sol-<package>`).
+The budgets and recorded baseline values stay unchanged. A probe of only some chain directories is ordinary work, as is
+every probe outside the chain, so an extra probe at the same depth still fails. Doubled ancestor work doubles the
+walks and adds a full reference walk. Labels that exceed the measured probe count, or chains of different sizes in one call,
+add the unbaselined counter `root_chain_unverified` instead of normalizing. The product memoizes path observations by
+exact spelling, so a non-canonical TMP (drive-letter or name case, 8.3 short names, a symlinked alias) makes it authenticate
+both the lexical and the canonical ancestor chain of every input, inside the fixture too. Each walk process therefore sets
+TMP/TEMP/TMPDIR to the native real path of its temp directory before any fixture exists: the same location, one spelling.
+Separators and a trailing separator already resolve to it. Work still measured under a non-canonical spelling also adds
+`root_chain_unverified`. A failing file-probe anomaly retains `rootChain`
+(`directories`, `walks`, `probes`, `adjustment`; raw = observed + adjustment). Child-process diagnostics
+(`GARDA_SYNTHETIC_WALK_DIAGNOSTICS`) and step-timing walks carry no labels and stay raw. Changing the reference
+restates every file-probe budget and needs a counter baseline decision.
+
 The snapshot reader also captures the task-mode JSON as well as task timelines. Its raw `timeline_bytes` counter retains every byte from both; for the stand budget, `timeline_bytes_normalized` replaces only occurrences of the disposable fixture root, including JSON-escaped paths, with a fixed root matching the length and separator shape of the original Windows calibration. Other content and extra reads still count. A normalization error is a finding and falls back to the raw count. Native child-process diagnostics do not install the stand projection, so their byte budget observations remain raw and can depend on the fixture location. Task-mode artifacts retain the complete redacted policy snapshot in compact JSON, reducing actual payload reads without removing policy data.
 
 The 1.4.4 round's `run-intermediate-command` expectation is recalibrated from 84,711 to 90,135 bytes for the corrected test-layout policy snapshots and authenticated preflight hashes. The retained preflight snapshot adds two identity and two native-realpath probes to the Windows ACL batch, whose before-and-after checks cover every sibling. The two observed routes' probe expectations increase by two for each counter. `walk-counter-calibration-evidence.json` records the file-level byte comparison, per-commit attribution and repeated snapshot-present/absent probe. The existing 4,096-byte numeric envelope, all other route budgets and all tolerance and growth rules remain unchanged.
@@ -242,7 +572,40 @@ Ordinary wall time covers the in-process navigator invocation. Core is its measu
 
 Project-size scenarios verify exactly 2, 2,000 and 20,000 tracked files using Git, then measure the same task. Scaffolding remains present but ignored in those disposable repositories. `projectSize` in the report gives per-route observations for each size. Do not mix this effect with growth in task events.
 
+The 1.4.4 selection/carry counter evidence is in `release144SelectionCounterCalibration` in `walk-counter-calibration-evidence.json`. It covers the mandatory selection route both initially and after a reviewed scope changes. The product shares invocation reads, pins admitted command inputs by hash, rejects an already different preflight before querying Git, and reads optional-skill history through the immutable timeline snapshot. Consumed reviewer launches are rejected from pending-policy recovery before opening their ACL-protected input/output snapshots. Unused semantic-carry candidates do not require authentication of their complete artifact chains.
+
+The review-fix evidence in that section's `reviewFixes` gives an exact route/step witness for every revised limit. On `performance-failed-large-fix` step 47, payload reads fall from 482 to 161; repeated reads fall from 361 to 39. Each of `profiles.json`, `paths.json`, `isolation-mode.json`, `package.json`, `review-capabilities.json` and `workflow-config.json` is read once. The 22 payload limits are reduced to measured route maxima, with zero numeric payload tolerance. The thirteen raised `task-test-selection` entries are measured on that decision's own `workflow set` command, including initial selection and selection after changed scope; they are not copied from the neighbouring full-suite step. Ordinary consumers share invocation bytes, including contained review-artifact readers. Their SHA and path observations now include the previously raw config inputs; hash/metadata changes list the distinct inputs and keep the existing validation checks.
+
+Required live rereads remain in `invocation-file-observation.ts` (descriptor/path checks and final stat, identity, realpath and link checks), invocation dependency assertions, workflow/review transaction-owner validation, authenticated timeline/task-mode and active-owner checks, and the `observeReads=false` review-index freshness witness. These are separate checks, not an allowance for rereading ordinary configuration. The independent five-event probe adds no Git, ACL, hash, payload-read or file-probe work. The selection route permits zero cloned events. Git/ACL budgets and constant-work growth tolerances are unchanged.
+
+The 37 metadata/hash entries above the `9cc56c65` reference retain their historical values and receive a same-route native-versus-original-Git control. Accepted native-ref reads name `.git/HEAD`, the branch ref and the config/format guards; a control forces the unchanged `git -C <repo> rev-parse HEAD` fallback on the identical fixture. Review routes measure 20 Git subprocesses with that command and 18 with native refs. This does not claim a net historical reduction where `9cc56c65` also measured 18. Routes which no longer consume native refs explicitly retire the old blanket attribution rather than claim an unmeasured saving. Only an unambiguous files-backend format takes the native path; reftable, unknown syntax and unresolved symbolic refs use Git.
+
+Original native traces and their original numeric findings are preserved; a JSON-only calibration reassessment uses the same report builder and records hashes of its inputs. The requested 16-scenario selection runs at level `full`, seed `1785881697`, provider `Codex`, with four workers. This selected Windows run is not a complete scenario-inventory or cross-platform acceptance claim.
+
 ### Current limits
+
+The universal merge calibrates only A1/A6 on `unknown-quartz`, `spring-maven` and
+`polyglot-maven-ts`, including their available auto peers. Ten ordinary smoke walks
+and twelve legacy representatives were run at `full`, seed `1785881697`, provider
+`Codex`, `JOBS=6`. All reached DONE with the expected review counts and modes. The
+legacy runs retain the same eight pre-existing findings and all old budget entries.
+Three new, natively admitted fixture states override only exceeded measured fields;
+Git/ACL limits and growth tolerances are unchanged. Other matrix shapes remain
+uncalibrated and the full 198-case matrix has not been run.
+
+`universalMergeStackCalibration` in `walk-counter-calibration-evidence.json` retains
+29 independent five-event comparisons from six generic walks. After one native
+publisher warmup, every comparison keeps its route and adds zero non-history work.
+The task JSONL is parsed and verified once per call, with no cloned events. Raw
+input identities are retained; only ephemeral transaction lease IDs are normalized
+for comparison. Ordinary bounds come from a separate run without the probe hook.
+
+To reproduce only that experiment, set `GARDA_STACK_CALIBRATION_ROOT` to this
+worktree, `GARDA_STACK_CALIBRATION_OUTPUT` to a fresh temporary folder and
+`NODE_OPTIONS` to `--require="<worktree-with-forward-slashes>/tests/node/synthetic/engine/walk-stack-counter-calibration.cjs"`.
+Run the six generic A1/A6 smoke IDs above with the same level, seed, provider and
+jobs. Unset all three variables before ordinary acceptance. The hook adds native
+INFO events only inside the disposable repositories and preserves gate decisions.
 
 Only the source inventory and emitted sweep manifest define the coverage claim. Follow the report's unexplained route list; this expansion is not a claim that every gate or BLOCKED branch has been reached. Real provider tool behavior, model quality, network transports, native Linux/macOS paths and concurrent reviewer scheduling remain outside this synthetic agent. Parallel policy/graph scenarios exercise launch eligibility and dependency order while the synthetic reviewer finishes one launch at a time. Full-suite failure injection uses real fixture commands for compile/full-suite only; other gates get the observed artifact rejection mutations, and the applicability report explicitly names the missing generic failure injection. Strict decomposition now includes native two-child execution, SOURCE acceptance and an aggregate follow-up. Full-suite repair includes two isolated repair children and WIP restoration; its final acceptance and calibration must be checked in the latest report. Manual-validation attachment recovery and reset/re-entry paths beyond the sweep's confirmed one-action reset still need dedicated scenario coverage. These omissions must not be described as green acceptance.
 
@@ -289,3 +652,13 @@ The later full ordinary run in `%TEMP%/garda-walk-report-mUWOyr` ran 132 cases /
 The focused replay in `%TEMP%/garda-finish-v11` subsequently passed at 20 jobs: 13 cases / 816 steps, zero findings. It includes native parent acceptance (102 steps), aggregate follow-up (145), restored full-suite WIP (120), two long remediation/counter regressions, and exact-guidance recovery/refusal cases. Its partial coverage is 33/69 gates and 35/148 BLOCKED points, with 21 concrete exemptions and no invalid exemption IDs. It does not certify complete coverage. The WIP state's independently retained 102 unchanged-input comparisons each append five events and show zero constant-work increases; its ordinary calibration uses 106 admitted steps across 42 routes.
 
 Coverage work also found an unresolved policy conflict in a temporary native declared-recipe probe: a docs-only task has no mandatory code/test lane, while an approved case-bearing recipe requires independent semantic review in such a lane. The final docs-only rules suppress those lanes, and the task loops at required-reviews-check. Its trace is `%TEMP%/garda-finish-edge-recipe/trace.json`; it has not been exempted or admitted as a passing scenario. An operator-only refusal versus another already-approved policy needs a decision before implementation. No final-source complete sweep has been run.
+
+## What a green stand guarantees
+
+A green result certifies the explicit properties in [stand-properties.json](stand-properties.json) for the recorded source identity, level and selected scenarios. The summary includes every property, its concept rule IDs or gate registry entries, the checks actually executed and their status. [Stable rule IDs](../../../docs/stand/concept-rules.md) cover concept sections 2–7. Missing mappings, removed/filtered/skipped checks, unregistered gates and uncovered rule IDs fail the stand. Known defects remain failures; the historical findings catalog is not an acceptance waiver.
+
+The checks cover executable recovery without dead ends/loops or unknown-stack refusals; additive adapters; FULL/DELTA, affected-lane repeats and passed-review reuse; RED before GREEN; separately executed multi-command tasks; fake/no-op/skipped/dropped-target controls; deterministic work budgets and the timing protocol. Full and sweep require the complete stack/task selection. A short or selected run certifies its narrower scope. NOT_REQUESTED is not evidence, and short permits INCONCLUSIVE step timing without claiming speed acceptance.
+
+The stand simulates toolchains and reviewer agents. It does not prove real Maven/Gradle/etc. behavior, other operating systems, or real agents' semantic judgment and clean contexts. External checks are manually authorized CI on three OS (Windows/Linux/macOS), T-406/T-408, and real-project acceptance. Quiet-machine median/p95 acceptance needs a separate measured run with the stored prior-release baseline. No synthetic result substitutes for those checks.
+
+Every externally found bug belongs to the permanent `field-cases` family. See [how to add a field case](../../../docs/stand/field-cases.md). Run its four initial IDs using WALK_ONLY, full, seed 1785881697, Codex and JOBS=3. OnlineStore T-006-6 uses a real archived older Garda to produce legacy selection/failure evidence; current native commands must preserve those bytes, narrow to both own tests and materialize the unattributed failure in the grouped follow-up before DONE.

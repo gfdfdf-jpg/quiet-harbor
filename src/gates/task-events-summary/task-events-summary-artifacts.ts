@@ -1,3 +1,4 @@
+import { readInvocationTextFile } from '../../core/invocation-file-observation';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { resolvePathInsideRepo, toPosix } from '../shared/helpers';
@@ -37,7 +38,7 @@ export function readJsonArtifactForSummary(
         }
         return {
             path: toPosix(resolvedPath),
-            payload: JSON.parse(fs.readFileSync(resolvedPath, 'utf8'))
+            payload: JSON.parse(readInvocationTextFile(resolvedPath))
         };
     } catch {
         return null;
@@ -49,7 +50,7 @@ export function safeReadJson(filePath: string): Record<string, unknown> | null {
         if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
             return null;
         }
-        return JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<string, unknown>;
+        return JSON.parse(readInvocationTextFile(filePath)) as Record<string, unknown>;
     } catch {
         return null;
     }

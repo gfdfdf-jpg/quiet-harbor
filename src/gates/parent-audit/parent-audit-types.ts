@@ -82,6 +82,8 @@ export interface ParentCompletionInspection {
     contractSha256: string;
     childSources: NativeChildSourceAcceptance[];
     ready: boolean;
+    /** Verified restored WIP still needs its own gates and SOURCE; never aggregate acceptance. */
+    implementationPending?: boolean;
     result: ParentAuditResult | null;
     followUpTaskId: string | null;
     violations: string[];

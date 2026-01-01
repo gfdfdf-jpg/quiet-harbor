@@ -6,12 +6,30 @@ import { isPlainRecord } from '../../core/records';
 import { inspectTaskEventFile, readTaskTimelineJsonlEntries, withTaskTimelineReadSnapshot } from '../../gate-runtime/task-events';
 import { stringSha256 } from '../../gate-runtime/hash';
 
+/** Diagnostic references are not proof that individual tests failed.
+ * Current producers emit repository-relative paths; retain all legacy raw values
+ * in authenticated evidence, but never relabel opaque tokens as failed tests.
+ */
+export function displayableFailureReferences(refs: readonly string[]): readonly string[] | null {
+    return refs.length && refs.every(ref => ref.includes('/') && !ref.includes('\\')
+        && !/^[\s/]|[\s/]$/u.test(ref) && !/[\u0000-\u001f\u007f|:]/u.test(ref)
+        && ref.split('/').every(part => part !== '' && part !== '.' && part !== '..')) ? refs : null;
+}
+
+export function recordedFailureAttributionText(refs: readonly string[]): string {
+    const paths = displayableFailureReferences(refs);
+    return paths ? `Reported failure references (informational): ${paths.join(', ')}`
+        : 'Tests: not attributed' + (refs.length
+            ? '; Original diagnostic references are retained in the authenticated failure artifact' : '');
+}
+
 export interface RecordedOutOfScopeFailure {
     task_id: string;
     task_mode_entry_sha256: string;
     failure_event_sha256: string;
     command: string;
     failing_tests: string[];
+    attribution?: 'attributed' | 'not attributed';
     artifact_path: string;
     artifact_sha256: string;
     // Retain the original artifact even after narrow validation replaces its mutable path.
@@ -41,19 +59,23 @@ export function readRecordedOutOfScopeFailures(repoRoot: string, taskId: string)
                 for (const value of failures) {
                     if (!isPlainRecord(value) || value.task_id !== taskId || !isPlainRecord(value.artifact)
                         || typeof value.failure_event_sha256 !== 'string' || typeof value.command !== 'string'
-                        || !Array.isArray(value.failing_tests) || !value.failing_tests.length
+                        || !Array.isArray(value.failing_tests)
+                        || (!value.failing_tests.length && value.attribution !== 'not attributed')
+                        || (value.attribution !== undefined && value.attribution !== (value.failing_tests.length ? 'attributed' : 'not attributed'))
                         || !value.failing_tests.every(ref => typeof ref === 'string')) throw new Error('Invalid recorded out-of-scope failure.');
                     const failure = entries.find(item => stringSha256(item.rawLine.trim()) === value.failure_event_sha256);
                     const source = failure?.record?.details;
+                    const optionalRefs = isPlainRecord(source) ? source.out_of_scope_failure_refs ?? value.artifact.out_of_scope_failure_refs : null;
                     const cycle = [...entries.slice(0, failure ? entries.indexOf(failure) : 0)].reverse()
                         .find(item => item.record?.event_type === 'TASK_MODE_ENTERED');
                     if (!cycle || stringSha256(cycle.rawLine.trim()) !== value.task_mode_entry_sha256
                         || failure?.record?.event_type !== 'FULL_SUITE_VALIDATION_FAILED'
                         || failure.record.actor !== 'gate' || failure.record.outcome !== 'FAIL' || !isPlainRecord(source)
                         || value.artifact.status !== 'FAILED' || !isDeepStrictEqual(source.cycle_binding, value.artifact.cycle_binding)
-                        || source.command !== value.command || source.out_of_scope_audit_verdict !== 'BLOCKED'
+                        || source.command !== value.command || value.artifact.command !== value.command
                         || source.artifact_sha256 !== value.artifact_sha256 || source.artifact_path !== value.artifact_path
-                        || !isDeepStrictEqual(source.out_of_scope_failure_refs, value.failing_tests)
+                        || !isDeepStrictEqual(Array.isArray(optionalRefs)
+                            ? optionalRefs.filter(ref => typeof ref === 'string') : [], value.failing_tests)
                         || stringSha256(JSON.stringify(value.artifact, null, 2) + '\n') !== value.artifact_sha256) {
                         throw new Error('Recorded out-of-scope failure is not bound to its authenticated task cycle and full-suite artifact.');
                     }
@@ -67,6 +89,7 @@ export function readRecordedOutOfScopeFailures(repoRoot: string, taskId: string)
 
 export function recordedOutOfScopeNotice(repoRoot: string, taskId: string): string {
     const records = readRecordedOutOfScopeFailures(repoRoot, taskId);
-    return records.length ? `Task completed with recorded out-of-scope failures: ${[...new Set(records.flatMap(record => record.failing_tests))].join(', ')}. See the recorded failure follow-up task and its authenticated full-suite evidence.` : '';
+    return records.length ? `Task completed with recorded out-of-scope failures: ${[...new Set(records.flatMap(record =>
+        displayableFailureReferences(record.failing_tests) ?? [`not attributed (command: ${record.command}; artifact: ${record.artifact_path})`]))].join(', ')}. See the recorded failure follow-up task and its authenticated full-suite evidence.` : '';
 }
 

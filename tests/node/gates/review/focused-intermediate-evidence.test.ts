@@ -176,7 +176,7 @@ function nativeFixture(options: { source?: string; content?: string; baselineFil
     return { repoRoot, bundleRoot, reviewsRoot, eventsRoot, preflightPath, preflightSha256: sha256(preflightPath), scopeContentSha256 };
 }
 
-it('rejects native multi-target focused authority before filtering to changed source scope', async () => {
+it('keeps every native focused target visible beyond the changed source scope', async () => {
     const source = 'tests/changed.test.cjs', unrelated = 'tests/unrelated.test.cjs';
     const testBody = (name: string) => `require('node:test')(${JSON.stringify(name)}, () => require('node:assert/strict').equal(1, 1));\n`;
     const f = nativeFixture({ source, content: testBody('changed assertion'),
@@ -189,11 +189,10 @@ it('rejects native multi-target focused authority before filtering to changed so
             assert.equal(run.exitCode, 0, run.outputLines.join('\n'));
             const observations = readTaskOwnedFocusedIntermediateEvidence({ ...f, taskId: TASK_ID,
                 changedFiles: [source], expectedPreflightPath: f.preflightPath, expectedPreflightSha256: f.preflightSha256 });
-            const preflight = JSON.parse(fs.readFileSync(f.preflightPath, 'utf8'));
-            assert.equal(inspectReviewerFocusedValidationCommand(command, f.repoRoot, TASK_ID).syntax_supported, false,
-                JSON.stringify({ explicitCases: selectedCases?.length ?? 0,
-                    policy: preflight.profile_policy_snapshot?.review_trigger_policy ?? null,
-                    captured: observations.entries[0]?.selected_case_binding?.before.sources.map(item => item.path) }));
+            const inspection = inspectReviewerFocusedValidationCommand(command, f.repoRoot, TASK_ID);
+            assert.equal(inspection.syntax_supported, true, inspection.violations.join('\n'));
+            assert.deepEqual(inspection.targets, [source, unrelated]);
+            assert.ok(observations.entries[0]?.selected_case_binding?.before.sources.some(item => item.path === unrelated));
         }
     } finally { fs.rmSync(f.repoRoot, { recursive: true, force: true }); }
 });
@@ -221,7 +220,7 @@ it('retains current selected typecheck observations for focused validation', asy
     } finally { fs.rmSync(f.repoRoot, { recursive: true, force: true }); }
 });
 
-it('rejects a directory suite operand hidden beside one selected test file', async () => {
+it('retains directory operands for semantic review without guessing the runner scope', async () => {
     const source = 'tests/changed.test.cjs', directory = 'tests/extra';
     const body = (name: string) => `require('node:test')(${JSON.stringify(name)}, () => require('node:assert/strict').equal(1, 1));\n`;
     const f = nativeFixture({ source, content: body('changed assertion'),
@@ -233,7 +232,11 @@ it('rejects a directory suite operand hidden beside one selected test file', asy
             const run = await runIntermediateCommandCommand({ repoRoot: f.repoRoot, taskId: TASK_ID,
                 commandSource: 'targeted-test', command, preflightPath: f.preflightPath, selectedCases });
             assert.equal(run.exitCode, 0, run.outputLines.join('\n'));
-            assert.equal(inspectReviewerFocusedValidationCommand(command, f.repoRoot, TASK_ID).syntax_supported, false);
+            const proof = readTaskOwnedFocusedIntermediateEvidence({ ...f, taskId: TASK_ID, changedFiles: [source],
+                expectedPreflightPath: f.preflightPath, expectedPreflightSha256: f.preflightSha256 });
+            assert.equal(inspectReviewerFocusedValidationCommand(command, f.repoRoot, TASK_ID).syntax_supported, true);
+            assert.ok(proof.entries[0].selected_case_binding?.before.scope_operands?.includes(directory));
+            assert.equal(proof.entries[0].semantic_status, 'PENDING_INDEPENDENT_REVIEW');
         }
     } finally { fs.rmSync(f.repoRoot, { recursive: true, force: true }); }
 });

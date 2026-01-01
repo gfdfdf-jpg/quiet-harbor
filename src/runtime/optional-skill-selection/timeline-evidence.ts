@@ -1,8 +1,8 @@
 import * as path from 'node:path';
 import {
-    readTaskTimelineBoundedJsonlTail,
     taskTimelineAwareFileExists
 } from '../../gate-runtime/task-events';
+import { readImmutableTaskTimelineBoundedJsonlTail } from '../../gate-runtime/timeline/task-timeline-read-snapshot';
 import { BASELINE_SKILL_DIRECTORIES } from '../skill-manifest';
 
 import {
@@ -117,7 +117,7 @@ export function readOptionalSkillSelectionTimelineEvidence(
     }
 
     const liveSkillsRoot = path.join(bundleRoot, 'live', 'skills');
-    const boundedRead = readTaskTimelineBoundedJsonlTail<Record<string, unknown>>(
+    const boundedRead = readImmutableTaskTimelineBoundedJsonlTail<Record<string, unknown>>(
         resolvedTaskEventsPath,
         OPTIONAL_SKILL_TIMELINE_READ_LIMITS
     );

@@ -1,4 +1,4 @@
-import { admitLegacyFullSuiteFixture, appendFixtureCompileEvent } from '../../task-test-selection-fixtures';
+import { admitLegacyFullSuiteFixture, appendFixtureCompileEvent, recordFixtureFullSuiteArtifact } from '../../task-test-selection-fixtures';
 import { describe, it } from 'node:test';
 import {
     assert,
@@ -231,6 +231,7 @@ import {
             }, null, 2), 'utf8');
 
             const outputPath = path.join(reviewsRoot, 'T-920-test-review-context.json');
+            recordFixtureFullSuiteArtifact(repoRoot, 'T-920');
             const result = buildReviewContext({
                 reviewType: 'test',
                 depth: 3,
@@ -999,6 +1000,7 @@ import {
             }, null, 2), 'utf8');
 
             const outputPath = path.join(reviewsRoot, 'T-927-code-review-context.json');
+            recordFixtureFullSuiteArtifact(repoRoot, 'T-927');
             const result = buildReviewContext({
                 reviewType: 'code',
                 depth: 3,
@@ -1094,6 +1096,7 @@ import {
             }, null, 2), 'utf8');
 
             const outputPath = path.join(reviewsRoot, 'T-928-code-review-context.json');
+            recordFixtureFullSuiteArtifact(repoRoot, 'T-928');
             const result = buildReviewContext({
                 reviewType: 'code',
                 depth: 3,
@@ -1905,7 +1908,7 @@ import {
             assert.ok(promptArtifactText.includes('## Full-Suite Validation Evidence'));
             assert.ok(promptArtifactText.includes('- Required before this review: no'));
             assert.ok(promptArtifactText.includes('- Enabled: false'));
-            assert.ok(!promptArtifactText.includes('Full-suite validation evidence artifact is missing.'));
+            assert.ok(!promptArtifactText.includes('Task test validation evidence artifact is missing.'));
             fs.rmSync(repoRoot, { recursive: true, force: true });
         });
 
@@ -1969,10 +1972,10 @@ import {
             assert.ok(promptArtifactText.includes('## Full-Suite Validation Evidence'));
             assert.ok(promptArtifactText.includes('- Required before this review: no'));
             assert.ok(promptArtifactText.includes('- Placement: before_completion'));
-            assert.ok(promptArtifactText.includes('completion still enforces full-suite validation later'));
+            assert.ok(promptArtifactText.includes('completion still enforces task test validation later'));
             assert.ok(promptArtifactText.includes('follow the focused-self-validation contract in this handoff'));
             assert.ok(promptArtifactText.includes('never invoke Garda or write task-owned validation logs'));
-            assert.ok(!promptArtifactText.includes('Full-suite validation evidence artifact is missing.'));
+            assert.ok(!promptArtifactText.includes('Task test validation evidence artifact is missing.'));
             fs.rmSync(repoRoot, { recursive: true, force: true });
         });
 
@@ -2030,7 +2033,7 @@ import {
             assert.ok(promptArtifactText.includes('must not demand pre-review full-suite evidence or run it manually'));
             assert.ok(promptArtifactText.includes('follow the focused-self-validation contract in this handoff'));
             assert.ok(promptArtifactText.includes('never invoke Garda or write task-owned validation logs'));
-            assert.ok(!promptArtifactText.includes('Full-suite validation evidence artifact is missing.'));
+            assert.ok(!promptArtifactText.includes('Task test validation evidence artifact is missing.'));
             fs.rmSync(repoRoot, { recursive: true, force: true });
         });
 
@@ -2084,7 +2087,7 @@ import {
             const promptArtifactText = fs.readFileSync(outputPath.replace(/\.json$/, '.md'), 'utf8');
             assert.ok(promptArtifactText.includes('- Required before this review: yes'));
             assert.ok(promptArtifactText.includes('- Placement: after_compile_before_reviews'));
-            assert.ok(promptArtifactText.includes('Full-suite validation evidence artifact is missing.'));
+            assert.ok(promptArtifactText.includes('Task test validation evidence artifact is missing.'));
             fs.rmSync(repoRoot, { recursive: true, force: true });
         });
 
@@ -2247,6 +2250,7 @@ import {
             }, null, 2), 'utf8');
 
             const outputPath = path.join(reviewsRoot, 'T-922-test-review-context.json');
+            recordFixtureFullSuiteArtifact(repoRoot, 'T-922');
             const result = buildReviewContext({
                 reviewType: 'test',
                 depth: 3,

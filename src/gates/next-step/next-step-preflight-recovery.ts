@@ -1,4 +1,6 @@
-import { readRouteOrderedWitnesses } from './next-step-route-query-readers';
+import { readImmutableRouteOrderedWitnesses } from './next-step-route-query-readers';
+import { readTaskTimelineRouteQuery } from '../../gate-runtime/timeline/task-events-integrity';
+import { routeLatestNormalizedSequence } from '../../gate-runtime/timeline/task-route-query';
 import { countNextStepWork } from '../../core/next-step-measurement';
 import { formatInstalledBundleMaintenanceGuidance } from '../protected-control-plane/installed-bundle-guard';
 import * as fs from 'node:fs';
@@ -1206,6 +1208,8 @@ export function resolveActiveTaskModeArtifactPath(
 
 function getLatestTimelineSequence(eventsRoot: string, taskId: string, eventType: string): number | null {
     const timelinePath = path.join(eventsRoot, `${taskId}.jsonl`);
+    const query = readTaskTimelineRouteQuery(timelinePath, taskId);
+    if (query) return routeLatestNormalizedSequence(query, eventType);
     const errors: string[] = [];
     const events = readOrderedRouteEvents(timelinePath, errors);
     let latestSequence: number | null = null;
@@ -1233,5 +1237,5 @@ export function isLatestCompletionCurrent(eventsRoot: string, taskId: string): b
 }
 
 function readOrderedRouteEvents(timelinePath: string, errors: string[]): TimelineEventEntry[] {
-    return readRouteOrderedWitnesses(timelinePath, errors, 'preflight');
+    return readImmutableRouteOrderedWitnesses(timelinePath, errors, 'preflight');
 }

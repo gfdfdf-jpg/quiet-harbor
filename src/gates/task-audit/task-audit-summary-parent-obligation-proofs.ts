@@ -6,7 +6,6 @@ import { runGit } from '../../core/git-helpers';
 import { readTransactionBytes } from '../../core/file-transaction-journal';
 import { isPlainRecord } from '../../core/records';
 import { joinOrchestratorPath } from '../../core/orchestrator-paths';
-import { TASK_QUEUE_FILENAME } from '../../core/orchestration-constants';
 import { resolveWorkflowConfigPath } from '../../core/full-suite-validation-config';
 import { assertValidTaskId, inspectTaskEventFile, readTaskTimelineJsonlEntries, withTaskTimelineReadSnapshot } from '../../gate-runtime/task-events';
 import { captureTaskTimelineReadSnapshotSha256, assertTaskTimelineReadSnapshotCurrent } from '../../gate-runtime/timeline/task-timeline-read-snapshot';
@@ -14,7 +13,8 @@ import { getProjectMemoryImpactLifecycleEvidence } from '../project-memory-impac
 import { readAuthenticatedSplitRequiredWipManifestSnapshot } from '../split-required/split-required-wip-runtime-handoff-contracts';
 import { resolveWipRoot } from '../split-required/split-required-wip-contracts';
 import { validateAdvancedManifestBlobs, validateManifestFileReferences } from '../split-required/split-required-wip-restore-plan';
-import { readNativeDecomposedParentFacts, type NativeDecomposedParentFacts } from './task-audit-summary-lifecycle';
+import { assertNativeParentQueueCurrent, readNativeDecomposedParentFacts, readNativeParentQueueInput,
+    withNativeParentQueueReadScope, type NativeDecomposedParentFacts } from './task-audit-summary-lifecycle';
 import { readNativeChildSourceAcceptance, readNativeSourceCompositionProof, readParentAuditProofRecord } from './task-audit-summary-decomposed-parent-proofs';
 import { getTaskModeEvidence } from '../task-mode/task-mode-evidence';
 import { inspectCompletionGateFinalizationLock } from '../locks/finalization-lock';
@@ -27,6 +27,8 @@ type Event = Readonly<Record<string, unknown>>;
 const ORIGINAL_SUITE_EVENTS = new Set(['FULL_SUITE_VALIDATION_PASSED', 'FULL_SUITE_VALIDATION_WARNED', 'FULL_SUITE_VALIDATION_FAILED']);
 export interface NativeParentObligationProofs {
     status: 'QUALIFIED' | 'BLOCKED';
+    /** Prerequisites qualified for ordinary restored implementation, never aggregate PASS. */
+    implementationPending?: boolean;
     native: NativeDecomposedParentFacts;
     qualifiedProofs: DecomposedParentRequiredProof[];
     violations: string[];
@@ -213,21 +215,25 @@ export function withNativeParentReadScope<T>(
         current.readChildAudit ??= readChildAudit;
         return read(current);
     }
-    const scope: ParentReadScope = { rootTaskId: taskId, sourceEpoch: null, readChildAudit,
-        rechecks: [], proofRechecks: [], childSources: new Map() };
-    activeParentReadScopes.set(root, scope);
-    try {
-        const result = read(scope);
-        if (qualified(result)) {
-            scope.rechecks.forEach(check => check());
-            scope.proofRechecks.forEach(check => check());
-            scope.rechecks.forEach(check => check());
-            if (scope.sourceEpoch !== null && readParentSourceEpoch(root) !== scope.sourceEpoch) {
-                throw new Error('Native parent source epoch changed during qualification.');
+    return withNativeParentQueueReadScope(root, () => {
+        const scope: ParentReadScope = { rootTaskId: taskId, sourceEpoch: null, readChildAudit,
+            rechecks: [], proofRechecks: [], childSources: new Map() };
+        activeParentReadScopes.set(root, scope);
+        try {
+            const result = read(scope);
+            if (qualified(result)) {
+                scope.rechecks.forEach(check => check());
+                assertNativeParentQueueCurrent(root);
+                scope.proofRechecks.forEach(check => check());
+                scope.rechecks.forEach(check => check());
+                assertNativeParentQueueCurrent(root);
+                if (scope.sourceEpoch !== null && readParentSourceEpoch(root) !== scope.sourceEpoch) {
+                    throw new Error('Native parent source epoch changed during qualification.');
+                }
             }
-        }
-        return result;
-    } finally { activeParentReadScopes.delete(root); }
+            return result;
+        } finally { activeParentReadScopes.delete(root); }
+    });
 }
 
 function assertNestedFinalized(root: string, taskId: string): void {
@@ -240,7 +246,8 @@ function readParentObligations(repoRoot: string, taskId: string, scope: ParentRe
     const registered = readRegisteredParentObligations(root, id);
     if (registered) return registered;
     return withTaskTimelineReadSnapshot(eventsRoot, id, () => {
-        const files = [path.join(root, TASK_QUEUE_FILENAME), ...['strict-decomposition-decision', 'preflight'].map(kind => joinOrchestratorPath(root, 'runtime/reviews/' + id + '-' + kind + '.json'))];
+        readNativeParentQueueInput(root);
+        const files = ['strict-decomposition-decision', 'preflight'].map(kind => joinOrchestratorPath(root, 'runtime/reviews/' + id + '-' + kind + '.json'));
         const inputs = files.map(file => readTransactionBytes(root, file));
         const native = readNativeDecomposedParentFacts(root, id, child => {
             scope.sourceEpoch ??= readParentSourceEpoch(root);
@@ -308,6 +315,7 @@ function readParentObligations(repoRoot: string, taskId: string, scope: ParentRe
                 });
                 assertTaskTimelineReadSnapshotCurrent(timeline, snapshot);
             };
+            assertNativeParentQueueCurrent(root);
             assertCurrent();
             scope.rechecks.push(() => withTaskTimelineReadSnapshot(eventsRoot, id, assertCurrent));
             if (result.violations.length === 0 && native.requirements.requiredProofs.every(proof => result.qualifiedProofs.includes(proof))) result.status = 'QUALIFIED';
@@ -326,9 +334,10 @@ export function readNativeParentObligationProofs(
         return withNativeParentReadScope(root, id, scope => {
             observed.proof = readParentObligations(root, id, scope);
             return observed.proof;
-        }, result => result?.status === 'QUALIFIED', readChildAudit);
+        }, result => result?.status === 'QUALIFIED' || result?.implementationPending === true, readChildAudit);
     } catch (error: unknown) {
-        if (observed.proof?.status !== 'QUALIFIED') throw error;
+        if (!observed.proof || (observed.proof.status !== 'QUALIFIED' && !observed.proof.implementationPending)) throw error;
+        observed.proof.implementationPending = false;
         observed.proof.status = 'BLOCKED'; observed.proof.violations.push(error instanceof Error ? error.message : String(error));
         return observed.proof;
     }

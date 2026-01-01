@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
-import { activateStartedFixtureTask, selectConfiguredTaskTests } from '../../task-test-selection-fixtures';
+import { activateStartedFixtureTask, selectConfiguredTaskTests, fixtureTaskTestProcessEvidence, bindFixtureFullSuiteArtifact } from '../../task-test-selection-fixtures';
 
 import { normalizeReviewCatalog } from '../../../../src/core/review-catalog';
 import type { ReviewCapabilitiesConfigMap } from '../../../../src/core/review-capabilities';
@@ -112,6 +112,11 @@ export function makeTempRepo(): string {
         ''
     ].join('\n'), 'utf8');
     fs.writeFileSync(path.join(repoRoot, 'src', 'app.ts'), 'export const value = 1;\n', 'utf8');
+    // Seed the declared regression input before Git/preflight capture, never during selection.
+    fs.mkdirSync(path.join(repoRoot, 'tests'), { recursive: true });
+    fs.writeFileSync(path.join(repoRoot, 'tests/fixture-task-validation.test.cjs'),
+        "require('node:test').test('fixture regression input', () => {});\n");
+
     writeJson(path.join(repoRoot, 'garda-agent-orchestrator', 'runtime', 'init-answers.json'), {
         SourceOfTruth: 'Codex'
     });
@@ -308,6 +313,8 @@ export function appendEvent(
     details: Record<string, unknown> = {},
     timestampUtc?: string
 ): { task_sequence: number; prev_event_sha256: string | null; event_sha256: string } {
+    if (['FULL_SUITE_VALIDATION_PASSED', 'FULL_SUITE_VALIDATION_WARNED', 'FULL_SUITE_VALIDATION_FAILED'].includes(eventType))
+        details = { ...bindFixtureFullSuiteArtifact(repoRoot, taskId), ...details };
     const timelinePath = path.join(eventsRoot(repoRoot), `${taskId}.jsonl`);
     const existingLines = fs.existsSync(timelinePath)
         ? fs.readFileSync(timelinePath, 'utf8').split('\n').filter((line) => line.trim())
@@ -1481,16 +1488,19 @@ export function seedFullSuiteValidation(
         ? workflowConfig.full_suite_validation as Record<string, unknown>
         : {};
     const placement = String(fullSuiteConfig.placement || 'before_test_review');
+    const command = String(fullSuiteConfig.command || 'npm test');
     writeJson(path.join(reviewsRoot(repoRoot), `${taskId}-full-suite-validation.json`), {
         task_id: taskId,
         status,
         enabled: true,
-        command: 'npm test',
+        command,
         placement,
         required: status === 'SKIPPED' ? false : undefined,
         skip_reason: status === 'SKIPPED' ? 'DOCS_ONLY_SCOPE_NOT_REQUIRED' : undefined,
         exit_code: status === 'PASSED' ? 0 : status === 'SKIPPED' ? null : 1,
         cycle_binding: cycleBinding,
+        timed_out: false,
+        ...fixtureTaskTestProcessEvidence(repoRoot, taskId, { status, exit_code: status === 'FAILED' ? 1 : 0, cycle_binding: cycleBinding }),
         output_artifact_path: status === 'SKIPPED'
             ? null
             : path.join(reviewsRoot(repoRoot), `${taskId}-full-suite-output.log`)
@@ -1504,7 +1514,9 @@ export function seedFullSuiteValidation(
                 ? 'FULL_SUITE_VALIDATION_SKIPPED'
                 : 'FULL_SUITE_VALIDATION_FAILED',
         status === 'FAILED' ? 'FAIL' : 'PASS',
-        { cycle_binding: cycleBinding, command: 'npm test', placement },
+        { cycle_binding: cycleBinding, command, placement,
+            artifact_path: normalizeForTimeline(path.join(reviewsRoot(repoRoot), `${taskId}-full-suite-validation.json`)),
+            artifact_sha256: fileSha256(path.join(reviewsRoot(repoRoot), `${taskId}-full-suite-validation.json`)) },
         timestampUtc
     );
 }

@@ -591,6 +591,13 @@ test('detectTaskModeRuleContractViolations accepts current task-mode contract sn
     try {
         const violations = detectTaskModeRuleContractViolations(tmpDir);
         assert.deepEqual(violations, []);
+        const commandsPath = path.join(rulesDir, '40-commands.md');
+        const legacy = fs.readFileSync(commandsPath, 'utf8');
+        fs.writeFileSync(commandsPath, legacy.replace('Do not use full-suite test commands here', 'Do not use test commands here'));
+        assert.deepEqual(detectTaskModeRuleContractViolations(tmpDir), [], 'T-457: current wording has the same compile/test separation contract');
+        fs.writeFileSync(commandsPath, legacy.replace('Do not use full-suite test commands here', 'Use test commands here'));
+        assert.ok(detectTaskModeRuleContractViolations(tmpDir).some(violation => violation.includes('Do not use test commands here')),
+            'accepting the wording alias must not waive compile/test separation');
     } finally {
         cleanupVerifyTempDir(tmpDir);
     }

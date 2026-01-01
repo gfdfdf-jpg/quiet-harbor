@@ -1,0 +1,202 @@
+name: Reference stand
+
+on:
+  workflow_dispatch:
+    inputs:
+      level:
+        description: Stand level
+        type: choice
+        options: [full, sweep]
+        default: full
+        required: true
+      linux_shards:
+        description: Linux shards (1..128)
+        type: number
+        default: 10
+        required: true
+      windows_shards:
+        description: Windows shards (1..128); Windows is about four times slower
+        type: number
+        default: 16
+        required: true
+      seed:
+        description: Unsigned 32-bit seed
+        type: string
+        default: '1785881697'
+        required: true
+      os:
+        description: Hosted OS selection
+        type: choice
+        options: [linux, windows, both]
+        default: both
+        required: true
+      linux_review_stacks:
+        description: Linux deep stack review selection
+        type: choice
+        options: [rotation, seeded, all]
+        default: all
+        required: true
+      windows_review_stacks:
+        description: Windows deep stack review selection (seeded = deep families on unknown-quartz plus three seeded stacks)
+        type: choice
+        options: [rotation, seeded, all]
+        default: seeded
+        required: true
+      provider:
+        description: Synthetic provider identity
+        type: choice
+        options: [Codex, Claude]
+        default: Codex
+        required: true
+      only_shard:
+        description: Optional exact failed shard for diagnosis; missing shards refuse acceptance
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  STAND_LEVEL: ${{ inputs.level }}
+  STAND_LINUX_SHARDS: ${{ inputs.linux_shards }}
+  STAND_WINDOWS_SHARDS: ${{ inputs.windows_shards }}
+  STAND_SEED: ${{ inputs.seed }}
+  STAND_OS: ${{ inputs.os }}
+  STAND_LINUX_REVIEW_STACKS: ${{ inputs.linux_review_stacks }}
+  STAND_WINDOWS_REVIEW_STACKS: ${{ inputs.windows_review_stacks }}
+  STAND_PROVIDER: ${{ inputs.provider }}
+  STAND_ONLY_SHARD: ${{ inputs.only_shard }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      shards: ${{ steps.matrix.outputs.shards }}
+      systems: ${{ steps.matrix.outputs.systems }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '24'
+      - name: Verify pinned native field producer
+        run: node scripts/ci/reference-stand-source-fixtures.cjs
+      - name: Validate manual selection
+        id: matrix
+        run: node scripts/ci/reference-stand-matrix.cjs
+
+  shard:
+    name: Partial / ${{ matrix.os }} / ${{ matrix.shard }} of ${{ matrix.total }}
+    needs: plan
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+          # Field cases archive a pinned historical tree; the push attaches it without history.
+          fetch-depth: 0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-fund --no-audit
+      - name: Build node-foundation
+        run: npm run build:node-foundation
+      - name: Canonicalize temporary paths and check native tools
+        run: |
+          set -euo pipefail
+          physical_temp="$(node -p 'require("node:fs").realpathSync.native(require("node:os").tmpdir()).split(require("node:path").sep).join("/")')"
+          printf 'TMP=%s\nTEMP=%s\nTMPDIR=%s\n' "$physical_temp" "$physical_temp" "$physical_temp" >> "$GITHUB_ENV"
+          if [ "$RUNNER_OS" = Windows ]; then
+            command -v icacls
+            command -v bash
+          fi
+      - name: Run partial stand
+        # Exit 2 means a completed partial, never acceptance. All failures remain for merge to inspect.
+        continue-on-error: true
+        env:
+          STAND_SHARD: ${{ matrix.shard }}/${{ matrix.total }}
+          # Per OS: review logic is OS independent; the Windows default keeps the full level with the seeded deep rotation.
+          STAND_REVIEW_STACKS: ${{ matrix.review_stacks }}
+        run: |
+          node tests/node/synthetic/stand.cjs "$STAND_LEVEL" --shard "$STAND_SHARD" --jobs 2 \
+            --seed "$STAND_SEED" --review-stacks "$STAND_REVIEW_STACKS" --provider "$STAND_PROVIDER" \
+            --report "$RUNNER_TEMP/reference-shard"
+      - name: Upload partial evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: stand-${{ matrix.os }}-${{ matrix.shard }}
+          path: |
+            ${{ runner.temp }}/reference-shard/**
+            !${{ runner.temp }}/reference-shard/walk/run-inputs/**
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 15
+
+  merge:
+    name: Verdict / ${{ matrix.os }}
+    needs: [plan, shard]
+    if: ${{ always() && needs.plan.result == 'success' }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.systems) }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-fund --no-audit
+      - name: Download this OS shard results
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: stand-${{ matrix.os }}-*
+          path: ${{ runner.temp }}/reference-inputs
+      - name: Merge complete evidence and return verdict
+        if: ${{ !cancelled() }}
+        env:
+          # The verdict reducer holds every shard's records at once, about 0.3 GB of heap per full shard after the
+          # verdict projection; the default V8 limit (2-4 GB by runner memory) is too small for ten or more shards.
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: |
+          mkdir -p "$RUNNER_TEMP/reference-inputs"
+          node tests/node/synthetic/stand.cjs merge --inputs "$RUNNER_TEMP/reference-inputs" --report "$RUNNER_TEMP/reference-merged"
+      - name: Write verdict to job summary
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/reference-merged/summary.md" ]; then
+            cat "$RUNNER_TEMP/reference-merged/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf 'FAIL: merge did not produce a summary. Inspect setup/download logs.\n' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload combined verdict and evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: stand-verdict-${{ matrix.os }}
+          path: ${{ runner.temp }}/reference-merged/**
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 15

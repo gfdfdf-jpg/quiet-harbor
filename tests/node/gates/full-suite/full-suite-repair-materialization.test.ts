@@ -47,4 +47,12 @@ describe('full-suite repair materialization compatibility', () => {
 
         assert.equal(isRepairQualifiedFullSuiteArtifact(artifact, 'T-BOUND'), false);
     });
+
+    it('accepts task-owned and legacy failed validations for a bounded repair handoff without attribution', () => {
+        const artifact = { status: 'FAILED', command: 'node --test tests/own.test.js', cycle_binding: { task_id: 'T-BOUND' } };
+        assert.equal(isRepairQualifiedFullSuiteArtifact(artifact, 'T-BOUND'), true);
+        assert.equal(isRepairQualifiedFullSuiteArtifact({ ...artifact, status: 'PASSED' }, 'T-BOUND'), false);
+        assert.equal(isRepairQualifiedFullSuiteArtifact({ ...artifact, timed_out: true }, 'T-BOUND'), false);
+        assert.equal(isRepairQualifiedFullSuiteArtifact(artifact, 'T-FOREIGN'), false);
+    });
 });

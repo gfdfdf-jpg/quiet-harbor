@@ -1,3 +1,4 @@
+import { readInvocationTextFile } from '../../core/invocation-file-observation';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { assertValidTaskId } from '../../gate-runtime/task-events';
@@ -15,7 +16,7 @@ export function readExistingRulePackArtifact(artifactPath: string): RulePackArti
         return null;
     }
     try {
-        const parsed = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+        const parsed = JSON.parse(readInvocationTextFile(artifactPath));
         if (!isRecord(parsed) || !isRecord(parsed.stages)) {
             return null;
         }

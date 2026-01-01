@@ -1,3 +1,4 @@
+import { readInvocationTextFile } from '../../core/invocation-file-observation';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -121,7 +122,7 @@ function readPackageJsonDatabaseEvidence(repoRoot: string): string[] {
     }
 
     try {
-        const raw = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as Record<string, unknown>;
+        const raw = JSON.parse(readInvocationTextFile(packageJsonPath)) as Record<string, unknown>;
         const dependencySections = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'];
         const packageNames = new Set<string>();
         for (const sectionName of dependencySections) {

@@ -1,6 +1,15 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { parseCommandChain } from '../../core/command-line';
+import { readValidationFile } from '../../core/project-validation-identity';
+
+type CaptureInput = (relative: string, sha256: string) => void;
+
+function readPom(root: string, relative: string, captureInput?: CaptureInput): string {
+    const file = readValidationFile(root, relative, 1024 * 1024);
+    captureInput?.(relative, file.identity.sha256);
+    return file.bytes.toString('utf8');
+}
 
 function safeRelative(value: string): boolean {
     return !!value && !path.posix.isAbsolute(value) && !path.win32.isAbsolute(value)
@@ -49,10 +58,10 @@ function literalReactorModules(pom: string): string[] {
     return roots === 1 && !stack.length && !xml.slice(offset).trim() ? modules : [];
 }
 
-function mavenTestConfigurationAllows(root: string, relative: string, seen = new Set<string>()): boolean {
+function mavenTestConfigurationAllows(root: string, relative: string, seen = new Set<string>(), captureInput?: CaptureInput): boolean {
     if (seen.has(relative) || !unlinkedPath(root, relative, false)) return false;
     seen.add(relative);
-    const xml = fs.readFileSync(path.join(root, relative), 'utf8').replace(/<!--[\s\S]*?-->/gu, '');
+    const xml = readPom(root, relative, captureInput).replace(/<!--[\s\S]*?-->/gu, '');
     if (xml.length > 1024 * 1024 || /<!|<\?/u.test(xml.replace(/<\?xml[^?]*\?>/u, ''))) return false;
     // Refuse dynamic or restrictive configuration rather than guessing an effective Maven model.
     for (const tag of xml.matchAll(/<(?:[\w.-]+:)?(skipTests|maven\.test\.skip|surefire\.skip|failsafe\.skip|skip)\b[^>]*>([\s\S]*?)<\//gu)) {
@@ -67,12 +76,12 @@ function mavenTestConfigurationAllows(root: string, relative: string, seen = new
     const declared = /<relativePath\b[^>]*>([\s\S]*?)<\/relativePath>/u.exec(parent)?.[1]?.trim();
     if (/<relativePath\s*\/>/u.test(parent) || declared === '' || (declared && /[&$]/u.test(declared))) return false;
     const parentPath = path.posix.normalize(path.posix.join(path.posix.dirname(relative), declared ?? '../pom.xml'));
-    return safeRelative(parentPath) && mavenTestConfigurationAllows(root, parentPath, seen);
+    return safeRelative(parentPath) && mavenTestConfigurationAllows(root, parentPath, seen, captureInput);
 }
 
 /** Only a literal reactor module directory and a test-running phase establish module inclusion. */
 function mavenModuleIncludes(tokens: string[], root: string, target: string, inspectConfiguration: boolean,
-    modules: Map<string, boolean>): boolean {
+    modules: Map<string, boolean>, captureInput?: CaptureInput): boolean {
     const executable = path.posix.basename(tokens[0].replace(/\\/gu, '/')).toLowerCase();
     if (!/^(?:mvn|mvnw)(?:\.cmd|\.bat|\.exe)?$/u.test(executable)) return false;
     let pom = '', module = '', phase = '';
@@ -100,19 +109,20 @@ function mavenModuleIncludes(tokens: string[], root: string, target: string, ins
     if (!target.startsWith(`${moduleDir}/src/test/java/`) || !target.endsWith('.java')) return false;
     const key = JSON.stringify([pom, module]);
     if (modules.has(key)) return modules.get(key)!;
-    const included = inspectMavenModule(root, pom, module, moduleDir, modulePom, inspectConfiguration);
+    const included = inspectMavenModule(root, pom, module, moduleDir, modulePom, inspectConfiguration, captureInput);
     modules.set(key, included);
     return included;
 }
 
 function inspectMavenModule(root: string, pom: string, module: string, moduleDir: string, modulePom: string,
-    inspectConfiguration: boolean): boolean {
+    inspectConfiguration: boolean, captureInput?: CaptureInput): boolean {
     if (!unlinkedPath(root, pom, false) || !unlinkedPath(root, moduleDir, true) || !unlinkedPath(root, modulePom, false)) return false;
     // Reject entity expansion and ambiguous dynamic module names. Maven must know this literal reactor member.
-    const bytes = fs.readFileSync(path.join(root, pom), 'utf8');
+    const bytes = readPom(root, pom, captureInput);
     if (bytes.length > 1024 * 1024 || /<!DOCTYPE|<!ENTITY/iu.test(bytes)) return false;
     return literalReactorModules(bytes).includes(module)
-        && (!inspectConfiguration || (mavenTestConfigurationAllows(root, pom) && mavenTestConfigurationAllows(root, modulePom)));
+        && (!inspectConfiguration || (mavenTestConfigurationAllows(root, pom, new Set(), captureInput)
+            && mavenTestConfigurationAllows(root, modulePom, new Set(), captureInput)));
 }
 
 function directoryIncludes(tokens: string[], root: string, target: string): boolean {
@@ -124,20 +134,28 @@ function directoryIncludes(tokens: string[], root: string, target: string): bool
     return safeRelative(directory) && target.startsWith(`${directory}/`) && unlinkedPath(root, directory, true);
 }
 
-function literalNodeFilesInclude(tokens: string[], root: string, target: string): boolean {
+function literalNodeFilesInclude(tokens: string[], root: string, target: string, captureInput?: CaptureInput): boolean {
     return /^(?:node)(?:\.exe)?$/iu.test(path.basename(tokens[0])) && tokens[1] === '--test'
-        && tokens.slice(2).includes(target) && tokens.slice(2).every(file => unlinkedPath(root, file, false));
+        && tokens.slice(2).includes(target) && tokens.slice(2).every(file => {
+            if (!unlinkedPath(root, file, false)) return false;
+            if (captureInput) captureInput(file, readValidationFile(root, file).identity.sha256);
+            return true;
+        });
 }
 
-/** One checker belongs to one validation/read invocation; no module observation survives into another call. */
-export function createTaskTestCommandContainerChecker(command: string, root: string, inspectConfiguration = true): (target: string) => boolean {
+/** Optional legacy adapter observations only. False means inconclusive, never a generic admission refusal.
+ * One checker belongs to one capture; no module observation survives into another call.
+ * Task selection uses core/task-validation-plan instead of this partial effective-model parser.
+ */
+export function createTaskTestCommandContainerChecker(command: string, root: string, inspectConfiguration = true,
+    captureInput?: CaptureInput): (target: string) => boolean {
     try {
         const chain = parseCommandChain(command);
         const modules = new Map<string, boolean>();
         return target => {
             try {
-                return chain.length === 1 && (literalNodeFilesInclude(chain[0], root, target)
-                    || mavenModuleIncludes(chain[0], root, target, inspectConfiguration, modules)
+                return chain.length === 1 && (literalNodeFilesInclude(chain[0], root, target, captureInput)
+                    || mavenModuleIncludes(chain[0], root, target, inspectConfiguration, modules, captureInput)
                     || directoryIncludes(chain[0], root, target));
             } catch { return false; }
         };

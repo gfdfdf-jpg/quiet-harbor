@@ -3,8 +3,11 @@ import type { WalkResult, WalkStep } from './navigator-walk';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { readRouteInventory, routeCoverage, type RouteCoverage, type UncoveredRoute } from './walk-routes';
-import { analyzeWalkMetrics, type CounterBaseline, type RouteMetrics, type WalkAnomaly } from './walk-metrics';
+import { analyzeWalkMetrics, type RouteMetrics, type WalkAnomaly } from './walk-metrics';
 import { renderReviewEconomy, summarizeReviewEconomy, type EconomySummary } from './walk-economy';
+import { stackReviewDifferences, stackReviewResults, stackReviewRotation } from './walk-stack-review-scenarios';
+import { platformCounterBaseline } from './walk-platform-baselines';
+import { reviewStackCount } from './walk-plan';
 
 const EVENT_BUCKET_SIZE = 50;
 
@@ -32,6 +35,9 @@ export interface WalkReport {
     disturbed: { results: number; steps: number; metrics: RouteMetrics[]; overBudget: DisturbedCounterSummary[] };
     /** Reviews of disturbed DONE variants against the rule-derived bound; these are judged. */
     economy: EconomySummary;
+    stackReviewLogic: ReturnType<typeof stackReviewResults>;
+    reviewRotation: ReturnType<typeof stackReviewRotation>;
+    stackReviewDifferences: ReturnType<typeof stackReviewDifferences>;
     projectSize: Array<{ scenario: string; trackedFiles: number; routes: RouteMetrics[] }>;
     sweep: Array<{ scenario: string; seed: number; baseline: string; step: number; disturbances: string[]; applied: string[] }>;
     executedSteps: number;
@@ -93,8 +99,8 @@ export function summarizeDisturbedAnomalies(anomalies: readonly WalkAnomaly[]): 
 
 export function buildWalkReport(results: readonly WalkResult[], findings: StandFinding[]): WalkReport {
     const root = path.resolve('.');
-    const baseline = JSON.parse(fs.readFileSync(path.join(root, 'tests/node/synthetic/walk-counter-baseline.json'), 'utf8')) as CounterBaseline;
-    const quiet = process.env.GARDA_SYNTHETIC_WALK_QUIET === '1';
+    const baseline = platformCounterBaseline(root);
+    const quiet = process.env.GITHUB_ACTIONS !== 'true' && process.env.GARDA_SYNTHETIC_WALK_QUIET === '1';
     const disturbedResults = results.filter(result => result.sweep || result.disturbances?.length);
     const metrics = analyzeWalkMetrics(results.filter(result => !result.sweep && !result.disturbances?.length), baseline, quiet);
     const disturbedMetrics = analyzeWalkMetrics(disturbedResults, baseline, quiet);
@@ -129,6 +135,10 @@ export function buildWalkReport(results: readonly WalkResult[], findings: StandF
             metrics: disturbedMetrics.routes,
             overBudget: summarizeDisturbedAnomalies(disturbedMetrics.anomalies.map(entry => ({ ...entry, severity: 'report' as const }))) },
         economy: summarizeReviewEconomy(results),
+        stackReviewLogic: stackReviewResults(results, findings),
+        reviewRotation: stackReviewRotation(Number(process.env.GARDA_SYNTHETIC_SEED ?? 0x6a726461),
+            reviewStackCount(process.env.GARDA_SYNTHETIC_REVIEW_STACKS)),
+        stackReviewDifferences: stackReviewDifferences(results),
         executedSteps: actualSteps.length,
         projectSize: results.flatMap(result => result.trackedFiles === undefined ? [] : [{ scenario: result.scenarioId,
             trackedFiles: result.trackedFiles, routes: analyzeWalkMetrics([result], baseline, false).routes }]),
@@ -149,7 +159,15 @@ export function renderWalkReport(report: WalkReport): string {
         '| Scenario | Counter state | Outcome | Steps | Task events | Reviews |',
         '|---|---|---|---:|---:|---|',
         ...report.scenarios.map((entry) => '| ' + [entry.id, entry.counterState ?? 'ordinary', entry.outcome, entry.steps, entry.taskEvents, entry.reviews.join(' ')].join(' | ') + ' |'),
-        '', '## Growth by task events and route', '',
+        '', '## Stack review logic', '',
+        'Seed: ' + report.reviewRotation.seed + '; N=' + report.reviewRotation.count + ' other stacks per deep family. Permanent cases: '
+            + JSON.stringify(report.reviewRotation.permanent) + '.', '',
+        ...report.reviewRotation.families.map(family => '- ' + family.family + ': ' + family.stacks.join(', ')), '',
+        '| Stack | Review logic | Cases |', '|---|---|---:|',
+        ...report.stackReviewLogic.map(stack => `| ${stack.stack} | ${stack.verdict} | ${stack.cases.length} |`), '',
+        'Cross-stack family differences (retain through baseline --kind review-cases with a reason): '
+            + JSON.stringify(report.stackReviewDifferences), '',
+        '## Growth by task events and route', '',
         'Raw process timings, output, state hashes and runtime identity remain in the recorder journals linked by navigator-walk.json. These buckets add the event counts the recorder does not know. Compare the same scenario and route; different routes and states are not interchangeable.', '',
         '| Scenario | Route/lane | Task events | Calls | Wall/core/outside core median, ms | Inclusive phases, average ms |',
         '|---|---|---|---:|---|---|',

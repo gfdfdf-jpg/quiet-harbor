@@ -327,7 +327,7 @@ function resolvePreflightPath(repoRoot: string, taskId: string, preflightPath: u
 
 function readJsonRecord(filePath: string): Record<string, unknown> | null {
     try {
-        const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        const parsed = JSON.parse(readInvocationTextFile(filePath));
         return isRecord(parsed) ? parsed : null;
     } catch {
         return null;
@@ -952,3 +952,4 @@ export function formatQualityChecklistResult(artifact: QualityChecklistArtifact)
     }
     return lines;
 }
+import { readInvocationTextFile } from '../../core/invocation-file-observation';

@@ -1,3 +1,4 @@
+import { readInvocationTextFile } from '../../core/invocation-file-observation';
 import * as fs from 'node:fs';
 import { assertValidTaskId } from '../../gate-runtime/task-events';
 import { fileSha256, normalizePath, resolvePathInsideRepo } from '../shared';
@@ -75,7 +76,7 @@ export function getRulePackEvidence(
 
     let artifact: Record<string, unknown>;
     try {
-        const parsedArtifact = JSON.parse(fs.readFileSync(resolvedPath, 'utf8'));
+        const parsedArtifact = JSON.parse(readInvocationTextFile(resolvedPath));
         artifact = isRecord(parsedArtifact) ? parsedArtifact : {};
     } catch {
         result.evidence_status = 'EVIDENCE_INVALID_JSON';

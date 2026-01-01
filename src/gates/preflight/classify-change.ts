@@ -185,6 +185,7 @@ export interface ClassifyChangeTriggers {
 }
 
 export interface ClassifyChangeResult {
+    declared_test_paths?: string[];
     detection_source: string;
     review_coverage_contract_required: true;
     mode: string;
@@ -487,6 +488,7 @@ export function classifyChange(options: ClassifyChangeOptions): ClassifyChangeRe
             ignored_generated_runtime_files: ignoredGeneratedRuntimeFiles
         },
         required_reviews: requiredReviews,
+        ...(options.declaredTestPaths?.length ? { declared_test_paths: [...options.declaredTestPaths] } : {}),
         review_execution_policy: reviewExecutionPolicyMode
             ? {
                 mode: reviewExecutionPolicyMode,

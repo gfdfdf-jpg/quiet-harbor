@@ -8,6 +8,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { splitNulRecords } from '../../core/git-path-output';
+import { resolveWorkspaceSnapshotRequest, type WorkspaceSnapshotRequest } from '../workspace/workspace-snapshot-cache';
 import { isPlainRecord } from '../../core/records';
 import { findUnapprovedActiveImplementationOwners } from '../workspace/active-implementation-ownership';
 import {
@@ -142,12 +143,13 @@ function readGitPaths(repoRoot: string, args: string[]): string[] | null {
 interface CommandWorkspaceReadSnapshot {
     active: boolean;
     repositories: Map<string, { changedFiles: string[]; reliable: boolean }>;
+    request?: WorkspaceSnapshotRequest;
 }
 
 const commandWorkspaceReadSnapshots = new AsyncLocalStorage<CommandWorkspaceReadSnapshot>();
 
-export function withNextStepCommandWorkspaceReadSnapshot<T>(callback: () => T): T {
-    const snapshot: CommandWorkspaceReadSnapshot = { active: true, repositories: new Map() };
+export function withNextStepCommandWorkspaceReadSnapshot<T>(callback: () => T, request?: WorkspaceSnapshotRequest): T {
+    const snapshot: CommandWorkspaceReadSnapshot = { active: true, repositories: new Map(), request };
     return commandWorkspaceReadSnapshots.run(snapshot, () => {
         try {
             return callback();
@@ -164,7 +166,13 @@ function readCurrentWorkspaceChangedFiles(repoRoot: string): { changedFiles: str
     const key = process.platform === 'win32' ? resolvedRoot.toLowerCase() : resolvedRoot;
     const cached = snapshot?.active ? snapshot.repositories.get(key) : null;
     if (cached) return { changedFiles: [...cached.changedFiles], reliable: cached.reliable };
-    const result = captureCurrentWorkspaceChangedFiles(repoRoot);
+    let result: { changedFiles: string[]; reliable: boolean };
+    try {
+        result = snapshot?.active && snapshot.request
+            ? { changedFiles: resolveWorkspaceSnapshotRequest(repoRoot, snapshot.request).read('git_auto', true, []).changed_files,
+                reliable: true }
+            : captureCurrentWorkspaceChangedFiles(repoRoot);
+    } catch { result = { changedFiles: [], reliable: false }; }
     if (snapshot?.active) snapshot.repositories.set(key, result);
     return { changedFiles: [...result.changedFiles], reliable: result.reliable };
 }

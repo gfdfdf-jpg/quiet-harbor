@@ -79,6 +79,7 @@ export function resolveParentAuditNavigation(options: {
     }
     const inspection = inspectParentCompletion(root, taskId)!;
     if (inspection.violations.length) return { ...route('Resolve parent acceptance evidence.', inspection.violations.join(' '), null), status: 'BLOCKED' as const };
+    if (inspection.implementationPending) return null; // Its ordinary gates and task-bound commit must run first.
     if (inspection.ready) {
         const alreadyDone = isTaskQueueDoneStatus(entry?.status ?? null);
         const events = alreadyDone ? readParentEvents(root, taskId) : [];

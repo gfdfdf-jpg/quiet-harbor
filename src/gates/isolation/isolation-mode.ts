@@ -1,3 +1,4 @@
+import { readInvocationTextFile } from '../../core/invocation-file-observation';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -50,7 +51,7 @@ export function loadIsolationModeConfig(repoRoot: string): IsolationModeConfig {
     }
 
     try {
-        const raw = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<string, unknown>;
+        const raw = JSON.parse(readInvocationTextFile(configPath)) as Record<string, unknown>;
         const enforcement = normalizeEnforcementMode(raw.enforcement);
         return {
             enabled: raw.enabled === true,

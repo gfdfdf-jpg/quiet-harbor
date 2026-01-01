@@ -6,12 +6,13 @@ import { NativeWalkOwner, waitForOwner, writeOwnerBlocker } from './walk-native-
 import type { WalkScenario } from './navigator-walk';
 import { runGit } from '../../cli/commands/gate-test-helpers';
 import { EXIT_GATE_FAILURE } from '../../../../src/cli/exit-codes';
+import { legacySourceRoute } from './walk-legacy-task-contract';
 
 const REVIEWS = 'garda-agent-orchestrator/runtime/reviews/';
 // The active and dead owner decisions retain their distinct recovery routes after source lines moved.
-const FULL_ACTIVE = 'src/gates/next-step/next-step-full-suite-routing.ts:388:16';
-const FULL_DEAD = 'src/gates/next-step/next-step-full-suite-routing.ts:438:12';
-const RECIPE_ACTIVE = 'src/gates/next-step/next-step-validation-routes.ts:48:36';
+const FULL_ACTIVE = legacySourceRoute('src/gates/next-step/next-step-full-suite-routing.ts', 'Wait for active task test validation run.');
+const FULL_DEAD = legacySourceRoute('src/gates/next-step/next-step-full-suite-routing.ts', 'A previous task test validation run');
+const RECIPE_ACTIVE = legacySourceRoute('src/gates/next-step/next-step-validation-routes.ts', 'await-project-validation');
 const EDITS = [{ path: 'src/app.ts', append: '// owner coverage\n' }, { path: 'tests/app.test.ts', append: '// owner coverage\n' }];
 
 function fullSuiteOwner(crash: boolean): WalkScenario {
@@ -19,18 +20,16 @@ function fullSuiteOwner(crash: boolean): WalkScenario {
     let observed = false;
     return {
         id: 'coverage-full-suite-owner-' + (crash ? 'crashed' : 'in-flight'), edits: EDITS,
+        selectionTargets: ['tests/app.test.ts'],
+        testSelectionCommand: 'node .git/walk-owner/block.cjs --test tests/app.test.ts',
         expectedReviews: crash ? {} : { code: 1, test: 1 }, expectedModes: crash ? [] : ['code:FULL', 'test:FULL'],
         ...(crash ? { expectedBlockedGate: 'full-suite-validation',
-            expectedGuidance: /A previous full-suite validation run.*gate pid \d+ is no longer alive; child pid \d+ is no longer alive/isu } : {}),
+            expectedGuidance: /A previous task test validation run.*gate pid \d+ is no longer alive; child pid \d+ is no longer alive/isu } : {}),
         expectedRoutes: [crash ? FULL_DEAD : FULL_ACTIVE],
         disturbanceReason: crash ? 'Kill the real full-suite owner tree after its native marker and blocking test readiness exist.'
             : 'Hold the real fixture full-suite command on a release file while the navigator inspects its active owner.',
         configure: root => {
             writeOwnerBlocker(root);
-            const file = path.join(root, 'garda-agent-orchestrator/live/config/workflow-config.json');
-            const config = JSON.parse(fs.readFileSync(file, 'utf8'));
-            config.full_suite_validation.command = 'node .git/walk-owner/block.cjs';
-            fs.writeFileSync(file, JSON.stringify(config));
         },
         execute: async (root, step) => {
             if (!crash && owner && step.routes?.includes(FULL_ACTIVE)) {
@@ -123,8 +122,8 @@ function recipeOwner(): WalkScenario {
             if (gate !== 'await-project-validation') return false;
             if (!owner) throw new Error('Await route without the native executing owner.');
             fs.writeFileSync(path.join(root, '.git/walk-owner/release'), 'release fixture test\n');
-            await owner.finish([EXIT_GATE_FAILURE]); // Successful opaque execution awaits independent per-case semantics.
-            if (!/PROJECT_VALIDATION_UNRESOLVED[\s\S]*ExitCode: 0/u.test(owner.output))
+            await owner.finish(); // Process PASS still requires independent per-case semantics.
+            if (!/PROJECT_VALIDATION_PROCESS_PASSED[\s\S]*ResultStatus: UNRESOLVED[\s\S]*ExitCode: 0/u.test(owner.output))
                 throw new Error('Recipe did not retain a successful native result: ' + owner.output);
             return true;
         },

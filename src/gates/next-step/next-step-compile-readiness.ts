@@ -169,14 +169,14 @@ export function readCompileReadiness(
         const infraRecoverySuffix = infraRecoveryHintLine
             ? ` ${infraRecoveryHintLine}`
             : '';
-        // Retrying cannot help when the configured toolchain is absent; surface the operator action.
-        const missingToolchain = /\S+ is required but was not found in PATH\.[\s\S]*?(?= NextStep:|$)/u.exec(evidenceError)?.[0];
-        const missingToolchainSuffix = missingToolchain ? ` ${missingToolchain.trim()}` : '';
+        // Keep the actual refusal: task-local applicability and other recovery routes depend on it.
+        const failureReason = evidenceError.split(' NextStep:')[0];
+        const failureSuffix = failureReason ? ` ${failureReason}` : '';
         return {
             ready: false,
             reason:
                 `Compile gate did not pass. Evidence status='${evidenceStatus || 'UNKNOWN'}', ` +
-                `outcome='${evidenceOutcome || 'UNKNOWN'}'.${missingToolchainSuffix}${infraRecoverySuffix}`
+                `outcome='${evidenceOutcome || 'UNKNOWN'}'.${failureSuffix}${infraRecoverySuffix}`
         };
     }
     const evidencePreflightHash = String(evidence.preflight_hash_sha256 || '').trim().toLowerCase();

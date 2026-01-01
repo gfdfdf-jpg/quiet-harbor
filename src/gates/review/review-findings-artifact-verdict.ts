@@ -1,5 +1,6 @@
 import { extractReviewVerdictToken } from '../../gate-runtime/review-context';
 import { isPlainRecord } from '../../core/records';
+import { MISSING_FOCUSED_VALIDATION_PATTERN, missingFocusedValidationTargets } from './missing-focused-validation-marker';
 import {
     validateReviewFindingsReport,
     type ReviewFindingsReport
@@ -56,16 +57,10 @@ function parseJsonReviewFindingsArtifactObject(content: string): Record<string, 
     }
 }
 
-export const EVIDENCE_ONLY_MISSING_FOCUSED_VALIDATION_PATTERN =
-    /^\[garda:evidence-only:missing-focused-validation\]\s+test=(tests\/[^\s;]+\.(?:test|spec)\.(?:c|m)?[jt]sx?);\s*action=run-and-record-focused-test$/iu;
+export const EVIDENCE_ONLY_MISSING_FOCUSED_VALIDATION_PATTERN = MISSING_FOCUSED_VALIDATION_PATTERN;
 
-function findMissingFocusedValidationMarker(value: string): RegExpMatchArray | null {
-    return value.match(EVIDENCE_ONLY_MISSING_FOCUSED_VALIDATION_PATTERN);
-}
-
-function findJsonReviewMissingFocusedValidationMarker(finding: { title: string; description: string }): RegExpMatchArray | null {
-    return findMissingFocusedValidationMarker(finding.title)
-        || findMissingFocusedValidationMarker(finding.description);
+function findJsonReviewMissingFocusedValidationMarkers(finding: { title: string; description: string }): string[] {
+    return [finding.title, finding.description].flatMap(missingFocusedValidationTargets);
 }
 
 export function findJsonReviewMissingFocusedValidationTestPaths(report: ReviewFindingsReport): string[] {
@@ -76,8 +71,7 @@ export function findJsonReviewMissingFocusedValidationTestPaths(report: ReviewFi
         ...report.findings.low
     ];
     return [...new Set(findings
-        .map((finding) => findJsonReviewMissingFocusedValidationMarker(finding)?.[1] || '')
-        .filter(Boolean))];
+        .flatMap(findJsonReviewMissingFocusedValidationMarkers))];
 }
 
 export function parseJsonReviewFindingsArtifact(
@@ -208,7 +202,7 @@ export function jsonReviewFindingsArtifactContainsOnlyMissingFocusedValidation(r
         && report.residual_risks.length === 0
         && findings.every((finding) =>
             finding.id === 'F-000'
-            && Boolean(findJsonReviewMissingFocusedValidationMarker(finding))
+            && findJsonReviewMissingFocusedValidationMarkers(finding).length > 0
         );
 }
 

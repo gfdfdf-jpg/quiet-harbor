@@ -30,6 +30,13 @@ export function resolveDeclaredValidationDecisionRoute(options: {
     readiness: NextStepQualityChecklistReadiness | null; cliPrefix: string; taskId: string;
 }): ValidationRoute | null {
     const readiness = options.readiness;
+    const nativeCommand = `${options.cliPrefix} gate run-intermediate-command --task-id ${quoteCommandValue(options.taskId)}`
+        + ' --command-source targeted-test --command "<task-test-command>"'
+        + ` --preflight-path ${quoteCommandValue(`garda-agent-orchestrator/runtime/reviews/${options.taskId}-preflight.json`)} --repo-root "."`;
+    if (readiness?.validationRejection && /(?:Current selected case execution|Native case execution)/u.test(readiness.validationRejection))
+        return { status: 'BLOCKED', nextGate: 'run-intermediate-command', title: 'Record current execution for the selected cases.',
+            reason: `${readiness.validationRejection} Declare the actual command and record it using: ${nativeCommand}`,
+            commands: [] };
     if (readiness?.validationRejection) return { status: 'BLOCKED', nextGate: 'project-validation-evidence',
         title: 'Resolve rejected declared validation evidence.', reason: readiness.validationRejection, commands: [] };
     const phases = readiness?.ready && readiness.evidenceStatus === 'current' ? readiness.validationPhases : null;
@@ -42,7 +49,10 @@ export function resolveDeclaredValidationDecisionRoute(options: {
         status: 'BLOCKED', nextGate: 'run-intermediate-command', title: 'Execute the current project check.',
         reason: 'Structural source/case references are bound. Run the explicit project check through gate run-intermediate-command '
             + 'with --command-source targeted-test and the actual focused --command; retain its current output. '
-            + 'No runner or command is inferred from the source language. Independent per-case resolution remains required.',
+            + 'No runner or command is inferred from the source language. Independent per-case resolution remains required. '
+            + `Declare the actual command and record it using: ${nativeCommand}`,
+        // This is the initial agent declaration step. A template containing an unresolved
+        // project command is guidance, never a command queued for automatic execution.
         commands: []
     };
     if (pending.attempt_id) return { status: 'BLOCKED', nextGate: 'await-project-validation',
@@ -109,7 +119,7 @@ export function resolveScopeBudgetGuardDecisionRoute(options: {
                     `${guardReason}. The split-required latch artifact was materialized at ${formatNextStepInlineValue(options.formatArtifactPath(latchResult.artifact_path))}, ` +
                     `but TASK.md status sync failed with outcome ${formatNextStepInlineValue(latchResult.status_sync.outcome)}. ` +
                     `${latchResult.status_sync.error_message ? `${latchResult.status_sync.error_message} ` : ''}` +
-                    'Do not continue parent compile, review, full-suite, completion, or final closeout gates until the latch is repaired.',
+                    'Do not continue parent compile, review, task test validation, completion, or final closeout gates until the latch is repaired.',
                 commands: [],
                 finalReport: null
             }
@@ -126,7 +136,7 @@ export function resolveScopeBudgetGuardDecisionRoute(options: {
                 `${guardReason}. The gate moved this parent task to SPLIT_REQUIRED and materialized latch evidence at ` +
                 `${formatNextStepInlineValue(options.formatArtifactPath(latchResult.artifact_path))}. ` +
                 'Create and link child tasks before continuing; do not shrink or reshape the diff merely to bypass the guard. ' +
-                'Ordinary classify, compile, review, full-suite, completion, and final closeout gates are suppressed for the parent while the latch is active.',
+                'Ordinary classify, compile, review, task test validation, completion, and final closeout gates are suppressed for the parent while the latch is active.',
             commands: [],
             missingArtifacts: [],
             presentArtifacts: options.presentArtifacts,
@@ -231,7 +241,7 @@ export function resolveReviewCycleGuardDecisionRoute(options: {
     const autoSplitEnabled = reviewCycleBlock.auto_split_enabled;
     const continuationDecisionGuidance = continuationAlreadyRecorded
         ? 'A one-shot continuation was already recorded for this task attempt; do not offer or accept another one. Continue by splitting/decomposing the task or choosing an explicit terminal/operator decision.'
-        : 'The configured workflow guard blocks additional compile, review, or full-suite continuation until operator decision. allow_one_more_cycle records task-scoped one-shot runtime evidence only; raise_limits is a permanent repo-local workflow-config change through workflow set.';
+        : 'The configured workflow guard blocks additional compile, review, or task test continuation until operator decision. allow_one_more_cycle records task-scoped one-shot runtime evidence only; raise_limits is a permanent repo-local workflow-config change through workflow set.';
     let splitRequiredLatch: SplitRequiredLatchResult | null = null;
     if (autoSplitEnabled) {
         splitRequiredLatch = options.materializeLatch();
@@ -253,7 +263,7 @@ export function resolveReviewCycleGuardDecisionRoute(options: {
                         `${formatNextStepInlineValue(options.formatArtifactPath(splitRequiredLatch.artifact_path))}, ` +
                         `but TASK.md status sync failed with outcome ${formatNextStepInlineValue(splitRequiredLatch.status_sync.outcome)}. ` +
                         `${splitRequiredLatch.status_sync.error_message ? `${splitRequiredLatch.status_sync.error_message} ` : ''}` +
-                        'Do not continue parent compile, review, full-suite, completion, or final closeout gates until the latch is repaired.',
+                        'Do not continue parent compile, review, task test validation, completion, or final closeout gates until the latch is repaired.',
                     commands: [],
                     reviewCycleBlock,
                     finalReport: null

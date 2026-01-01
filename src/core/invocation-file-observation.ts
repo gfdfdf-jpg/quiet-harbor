@@ -86,16 +86,21 @@ function capturePath(filePath: string): InvocationPathObservation {
         const linkTarget = attempt(() => observedInvocationValue(stat).isSymbolicLink() ? fs.readlinkSync(filePath) : null);
         const targetStat = attempt(() => {
             observedInvocationValue(realPath);
-            return Object.freeze(fs.statSync(filePath));
+            const entry = observedInvocationValue(stat);
+            // Without a link, the directory entry is also the followed target. Keep
+            // symlink probes separate and recheck both identities at invocation exit.
+            return entry.isSymbolicLink() ? Object.freeze(fs.statSync(filePath)) : entry;
         });
         const completeTargetStat = attempt(() => {
             const target = observedInvocationValue(targetStat);
             return process.platform === 'win32' && target.dev === 0 && (target.isFile() || target.isDirectory())
-                ? Object.freeze(statFileIdentitySync(filePath)) : target;
+                ? Object.freeze(observedInvocationValue(stat).isSymbolicLink()
+                    ? statFileIdentitySync(filePath) : lstatFileIdentitySync(filePath)) : target;
         });
         const targetIdentity = attempt(() => {
             observedInvocationValue(targetStat);
-            return Object.freeze(statFileIdentitySync(filePath, { bigint: true }));
+            return observedInvocationValue(stat).isSymbolicLink()
+                ? Object.freeze(statFileIdentitySync(filePath, { bigint: true })) : observedInvocationValue(identity);
         });
         return Object.freeze({ path: filePath, stat, identity, realPath, linkTarget, targetStat, completeTargetStat, targetIdentity });
     });
@@ -175,8 +180,6 @@ function captureContent(observation: InvocationPathObservation): InvocationFileC
         const filePath = observation.path;
         const before = observedInvocationValue(observation.targetIdentity);
         if (!before.isFile()) throw new Error('Invocation input is not a regular file: ' + filePath);
-        const currentPath = statFileIdentitySync(filePath, { bigint: true });
-        if (!sameStat(before, currentPath)) throw new Error('Invocation file changed before read: ' + filePath);
         const descriptor = fs.openSync(filePath, 'r');
         try {
             const descriptorBefore = fs.fstatSync(descriptor, { bigint: true });
@@ -187,6 +190,7 @@ function captureContent(observation: InvocationPathObservation): InvocationFileC
             const digest = createHash('sha256'), buffer = Buffer.allocUnsafe(FILE_HASH_BUFFER_BYTES);
             let total = 0n;
             while (true) {
+                countNextStepWork('visit:invocation_file_read_chunk:' + filePath);
                 const count = fs.readSync(descriptor, buffer, 0, buffer.length, null);
                 if (count === 0) break;
                 if (retained) {
@@ -227,6 +231,23 @@ export interface InvocationFileContentRead {
 /** The content observation is shared across every hash entrypoint and lexical alias. */
 export function readInvocationFileContent(filePath: string, maximumBytes = Infinity): InvocationFileContent | null {
     return readInvocationFileContentWithObservation(filePath, maximumBytes)?.content ?? null;
+}
+
+/** Ordinary read-only consumers share bytes with hash/contained readers. Action/transaction
+ * readers keep their native reads; the observation still validates every alias at invocation exit. */
+export function readInvocationFileBytes(filePath: string): Buffer {
+    const content = readInvocationFileContent(filePath);
+    if (!content) return fs.readFileSync(filePath);
+    if (content.size <= MAX_RETAINED_FILE_BYTES) return content.copyBytes();
+    // Preserve the original reader's size contract without retaining unbounded payloads.
+    const bytes = fs.readFileSync(filePath);
+    if (createHash('sha256').update(bytes).digest('hex') !== content.sha256)
+        throw new Error('Invocation file changed after observation: ' + filePath);
+    return bytes;
+}
+
+export function readInvocationTextFile(filePath: string): string {
+    return readInvocationFileBytes(filePath).toString('utf8');
 }
 
 export function readInvocationFileContentWithObservation(filePath: string, maximumBytes = Infinity): InvocationFileContentRead | null {

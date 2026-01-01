@@ -27,6 +27,7 @@ import {
     type ReviewRemediationReusableReceipt
 } from '../../../../src/gates/review-remediation/review-remediation-recovery-routing';
 import type { ReviewRemediationDeltaClassification } from '../../../../src/gates/review-remediation/review-remediation-delta';
+import { REVIEW_REMEDIATION_DELTA_MAX_TEXT_BYTES } from '../../../../src/gates/review-remediation/review-remediation-delta-contract';
 import { buildReviewRemediationReadableDiffEvidence } from '../../../../src/gates/review-remediation/review-remediation-readable-diff';
 import {
     buildReviewRemediationValidationEvidence,
@@ -445,7 +446,10 @@ describe('review remediation selective recovery routing', () => {
             const profilePolicySnapshot = makeSnapshot();
             const delta = buildLeafTestDeltaClassification({ repoRoot: fixture.root, taskId: TASK_ID, reviewType: 'test',
                 changedFile: 'assets/opaque.xyz', preflightPath: fixture.preflightPath, preflightSha256: fixture.preflightSha256,
-                profilePolicySnapshot, modePolicy: buildDefaultReviewRemediationModePolicy() });
+                profilePolicySnapshot, modePolicy: buildDefaultReviewRemediationModePolicy(),
+                // An unfamiliar extension alone is generic production source now; only a fix whose
+                // line delta cannot be read stays ambiguous and forces every lane FULL.
+                currentContent: 'x'.repeat(REVIEW_REMEDIATION_DELTA_MAX_TEXT_BYTES + 1) });
             assert.equal(delta.category, 'ambiguous');
             const classification = { source: 'delta' as const, delta, profilePolicySnapshot,
                 baselineProfilePolicySnapshotSha256: sha256RedactedJsonPayload(profilePolicySnapshot) };

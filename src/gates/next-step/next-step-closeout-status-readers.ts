@@ -360,7 +360,7 @@ export function readPostDoneWorkspaceDriftDecision(
             reason:
                 `Post-DONE workspace drift detected outside completed scope ${describePathList(auditedChangedFiles)}: ` +
                 `${details}. ` +
-                'Do not reopen stale lifecycle gates automatically. Commit or isolate the already-completed task diff, or explicitly reopen/reset the task before running classify, compile, review, full-suite, or completion gates again.'
+                'Do not reopen stale lifecycle gates automatically. Commit or isolate the already-completed task diff, or explicitly reopen/reset the task before running classify, compile, review, task test validation, or completion gates again.'
         };
     }
     const stagedScopeDecision = evaluateStagedPostDoneAuditedScope({
@@ -423,7 +423,7 @@ export function readPostDoneWorkspaceDriftDecision(
             reason:
                 `Tracked post-DONE workspace drift detected in audited completed scope ${describePathList(auditedChangedFiles)}: ` +
                 `${auditedViolations.join('; ')}. ` +
-                'Do not reopen stale lifecycle gates automatically. Commit or isolate the already-completed task diff, or explicitly reopen/reset the task before running classify, compile, review, full-suite, or completion gates again.'
+                'Do not reopen stale lifecycle gates automatically. Commit or isolate the already-completed task diff, or explicitly reopen/reset the task before running classify, compile, review, task test validation, or completion gates again.'
         };
     }
 
@@ -444,6 +444,6 @@ export function readPostDoneWorkspaceDriftDecision(
         blocked: true,
         reason:
             `Tracked post-DONE workspace drift detected in completed scope ${describePathList(getPreflightChangedFiles(preflight))}: ${readiness.reason} ` +
-            'Do not reopen stale lifecycle gates automatically. Commit or isolate the already-completed task diff, or explicitly reopen/reset the task before running classify, compile, review, full-suite, or completion gates again.'
+            'Do not reopen stale lifecycle gates automatically. Commit or isolate the already-completed task diff, or explicitly reopen/reset the task before running classify, compile, review, task test validation, or completion gates again.'
     };
 }

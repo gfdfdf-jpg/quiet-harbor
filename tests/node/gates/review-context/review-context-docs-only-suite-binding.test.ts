@@ -2,6 +2,7 @@ import { it } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { FIXTURE_TASK_TEST_COMMAND } from '../../task-test-selection-fixtures';
 import {
     buildFullSuiteValidationEvidence,
     getReviewContextFullSuiteValidationViolations
@@ -26,7 +27,7 @@ function makeFixture(scopeCategory = 'docs-only') {
     writeJson(configPath, {
         ...config,
         full_suite_validation: { ...config.full_suite_validation, enabled: true,
-            command: 'npm test', placement: 'after_compile_before_reviews' },
+            command: FIXTURE_TASK_TEST_COMMAND, placement: 'after_compile_before_reviews' },
         project_memory_maintenance: { ...config.project_memory_maintenance, enabled: false }
     });
     seedStartedTask(repoRoot, TASK_ID);

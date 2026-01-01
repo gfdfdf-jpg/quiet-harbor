@@ -2,8 +2,11 @@ import { countNextStepWork } from '../../core/next-step-measurement';
 import { createHash } from 'node:crypto';
 import * as path from 'node:path';
 import { declaredFileRole, type FileRoleBindings } from '../../core/file-role-bindings';
+import { isPlainRecord } from '../../core/records';
 
-import { sha256RedactedJsonPayload } from '../../core/redaction';
+import { redactSecretText, sha256RedactedJsonPayload } from '../../core/redaction';
+import type { ResolvedClassificationConfig } from '../preflight/classify-change';
+import { resolveReviewReuseClassificationConfig } from '../review-reuse/review-reuse';
 import {
     CODE_EXTENSION_GROUP,
     DEFAULT_INFRA_TRIGGER_REGEXES,
@@ -119,6 +122,8 @@ export interface ReviewRemediationDeltaClassification {
     deletions_total: number | null;
     changed_lines_total: number | null;
     readable_diff: ReviewRemediationReadableDiffEvidence;
+    /** Exact preflight bytes let the independent verifier authenticate task-local roles. */
+    task_role_preflight_text?: string;
     mode_policy_assessment?: ReviewRemediationModeAssessment;
     /** Carried passed lanes may need their own earlier reviewed tree as the DELTA base. */
     lane_deltas?: Record<string, ReviewRemediationDeltaClassification>;
@@ -356,7 +361,8 @@ function categorizeFile(options: {
             .some((signal) => signal in PROTECTED_BOUNDARY_SIGNAL_OWNERS)) {
         return { category: 'production', reason: 'path is owned configuration' };
     }
-    const testDocument = documentationFolder ? insideTests(options.filePath.slice(0, documentationFolder.index + 1)) : testLike;
+    const testDocument = role === 'test'
+        || (documentationFolder ? insideTests(options.filePath.slice(0, documentationFolder.index + 1)) : testLike);
     if (!testCode && !testDocument && !fixtureData && isDocumentation(options.filePath, documentationFolder)) {
         return { category: 'global', reason: 'path is documentation' };
     }
@@ -417,7 +423,39 @@ function categorizeFile(options: {
     if (SOURCE_FILE_PATTERN.test(options.filePath) || PRODUCTION_PATH_PATTERN.test(options.filePath)) {
         return { category: 'production', reason: 'path is production runtime source' };
     }
-    return { category: 'ambiguous', reason: 'path does not match a frozen remediation delta class' };
+    // Match preflight's generic code fallback: an unfamiliar extension alone cannot force every lane FULL.
+    return { category: 'production', reason: 'reviewable task source uses the generic production fallback' };
+}
+
+/** Authenticate the preflight and preserve existing protected source and artifact categories. */
+export function resolveRemediationTaskRoleConfig(options: {
+    repoRoot: string;
+    taskId: string;
+    preflightText: string;
+    authenticatedPreflightHashes: readonly string[];
+    config: ResolvedClassificationConfig;
+}): ResolvedClassificationConfig {
+    const text = options.preflightText;
+    if (typeof text !== 'string' || Buffer.byteLength(text, 'utf8') > 1024 * 1024
+        || redactSecretText(text) !== text) throw new Error('remediation task-role preflight is invalid or cannot be safely retained.');
+    const hash = createHash('sha256').update(text, 'utf8').digest('hex');
+    if (!options.authenticatedPreflightHashes.includes(hash)) throw new Error('remediation task-role preflight is not authenticated.');
+    const preflight: unknown = JSON.parse(text);
+    if (!isPlainRecord(preflight) || preflight.task_id !== options.taskId
+        || !Array.isArray(preflight.declared_test_paths)
+        || preflight.declared_test_paths.some((file) => typeof file !== 'string')) {
+        throw new Error('remediation task-role preflight does not contain this task’s declared test paths.');
+    }
+    const declaredTestPaths = (preflight.declared_test_paths as string[]).filter((filePath) => {
+        const prior = categorizeFile({ filePath, operation: 'modified', changedLines: 1,
+            lineDeltaUnavailableReason: null, baselineStatus: 'text', currentStatus: 'text',
+            testPathRegexes: options.config.test_trigger_regexes, fileRoles: options.config.file_roles,
+            structuralPatterns: [], structuralThreshold: options.config.test_refactor_changed_lines_threshold });
+        return prior.category !== 'generated_churn'
+            && (prior.category !== 'production' || prior.reason === 'reviewable task source uses the generic production fallback')
+            && !(prior.category === 'global' && prior.reason === 'path is runtime or tool configuration');
+    });
+    return resolveReviewReuseClassificationConfig({ ...preflight, declared_test_paths: declaredTestPaths }, options.repoRoot, options.config);
 }
 
 function namesTestCode(filePath: string): boolean {
@@ -488,6 +526,19 @@ function isSharedTestHelper(
     // suite names cannot establish that context. Project-added patterns still apply.
     return (!ignoreDefaultPatterns && testContext)
         || matched.some((pattern) => !DEFAULT_STRUCTURAL_PATTERN_SOURCES.has(pattern.source));
+}
+
+function aggregateFileCategories(fileDeltas: readonly Pick<ReviewRemediationFileDelta, 'category'>[]): ReviewRemediationDeltaCategory {
+    const categories = [...new Set(fileDeltas.map((entry) => entry.category))].sort();
+    const compatibleTestCategories = categories.length > 0 && categories.every(category =>
+        category === 'leaf_test' || category === 'structural_test' || category === 'shared_test_helper_or_harness');
+    return compatibleTestCategories
+        ? categories.includes('shared_test_helper_or_harness')
+            ? 'shared_test_helper_or_harness'
+            : categories.includes('structural_test') ? 'structural_test' : 'leaf_test'
+        : categories.includes('production') && categories.every((entry) => entry === 'production'
+            || entry === 'leaf_test' || entry === 'structural_test' || entry === 'shared_test_helper_or_harness')
+            ? 'production' : categories.length === 1 ? categories[0] : 'ambiguous';
 }
 
 function classifyFromBaseline(options: {
@@ -663,13 +714,7 @@ function classifyFromBaseline(options: {
     const categories = [...new Set(fileDeltas.map((entry) => entry.category))].sort();
     const compatibleTestCategories = categories.length > 0 && categories.every(category =>
         category === 'leaf_test' || category === 'structural_test' || category === 'shared_test_helper_or_harness');
-    const category: ReviewRemediationDeltaCategory = compatibleTestCategories
-        ? categories.includes('shared_test_helper_or_harness')
-            ? 'shared_test_helper_or_harness'
-            : categories.includes('structural_test') ? 'structural_test' : 'leaf_test'
-        : categories.includes('production') && categories.every((entry) => entry === 'production'
-            || entry === 'leaf_test' || entry === 'structural_test' || entry === 'shared_test_helper_or_harness')
-            ? 'production' : categories.length === 1 ? categories[0] : 'ambiguous';
+    const category = aggregateFileCategories(fileDeltas);
     const baseReason = fileDeltas.length === 0
         ? 'no post-baseline file content changes were detected'
         : category === 'ambiguous' && categories.length === 1
@@ -845,6 +890,7 @@ export function classifyReviewRemediationDelta(
 }
 
 export const reviewRemediationDeltaInternals = {
+    aggregateFileCategories,
     categorizeFile,
     compilePatterns,
     getLcsLength,

@@ -234,7 +234,7 @@ Mandatory gate order:
 9. \`gate build-review-context\` for each required review
 10. \`gate required-reviews-check\`
 11. \`gate doc-impact-gate\`
-12. \`gate full-suite-validation\` (when enabled via workflow-config.json)
+12. \`gate task-test-validation\` (when enabled via workflow-config.json)
 13. \`gate completion-gate\`
 
 Hard stops:
@@ -253,7 +253,7 @@ Hard stops:
 - Do not hand-edit active \`TASK.md\` lifecycle statuses (\`IN_PROGRESS\`, \`IN_REVIEW\`, \`DONE\`, \`BLOCKED\`) as a substitute for gates; completion finalization owns \`DONE\`, review-gate owns \`IN_REVIEW\`, task-mode owns \`IN_PROGRESS\`, and explicit operator \`task-reset\` owns reset/discard.
 - Do not mark \`DONE\` without \`COMPLETION_GATE_PASSED\`.
 - Do not create fake review artifacts or bypass reviewer routing.
-- The \`40-commands.md\` restraint applies only to standalone ad-hoc commands. It does NOT exempt mandatory gates: gates such as \`compile-gate\` and \`full-suite-validation\` must execute their underlying build/test/type-check commands when the workflow requires them.
+- The \`40-commands.md\` restraint applies only to standalone ad-hoc commands. It does NOT exempt mandatory gates: gates such as \`compile-gate\` and \`task-test-validation\` must execute their underlying build/test/type-check commands when the workflow requires them.
 ${MANAGED_END}`.trim();
 }
 

@@ -1,0 +1,1841 @@
+{
+  "schema": 1,
+  "source_commit": "893cea6c7a286eac17fccea1824c805cb32b8306",
+  "sources": [
+    {
+      "file": "C:\\Users\\dshub\\AppData\\Local\\Temp\\garda-sol-merge-2\\green-bc-dependencies-1\\results.json",
+      "sha256": "ec4ec54b29d1a394532de3aa43ce50b3fa0d03e6f9fb4e6752cb167fc7f2b5cf"
+    },
+    {
+      "file": "C:\\Users\\dshub\\AppData\\Local\\Temp\\garda-sol-merge-2\\green-b-argv-1\\results.json",
+      "sha256": "d83dc52b140609d1f164dfe79b4f6d7f633014942b3705c6267ea042d9a6f593"
+    },
+    {
+      "file": "C:\\Users\\dshub\\AppData\\Local\\Temp\\garda-sol-merge-2\\green-b-argv-2\\results.json",
+      "sha256": "10bdf8e09a9447808db08aecd4d410767f263523c5787ecba175d9375954f608"
+    },
+    {
+      "file": "C:\\Users\\dshub\\AppData\\Local\\Temp\\garda-sol-merge-2\\green-b-argv-3\\results.json",
+      "sha256": "90cd682ef29544f7b52714c7fad1bc79d91560b41c1751fb35c1dc63d8b8f6d6"
+    }
+  ],
+  "reasons": {
+    "stack-fixture-cmake-planning": "New CMake A3 route binds nested lib/ source/test paths and its exact -R test invocation. Native planned path authority requires the observed additional canonical-path probes, independent of task history.",
+    "task-test-failure-repair": "New own-test failure diagnostic restart: CMake has deeper owned paths; Python+Go binds two executable/compile inputs and both source/test pairs, compared with one Go invocation. Refreshing TASK_ENTRY, diagnostics and preflight authenticates those concrete inputs. Only measured new recovery routes change.",
+    "stack-retained-broad-failure": "New A6 retained broad-failure route in Go/CMake/Python+Go: the integrated task-local contract authenticates retained full-suite-output.log and its path/file identity while preparing the mandatory out-of-scope follow-up after narrow reselection. No task-owned failure is hidden.",
+    "stack-four-lane-task": "New Go/CMake/Python+Go A8 input: frozen preflight requires four review lanes. Refactor/security authenticate declared task cases, source/target scope and one or two native tool manifests, rather than the old ordinary Node input. CMake includes nested paths; Python+Go has two executables. No extra review launches are allowed."
+  },
+  "observations": [
+    {
+      "profile": "stack-retained-broad-failure",
+      "scenario": "stack-go-a6-generic",
+      "step": 16,
+      "route": "BLOCKED/materialize-review-follow-up-tasks/recorded-out-of-scope",
+      "metric": "file_hash:file",
+      "observed": 56,
+      "before": {
+        "expected": 55,
+        "tolerance": 0,
+        "constantWithEvents": true,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-retained-broad-failure",
+      "scenario": "stack-go-a6-generic",
+      "step": 16,
+      "route": "BLOCKED/materialize-review-follow-up-tasks/recorded-out-of-scope",
+      "metric": "file_probes:lstatSync",
+      "observed": 796,
+      "before": {
+        "expected": 775,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-retained-broad-failure",
+      "scenario": "stack-go-a6-generic",
+      "step": 16,
+      "route": "BLOCKED/materialize-review-follow-up-tasks/recorded-out-of-scope",
+      "metric": "file_probes:fstatSync",
+      "observed": 119,
+      "before": {
+        "expected": 117,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-fixture-cmake-planning",
+      "scenario": "stack-cmake-a3-generic",
+      "step": 7,
+      "route": "BLOCKED/classify-change",
+      "metric": "file_probes:realpathSync",
+      "observed": 62,
+      "before": {
+        "expected": 48,
+        "tolerance": 12,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-fixture-cmake-planning",
+      "scenario": "stack-cmake-a3-generic",
+      "step": 9,
+      "route": "BLOCKED/load-rule-pack",
+      "metric": "file_probes:realpathSync",
+      "observed": 64,
+      "before": {
+        "expected": 46,
+        "tolerance": 16,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "task-test-failure-repair",
+      "scenario": "stack-cmake-a5-generic",
+      "step": 17,
+      "route": "BLOCKED/handshake-diagnostics",
+      "metric": "file_probes:lstatSync",
+      "observed": 660,
+      "before": {
+        "expected": 648,
+        "tolerance": 8,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "reason": "New real own-test failure recovery route: failed task-local selected tests after current compile refresh TASK_ENTRY/startup diagnostics, preflight, rule-pack and compile before replacement GREEN. Existing clean-start and opaque-tour limits are unchanged. Native history is parsed/verified once, no event clones; Git/ACL ceilings unchanged."
+      }
+    },
+    {
+      "profile": "task-test-failure-repair",
+      "scenario": "stack-cmake-a5-generic",
+      "step": 17,
+      "route": "BLOCKED/handshake-diagnostics",
+      "metric": "file_probes:realpathSync",
+      "observed": 56,
+      "before": {
+        "expected": 50,
+        "tolerance": 2,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "reason": "New real own-test failure recovery route: failed task-local selected tests after current compile refresh TASK_ENTRY/startup diagnostics, preflight, rule-pack and compile before replacement GREEN. Existing clean-start and opaque-tour limits are unchanged. Native history is parsed/verified once, no event clones; Git/ACL ceilings unchanged."
+      }
+    },
+    {
+      "profile": "task-test-failure-repair",
+      "scenario": "stack-cmake-a5-generic",
+      "step": 17,
+      "route": "BLOCKED/handshake-diagnostics",
+      "metric": "file_probes:statSync",
+      "observed": 649,
+      "before": {
+        "expected": 637,
+        "tolerance": 8,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "reason": "New real own-test failure recovery route: failed task-local selected tests after current compile refresh TASK_ENTRY/startup diagnostics, preflight, rule-pack and compile before replacement GREEN. Existing clean-start and opaque-tour limits are unchanged. Native history is parsed/verified once, no event clones; Git/ACL ceilings unchanged."
+      }
+    },
+    {
+      "profile": "task-test-failure-repair",
+      "scenario": "stack-cmake-a5-generic",
+      "step": 18,
+      "route": "BLOCKED/shell-smoke-preflight",
+      "metric": "file_probes:lstatSync",
+      "observed": 660,
+      "before": {
+        "expected": 648,
+        "tolerance": 8,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "reason": "New real own-test failure recovery route: failed task-local selected tests after current compile refresh TASK_ENTRY/startup diagnostics, preflight, rule-pack and compile before replacement GREEN. Existing clean-start and opaque-tour limits are unchanged. Native history is parsed/verified once, no event clones; Git/ACL ceilings unchanged."
+      }
+    },
+    {
+      "profile": "task-test-failure-repair",
+      "scenario": "stack-cmake-a5-generic",
+      "step": 18,
+      "route": "BLOCKED/shell-smoke-preflight",
+      "metric": "file_probes:realpathSync",
+      "observed": 56,
+      "before": {
+        "expected": 50,
+        "tolerance": 2,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "reason": "New real own-test failure recovery route: failed task-local selected tests after current compile refresh TASK_ENTRY/startup diagnostics, preflight, rule-pack and compile before replacement GREEN. Existing clean-start and opaque-tour limits are unchanged. Native history is parsed/verified once, no event clones; Git/ACL ceilings unchanged."
+      }
+    },
+    {
+      "profile": "task-test-failure-repair",
+      "scenario": "stack-cmake-a5-generic",
+      "step": 18,
+      "route": "BLOCKED/shell-smoke-preflight",
+      "metric": "file_probes:statSync",
+      "observed": 649,
+      "before": {
+        "expected": 637,
+        "tolerance": 8,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "reason": "New real own-test failure recovery route: failed task-local selected tests after current compile refresh TASK_ENTRY/startup diagnostics, preflight, rule-pack and compile before replacement GREEN. Existing clean-start and opaque-tour limits are unchanged. Native history is parsed/verified once, no event clones; Git/ACL ceilings unchanged."
+      }
+    },
+    {
+      "profile": "task-test-failure-repair",
+      "scenario": "stack-cmake-a5-generic",
+      "step": 19,
+      "route": "BLOCKED/classify-change",
+      "metric": "file_probes:realpathSync",
+      "observed": 64,
+      "before": {
+        "expected": 48,
+        "tolerance": 12,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "task-test-failure-repair",
+      "scenario": "stack-cmake-a5-generic",
+      "step": 21,
+      "route": "BLOCKED/load-rule-pack",
+      "metric": "file_probes:realpathSync",
+      "observed": 66,
+      "before": {
+        "expected": 46,
+        "tolerance": 16,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "task-test-failure-repair",
+      "scenario": "stack-cmake-a5-generic",
+      "step": 23,
+      "route": "BLOCKED/compile-gate",
+      "metric": "file_probes:realpathSync",
+      "observed": 66,
+      "before": {
+        "expected": 56,
+        "tolerance": 8,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "task-test-failure-repair",
+      "scenario": "stack-polyglot-python-go-a5-generic",
+      "step": 17,
+      "route": "BLOCKED/handshake-diagnostics",
+      "metric": "file_hash:file",
+      "observed": 50,
+      "before": {
+        "expected": 48,
+        "tolerance": 0,
+        "constantWithEvents": true,
+        "growthTolerance": 0,
+        "reason": "New real own-test failure recovery route: failed task-local selected tests after current compile refresh TASK_ENTRY/startup diagnostics, preflight, rule-pack and compile before replacement GREEN. Existing clean-start and opaque-tour limits are unchanged. Native history is parsed/verified once, no event clones; Git/ACL ceilings unchanged."
+      }
+    },
+    {
+      "profile": "task-test-failure-repair",
+      "scenario": "stack-polyglot-python-go-a5-generic",
+      "step": 17,
+      "route": "BLOCKED/handshake-diagnostics",
+      "metric": "file_probes:lstatSync",
+      "observed": 668,
+      "before": {
+        "expected": 648,
+        "tolerance": 8,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "reason": "New real own-test failure recovery route: failed task-local selected tests after current compile refresh TASK_ENTRY/startup diagnostics, preflight, rule-pack and compile before replacement GREEN. Existing clean-start and opaque-tour limits are unchanged. Native history is parsed/verified once, no event clones; Git/ACL ceilings unchanged."
+      }
+    },
+    {
+      "profile": "task-test-failure-repair",
+      "scenario": "stack-polyglot-python-go-a5-generic",
+      "step": 17,
+      "route": "BLOCKED/handshake-diagnostics",
+      "metric": "file_probes:statSync",
+      "observed": 661,
+      "before": {
+        "expected": 637,
+        "tolerance": 8,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "reason": "New real own-test failure recovery route: failed task-local selected tests after current compile refresh TASK_ENTRY/startup diagnostics, preflight, rule-pack and compile before replacement GREEN. Existing clean-start and opaque-tour limits are unchanged. Native history is parsed/verified once, no event clones; Git/ACL ceilings unchanged."
+      }
+    },
+    {
+      "profile": "task-test-failure-repair",
+      "scenario": "stack-polyglot-python-go-a5-generic",
+      "step": 17,
+      "route": "BLOCKED/handshake-diagnostics",
+      "metric": "file_probes:realpathSync.native",
+      "observed": 549,
+      "before": {
+        "expected": 543,
+        "tolerance": 4,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "reason": "New real own-test failure recovery route: failed task-local selected tests after current compile refresh TASK_ENTRY/startup diagnostics, preflight, rule-pack and compile before replacement GREEN. Existing clean-start and opaque-tour limits are unchanged. Native history is parsed/verified once, no event clones; Git/ACL ceilings unchanged."
+      }
+    },
+    {
+      "profile": "task-test-failure-repair",
+      "scenario": "stack-polyglot-python-go-a5-generic",
+      "step": 17,
+      "route": "BLOCKED/handshake-diagnostics",
+      "metric": "file_probes:fstatSync",
+      "observed": 107,
+      "before": {
+        "expected": 103,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "reason": "New real own-test failure recovery route: failed task-local selected tests after current compile refresh TASK_ENTRY/startup diagnostics, preflight, rule-pack and compile before replacement GREEN. Existing clean-start and opaque-tour limits are unchanged. Native history is parsed/verified once, no event clones; Git/ACL ceilings unchanged."
+      }
+    },
+    {
+      "profile": "task-test-failure-repair",
+      "scenario": "stack-polyglot-python-go-a5-generic",
+      "step": 18,
+      "route": "BLOCKED/shell-smoke-preflight",
+      "metric": "file_hash:file",
+      "observed": 50,
+      "before": {
+        "expected": 48,
+        "tolerance": 0,
+        "constantWithEvents": true,
+        "growthTolerance": 0,
+        "reason": "New real own-test failure recovery route: failed task-local selected tests after current compile refresh TASK_ENTRY/startup diagnostics, preflight, rule-pack and compile before replacement GREEN. Existing clean-start and opaque-tour limits are unchanged. Native history is parsed/verified once, no event clones; Git/ACL ceilings unchanged."
+      }
+    },
+    {
+      "profile": "task-test-failure-repair",
+      "scenario": "stack-polyglot-python-go-a5-generic",
+      "step": 18,
+      "route": "BLOCKED/shell-smoke-preflight",
+      "metric": "file_probes:lstatSync",
+      "observed": 668,
+      "before": {
+        "expected": 648,
+        "tolerance": 8,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "reason": "New real own-test failure recovery route: failed task-local selected tests after current compile refresh TASK_ENTRY/startup diagnostics, preflight, rule-pack and compile before replacement GREEN. Existing clean-start and opaque-tour limits are unchanged. Native history is parsed/verified once, no event clones; Git/ACL ceilings unchanged."
+      }
+    },
+    {
+      "profile": "task-test-failure-repair",
+      "scenario": "stack-polyglot-python-go-a5-generic",
+      "step": 18,
+      "route": "BLOCKED/shell-smoke-preflight",
+      "metric": "file_probes:statSync",
+      "observed": 661,
+      "before": {
+        "expected": 637,
+        "tolerance": 8,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "reason": "New real own-test failure recovery route: failed task-local selected tests after current compile refresh TASK_ENTRY/startup diagnostics, preflight, rule-pack and compile before replacement GREEN. Existing clean-start and opaque-tour limits are unchanged. Native history is parsed/verified once, no event clones; Git/ACL ceilings unchanged."
+      }
+    },
+    {
+      "profile": "task-test-failure-repair",
+      "scenario": "stack-polyglot-python-go-a5-generic",
+      "step": 18,
+      "route": "BLOCKED/shell-smoke-preflight",
+      "metric": "file_probes:realpathSync.native",
+      "observed": 549,
+      "before": {
+        "expected": 543,
+        "tolerance": 4,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "reason": "New real own-test failure recovery route: failed task-local selected tests after current compile refresh TASK_ENTRY/startup diagnostics, preflight, rule-pack and compile before replacement GREEN. Existing clean-start and opaque-tour limits are unchanged. Native history is parsed/verified once, no event clones; Git/ACL ceilings unchanged."
+      }
+    },
+    {
+      "profile": "task-test-failure-repair",
+      "scenario": "stack-polyglot-python-go-a5-generic",
+      "step": 18,
+      "route": "BLOCKED/shell-smoke-preflight",
+      "metric": "file_probes:fstatSync",
+      "observed": 107,
+      "before": {
+        "expected": 103,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "reason": "New real own-test failure recovery route: failed task-local selected tests after current compile refresh TASK_ENTRY/startup diagnostics, preflight, rule-pack and compile before replacement GREEN. Existing clean-start and opaque-tour limits are unchanged. Native history is parsed/verified once, no event clones; Git/ACL ceilings unchanged."
+      }
+    },
+    {
+      "profile": "task-test-failure-repair",
+      "scenario": "stack-polyglot-python-go-a5-generic",
+      "step": 19,
+      "route": "BLOCKED/classify-change",
+      "metric": "file_probes:existsSync",
+      "observed": 729,
+      "before": {
+        "expected": 379,
+        "tolerance": 340,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 29,
+      "route": "BLOCKED/build-review-context/refactor",
+      "metric": "file_hash:file",
+      "observed": 86,
+      "before": {
+        "expected": 34,
+        "tolerance": 0,
+        "constantWithEvents": true,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 29,
+      "route": "BLOCKED/build-review-context/refactor",
+      "metric": "file_probes:lstatSync",
+      "observed": 1306,
+      "before": {
+        "expected": 963,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 29,
+      "route": "BLOCKED/build-review-context/refactor",
+      "metric": "file_probes:realpathSync",
+      "observed": 159,
+      "before": {
+        "expected": 141,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 29,
+      "route": "BLOCKED/build-review-context/refactor",
+      "metric": "file_probes:statSync",
+      "observed": 1211,
+      "before": {
+        "expected": 830,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 29,
+      "route": "BLOCKED/build-review-context/refactor",
+      "metric": "file_probes:realpathSync.native",
+      "observed": 1069,
+      "before": {
+        "expected": 999,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 29,
+      "route": "BLOCKED/build-review-context/refactor",
+      "metric": "file_probes:fstatSync",
+      "observed": 191,
+      "before": {
+        "expected": 140,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 30,
+      "route": "BLOCKED/record-review-routing/refactor",
+      "metric": "file_hash:file",
+      "observed": 90,
+      "before": {
+        "expected": 42,
+        "tolerance": 0,
+        "constantWithEvents": true,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 30,
+      "route": "BLOCKED/record-review-routing/refactor",
+      "metric": "file_probes:lstatSync",
+      "observed": 1364,
+      "before": {
+        "expected": 1050,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 30,
+      "route": "BLOCKED/record-review-routing/refactor",
+      "metric": "file_probes:realpathSync",
+      "observed": 169,
+      "before": {
+        "expected": 145,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 30,
+      "route": "BLOCKED/record-review-routing/refactor",
+      "metric": "file_probes:statSync",
+      "observed": 1262,
+      "before": {
+        "expected": 977,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 30,
+      "route": "BLOCKED/record-review-routing/refactor",
+      "metric": "file_probes:realpathSync.native",
+      "observed": 1104,
+      "before": {
+        "expected": 1102,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 30,
+      "route": "BLOCKED/record-review-routing/refactor",
+      "metric": "file_probes:fstatSync",
+      "observed": 205,
+      "before": {
+        "expected": 164,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 31,
+      "route": "BLOCKED/prepare-reviewer-launch/refactor",
+      "metric": "file_hash:file",
+      "observed": 90,
+      "before": {
+        "expected": 42,
+        "tolerance": 0,
+        "constantWithEvents": true,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 31,
+      "route": "BLOCKED/prepare-reviewer-launch/refactor",
+      "metric": "file_probes:lstatSync",
+      "observed": 1364,
+      "before": {
+        "expected": 1050,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 31,
+      "route": "BLOCKED/prepare-reviewer-launch/refactor",
+      "metric": "file_probes:realpathSync",
+      "observed": 169,
+      "before": {
+        "expected": 145,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 31,
+      "route": "BLOCKED/prepare-reviewer-launch/refactor",
+      "metric": "file_probes:statSync",
+      "observed": 1262,
+      "before": {
+        "expected": 977,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 31,
+      "route": "BLOCKED/prepare-reviewer-launch/refactor",
+      "metric": "file_probes:realpathSync.native",
+      "observed": 1104,
+      "before": {
+        "expected": 1102,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 31,
+      "route": "BLOCKED/prepare-reviewer-launch/refactor",
+      "metric": "file_probes:fstatSync",
+      "observed": 205,
+      "before": {
+        "expected": 164,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 32,
+      "route": "BLOCKED/record-reviewer-delegation-started/refactor",
+      "metric": "file_hash:file",
+      "observed": 92,
+      "before": {
+        "expected": 44,
+        "tolerance": 0,
+        "constantWithEvents": true,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 32,
+      "route": "BLOCKED/record-reviewer-delegation-started/refactor",
+      "metric": "file_probes:lstatSync",
+      "observed": 1387,
+      "before": {
+        "expected": 1092,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 32,
+      "route": "BLOCKED/record-reviewer-delegation-started/refactor",
+      "metric": "file_probes:realpathSync",
+      "observed": 171,
+      "before": {
+        "expected": 147,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 32,
+      "route": "BLOCKED/record-reviewer-delegation-started/refactor",
+      "metric": "file_probes:statSync",
+      "observed": 1297,
+      "before": {
+        "expected": 1009,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 32,
+      "route": "BLOCKED/record-reviewer-delegation-started/refactor",
+      "metric": "file_probes:fstatSync",
+      "observed": 209,
+      "before": {
+        "expected": 170,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 33,
+      "route": "BLOCKED/complete-reviewer-launch/refactor",
+      "metric": "file_hash:file",
+      "observed": 92,
+      "before": {
+        "expected": 44,
+        "tolerance": 0,
+        "constantWithEvents": true,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 33,
+      "route": "BLOCKED/complete-reviewer-launch/refactor",
+      "metric": "file_probes:lstatSync",
+      "observed": 1392,
+      "before": {
+        "expected": 1087,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 33,
+      "route": "BLOCKED/complete-reviewer-launch/refactor",
+      "metric": "file_probes:realpathSync",
+      "observed": 171,
+      "before": {
+        "expected": 147,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 33,
+      "route": "BLOCKED/complete-reviewer-launch/refactor",
+      "metric": "file_probes:statSync",
+      "observed": 1309,
+      "before": {
+        "expected": 1009,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 33,
+      "route": "BLOCKED/complete-reviewer-launch/refactor",
+      "metric": "file_probes:fstatSync",
+      "observed": 209,
+      "before": {
+        "expected": 170,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 34,
+      "route": "BLOCKED/record-review-result/refactor",
+      "metric": "file_hash:file",
+      "observed": 93,
+      "before": {
+        "expected": 44,
+        "tolerance": 0,
+        "constantWithEvents": true,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 34,
+      "route": "BLOCKED/record-review-result/refactor",
+      "metric": "file_probes:lstatSync",
+      "observed": 1396,
+      "before": {
+        "expected": 1106,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 34,
+      "route": "BLOCKED/record-review-result/refactor",
+      "metric": "file_probes:realpathSync",
+      "observed": 171,
+      "before": {
+        "expected": 147,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 34,
+      "route": "BLOCKED/record-review-result/refactor",
+      "metric": "file_probes:statSync",
+      "observed": 1317,
+      "before": {
+        "expected": 1013,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-go-a8-generic",
+      "step": 34,
+      "route": "BLOCKED/record-review-result/refactor",
+      "metric": "file_probes:fstatSync",
+      "observed": 211,
+      "before": {
+        "expected": 172,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-retained-broad-failure",
+      "scenario": "stack-cmake-a6-generic",
+      "step": 16,
+      "route": "BLOCKED/materialize-review-follow-up-tasks/recorded-out-of-scope",
+      "metric": "file_probes:lstatSync",
+      "observed": 809,
+      "before": {
+        "expected": 775,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-cmake-a8-generic",
+      "step": 9,
+      "route": "BLOCKED/load-rule-pack",
+      "metric": "file_probes:realpathSync",
+      "observed": 64,
+      "before": {
+        "expected": 46,
+        "tolerance": 16,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-cmake-a8-generic",
+      "step": 12,
+      "route": "BLOCKED/run-intermediate-command",
+      "metric": "file_probes:realpathSync",
+      "observed": 62,
+      "before": {
+        "expected": 60,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-cmake-a8-generic",
+      "step": 14,
+      "route": "BLOCKED/compile-gate",
+      "metric": "file_probes:realpathSync",
+      "observed": 68,
+      "before": {
+        "expected": 56,
+        "tolerance": 8,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-cmake-a8-generic",
+      "step": 29,
+      "route": "BLOCKED/build-review-context/refactor",
+      "metric": "file_probes:lstatSync",
+      "observed": 1324,
+      "before": {
+        "expected": 963,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-cmake-a8-generic",
+      "step": 29,
+      "route": "BLOCKED/build-review-context/refactor",
+      "metric": "file_probes:realpathSync",
+      "observed": 167,
+      "before": {
+        "expected": 141,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-cmake-a8-generic",
+      "step": 29,
+      "route": "BLOCKED/build-review-context/refactor",
+      "metric": "file_probes:statSync",
+      "observed": 1227,
+      "before": {
+        "expected": 830,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-cmake-a8-generic",
+      "step": 30,
+      "route": "BLOCKED/record-review-routing/refactor",
+      "metric": "file_probes:lstatSync",
+      "observed": 1382,
+      "before": {
+        "expected": 1050,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-cmake-a8-generic",
+      "step": 30,
+      "route": "BLOCKED/record-review-routing/refactor",
+      "metric": "file_probes:realpathSync",
+      "observed": 177,
+      "before": {
+        "expected": 145,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-cmake-a8-generic",
+      "step": 30,
+      "route": "BLOCKED/record-review-routing/refactor",
+      "metric": "file_probes:statSync",
+      "observed": 1278,
+      "before": {
+        "expected": 977,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-cmake-a8-generic",
+      "step": 31,
+      "route": "BLOCKED/prepare-reviewer-launch/refactor",
+      "metric": "file_probes:lstatSync",
+      "observed": 1382,
+      "before": {
+        "expected": 1050,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-cmake-a8-generic",
+      "step": 31,
+      "route": "BLOCKED/prepare-reviewer-launch/refactor",
+      "metric": "file_probes:realpathSync",
+      "observed": 177,
+      "before": {
+        "expected": 145,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-cmake-a8-generic",
+      "step": 31,
+      "route": "BLOCKED/prepare-reviewer-launch/refactor",
+      "metric": "file_probes:statSync",
+      "observed": 1278,
+      "before": {
+        "expected": 977,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-cmake-a8-generic",
+      "step": 32,
+      "route": "BLOCKED/record-reviewer-delegation-started/refactor",
+      "metric": "file_probes:lstatSync",
+      "observed": 1405,
+      "before": {
+        "expected": 1092,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-cmake-a8-generic",
+      "step": 32,
+      "route": "BLOCKED/record-reviewer-delegation-started/refactor",
+      "metric": "file_probes:realpathSync",
+      "observed": 179,
+      "before": {
+        "expected": 147,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-cmake-a8-generic",
+      "step": 32,
+      "route": "BLOCKED/record-reviewer-delegation-started/refactor",
+      "metric": "file_probes:statSync",
+      "observed": 1313,
+      "before": {
+        "expected": 1009,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-cmake-a8-generic",
+      "step": 33,
+      "route": "BLOCKED/complete-reviewer-launch/refactor",
+      "metric": "file_probes:lstatSync",
+      "observed": 1410,
+      "before": {
+        "expected": 1087,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-cmake-a8-generic",
+      "step": 33,
+      "route": "BLOCKED/complete-reviewer-launch/refactor",
+      "metric": "file_probes:realpathSync",
+      "observed": 179,
+      "before": {
+        "expected": 147,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-cmake-a8-generic",
+      "step": 33,
+      "route": "BLOCKED/complete-reviewer-launch/refactor",
+      "metric": "file_probes:statSync",
+      "observed": 1325,
+      "before": {
+        "expected": 1009,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-cmake-a8-generic",
+      "step": 34,
+      "route": "BLOCKED/record-review-result/refactor",
+      "metric": "file_probes:lstatSync",
+      "observed": 1414,
+      "before": {
+        "expected": 1106,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-cmake-a8-generic",
+      "step": 34,
+      "route": "BLOCKED/record-review-result/refactor",
+      "metric": "file_probes:realpathSync",
+      "observed": 179,
+      "before": {
+        "expected": 147,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-cmake-a8-generic",
+      "step": 34,
+      "route": "BLOCKED/record-review-result/refactor",
+      "metric": "file_probes:statSync",
+      "observed": 1333,
+      "before": {
+        "expected": 1013,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-retained-broad-failure",
+      "scenario": "stack-polyglot-python-go-a6-generic",
+      "step": 16,
+      "route": "BLOCKED/materialize-review-follow-up-tasks/recorded-out-of-scope",
+      "metric": "file_hash:file",
+      "observed": 59,
+      "before": {
+        "expected": 55,
+        "tolerance": 0,
+        "constantWithEvents": true,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-retained-broad-failure",
+      "scenario": "stack-polyglot-python-go-a6-generic",
+      "step": 16,
+      "route": "BLOCKED/materialize-review-follow-up-tasks/recorded-out-of-scope",
+      "metric": "file_probes:lstatSync",
+      "observed": 843,
+      "before": {
+        "expected": 775,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-retained-broad-failure",
+      "scenario": "stack-polyglot-python-go-a6-generic",
+      "step": 16,
+      "route": "BLOCKED/materialize-review-follow-up-tasks/recorded-out-of-scope",
+      "metric": "file_probes:statSync",
+      "observed": 861,
+      "before": {
+        "expected": 848,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-retained-broad-failure",
+      "scenario": "stack-polyglot-python-go-a6-generic",
+      "step": 16,
+      "route": "BLOCKED/materialize-review-follow-up-tasks/recorded-out-of-scope",
+      "metric": "file_probes:fstatSync",
+      "observed": 125,
+      "before": {
+        "expected": 117,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 14,
+      "route": "BLOCKED/compile-gate",
+      "metric": "file_hash:file",
+      "observed": 58,
+      "before": {
+        "expected": 49,
+        "tolerance": 8,
+        "constantWithEvents": true,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 14,
+      "route": "BLOCKED/compile-gate",
+      "metric": "file_probes:lstatSync",
+      "observed": 878,
+      "before": {
+        "expected": 708,
+        "tolerance": 155,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 14,
+      "route": "BLOCKED/compile-gate",
+      "metric": "file_probes:fstatSync",
+      "observed": 123,
+      "before": {
+        "expected": 105,
+        "tolerance": 16,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 29,
+      "route": "BLOCKED/build-review-context/refactor",
+      "metric": "file_hash:file",
+      "observed": 89,
+      "before": {
+        "expected": 34,
+        "tolerance": 0,
+        "constantWithEvents": true,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 29,
+      "route": "BLOCKED/build-review-context/refactor",
+      "metric": "file_probes:lstatSync",
+      "observed": 1350,
+      "before": {
+        "expected": 963,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 29,
+      "route": "BLOCKED/build-review-context/refactor",
+      "metric": "file_probes:statSync",
+      "observed": 1244,
+      "before": {
+        "expected": 830,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 29,
+      "route": "BLOCKED/build-review-context/refactor",
+      "metric": "file_probes:realpathSync.native",
+      "observed": 1084,
+      "before": {
+        "expected": 999,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 29,
+      "route": "BLOCKED/build-review-context/refactor",
+      "metric": "file_probes:fstatSync",
+      "observed": 197,
+      "before": {
+        "expected": 140,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 30,
+      "route": "BLOCKED/record-review-routing/refactor",
+      "metric": "file_hash:file",
+      "observed": 93,
+      "before": {
+        "expected": 42,
+        "tolerance": 0,
+        "constantWithEvents": true,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 30,
+      "route": "BLOCKED/record-review-routing/refactor",
+      "metric": "file_probes:lstatSync",
+      "observed": 1408,
+      "before": {
+        "expected": 1050,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 30,
+      "route": "BLOCKED/record-review-routing/refactor",
+      "metric": "file_probes:statSync",
+      "observed": 1295,
+      "before": {
+        "expected": 977,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 30,
+      "route": "BLOCKED/record-review-routing/refactor",
+      "metric": "file_probes:realpathSync.native",
+      "observed": 1119,
+      "before": {
+        "expected": 1102,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 30,
+      "route": "BLOCKED/record-review-routing/refactor",
+      "metric": "file_probes:fstatSync",
+      "observed": 211,
+      "before": {
+        "expected": 164,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 31,
+      "route": "BLOCKED/prepare-reviewer-launch/refactor",
+      "metric": "file_hash:file",
+      "observed": 93,
+      "before": {
+        "expected": 42,
+        "tolerance": 0,
+        "constantWithEvents": true,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 31,
+      "route": "BLOCKED/prepare-reviewer-launch/refactor",
+      "metric": "file_probes:lstatSync",
+      "observed": 1408,
+      "before": {
+        "expected": 1050,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 31,
+      "route": "BLOCKED/prepare-reviewer-launch/refactor",
+      "metric": "file_probes:statSync",
+      "observed": 1295,
+      "before": {
+        "expected": 977,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 31,
+      "route": "BLOCKED/prepare-reviewer-launch/refactor",
+      "metric": "file_probes:realpathSync.native",
+      "observed": 1119,
+      "before": {
+        "expected": 1102,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 31,
+      "route": "BLOCKED/prepare-reviewer-launch/refactor",
+      "metric": "file_probes:fstatSync",
+      "observed": 211,
+      "before": {
+        "expected": 164,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 32,
+      "route": "BLOCKED/record-reviewer-delegation-started/refactor",
+      "metric": "file_hash:file",
+      "observed": 95,
+      "before": {
+        "expected": 44,
+        "tolerance": 0,
+        "constantWithEvents": true,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 32,
+      "route": "BLOCKED/record-reviewer-delegation-started/refactor",
+      "metric": "file_probes:lstatSync",
+      "observed": 1431,
+      "before": {
+        "expected": 1092,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 32,
+      "route": "BLOCKED/record-reviewer-delegation-started/refactor",
+      "metric": "file_probes:statSync",
+      "observed": 1330,
+      "before": {
+        "expected": 1009,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 32,
+      "route": "BLOCKED/record-reviewer-delegation-started/refactor",
+      "metric": "file_probes:fstatSync",
+      "observed": 215,
+      "before": {
+        "expected": 170,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 33,
+      "route": "BLOCKED/complete-reviewer-launch/refactor",
+      "metric": "file_hash:file",
+      "observed": 95,
+      "before": {
+        "expected": 44,
+        "tolerance": 0,
+        "constantWithEvents": true,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 33,
+      "route": "BLOCKED/complete-reviewer-launch/refactor",
+      "metric": "file_probes:lstatSync",
+      "observed": 1436,
+      "before": {
+        "expected": 1087,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 33,
+      "route": "BLOCKED/complete-reviewer-launch/refactor",
+      "metric": "file_probes:statSync",
+      "observed": 1342,
+      "before": {
+        "expected": 1009,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 33,
+      "route": "BLOCKED/complete-reviewer-launch/refactor",
+      "metric": "file_probes:realpathSync.native",
+      "observed": 1151,
+      "before": {
+        "expected": 1147,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 33,
+      "route": "BLOCKED/complete-reviewer-launch/refactor",
+      "metric": "file_probes:fstatSync",
+      "observed": 215,
+      "before": {
+        "expected": 170,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 34,
+      "route": "BLOCKED/record-review-result/refactor",
+      "metric": "file_hash:file",
+      "observed": 96,
+      "before": {
+        "expected": 44,
+        "tolerance": 0,
+        "constantWithEvents": true,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 34,
+      "route": "BLOCKED/record-review-result/refactor",
+      "metric": "file_probes:lstatSync",
+      "observed": 1440,
+      "before": {
+        "expected": 1106,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 34,
+      "route": "BLOCKED/record-review-result/refactor",
+      "metric": "file_probes:statSync",
+      "observed": 1350,
+      "before": {
+        "expected": 1013,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "profile": "stack-four-lane-task",
+      "scenario": "stack-polyglot-python-go-a8-generic",
+      "step": 34,
+      "route": "BLOCKED/record-review-result/refactor",
+      "metric": "file_probes:fstatSync",
+      "observed": 217,
+      "before": {
+        "expected": 172,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "stack-go-a5-generic",
+      "outcome": "done",
+      "commands": [
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"2\" --task-summary \"Observe a failing order regression, repair only its source, and rerun the selection.\" --provider \"Codex\" --repo-root \".\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/go.cmd\\\" \\\"test\\\" \\\"-json\\\" \\\"./orders\\\" \\\"-run\\\" \\\"^TestTaskContract$\\\"\" \"--task-id\" \"T-WALK\" \"--reason\" \"T-WALK verifies Observe a failing order regression, repair only its source, and rerun the selection.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"orders/service_test.go\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"orders/service_test.go\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/go.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for orders/service_test.go.\\\"}]}\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/go.cmd\\\" \\\"test\\\" \\\"-json\\\" \\\"./orders\\\" \\\"-run\\\" \\\"^TestTaskContract$\\\"\" \"--task-id\" \"T-WALK\" \"--reason\" \"T-WALK verifies Observe a failing order regression, repair only its source, and rerun the selection.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"orders/service_test.go\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"orders/service_test.go\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/go.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for orders/service_test.go.\\\"}]}\""
+      ]
+    },
+    {
+      "id": "stack-go-a9-generic",
+      "outcome": "done",
+      "commands": [
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"3\" --task-summary \"Split order and partner contracts into two native children and audit the parent.\" --provider \"Codex\" --repo-root \".\"",
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK-1\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"3\" --task-summary \"Implement independent orders behavior\" --provider \"Codex\" --repo-root \".\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/go.cmd\\\" \\\"test\\\" \\\"-json\\\" \\\"./orders\\\" \\\"-run\\\" \\\"^TestTaskContract$\\\"\" \"--task-id\" \"T-WALK-1\" \"--reason\" \"T-WALK-1 verifies Split order and partner contracts into two native children and audit the parent.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"orders/service_test.go\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"orders/service_test.go\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/go.cmd\\\",\\\"reason\\\":\\\"T-WALK-1: this entrypoint verifies the declared task behavior for orders/service_test.go.\\\"}]}\"",
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK-2\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"3\" --task-summary \"Implement independent partners behavior\" --provider \"Codex\" --repo-root \".\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/go.cmd\\\" \\\"test\\\" \\\"-json\\\" \\\"./partners\\\" \\\"-run\\\" \\\"^TestTaskContract$\\\"\" \"--task-id\" \"T-WALK-2\" \"--reason\" \"T-WALK-2 verifies Split order and partner contracts into two native children and audit the parent.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"partners/service_test.go\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"partners/service_test.go\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/go.cmd\\\",\\\"reason\\\":\\\"T-WALK-2: this entrypoint verifies the declared task behavior for partners/service_test.go.\\\"}]}\""
+      ]
+    },
+    {
+      "id": "stack-cmake-a9-generic",
+      "outcome": "done",
+      "commands": [
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"3\" --task-summary \"Split order and partner contracts into two native children and audit the parent.\" --provider \"Codex\" --repo-root \".\"",
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK-1\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"3\" --task-summary \"Implement independent orders behavior\" --provider \"Codex\" --repo-root \".\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/ctest.cmd\\\" \\\"--test-dir\\\" \\\"out/build\\\" \\\"--output-on-failure\\\" \\\"-R\\\" \\\"^(order_test)$\\\"\" \"--task-id\" \"T-WALK-1\" \"--reason\" \"T-WALK-1 verifies Split order and partner contracts into two native children and audit the parent.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"tests/orders/order_test.cpp\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"tests/orders/order_test.cpp\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/ctest.cmd\\\",\\\"reason\\\":\\\"T-WALK-1: this entrypoint verifies the declared task behavior for tests/orders/order_test.cpp.\\\"}]}\"",
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK-2\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"3\" --task-summary \"Implement independent partners behavior\" --provider \"Codex\" --repo-root \".\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/ctest.cmd\\\" \\\"--test-dir\\\" \\\"out/build\\\" \\\"--output-on-failure\\\" \\\"-R\\\" \\\"^(partner_test)$\\\"\" \"--task-id\" \"T-WALK-2\" \"--reason\" \"T-WALK-2 verifies Split order and partner contracts into two native children and audit the parent.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"tests/partners/partner_test.cpp\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"tests/partners/partner_test.cpp\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/ctest.cmd\\\",\\\"reason\\\":\\\"T-WALK-2: this entrypoint verifies the declared task behavior for tests/partners/partner_test.cpp.\\\"}]}\""
+      ]
+    },
+    {
+      "id": "stack-polyglot-python-go-a9-generic",
+      "outcome": "done",
+      "commands": [
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"3\" --task-summary \"Split order and partner contracts into two native children and audit the parent.\" --provider \"Codex\" --repo-root \".\"",
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK-1\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"3\" --task-summary \"Implement independent backend behavior\" --provider \"Codex\" --repo-root \".\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/pytest.cmd\\\" \\\"-q\\\" \\\"tests/orders/test_service.py::test_task_contract\\\"\" \"--task-id\" \"T-WALK-1\" \"--reason\" \"T-WALK-1 verifies Split order and partner contracts into two native children and audit the parent.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"tests/orders/test_service.py\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"tests/orders/test_service.py\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/pytest.cmd\\\",\\\"reason\\\":\\\"T-WALK-1: this entrypoint verifies the declared task behavior for tests/orders/test_service.py.\\\"}]}\"",
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK-2\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"3\" --task-summary \"Implement independent frontend behavior\" --provider \"Codex\" --repo-root \".\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/go.cmd\\\" \\\"test\\\" \\\"-json\\\" \\\"./orders\\\" \\\"-run\\\" \\\"^TestTaskContract$\\\"\" \"--task-id\" \"T-WALK-2\" \"--reason\" \"T-WALK-2 verifies Split order and partner contracts into two native children and audit the parent.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"orders/service_test.go\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"orders/service_test.go\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/go.cmd\\\",\\\"reason\\\":\\\"T-WALK-2: this entrypoint verifies the declared task behavior for orders/service_test.go.\\\"}]}\""
+      ]
+    },
+    {
+      "id": "stack-go-a1-generic",
+      "outcome": "done",
+      "commands": [
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"2\" --task-summary \"Change order total behavior and guard the result.\" --provider \"Codex\" --repo-root \".\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/go.cmd\\\" \\\"test\\\" \\\"-json\\\" \\\"./orders\\\" \\\"-run\\\" \\\"^TestTaskContract$\\\"\" \"--task-id\" \"T-WALK\" \"--reason\" \"T-WALK verifies Change order total behavior and guard the result.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"orders/service_test.go\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"orders/service_test.go\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/go.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for orders/service_test.go.\\\"}]}\""
+      ]
+    },
+    {
+      "id": "stack-go-a2-generic",
+      "outcome": "done",
+      "commands": [
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"2\" --task-summary \"Add the zero-order-total boundary case without changing production.\" --provider \"Codex\" --repo-root \".\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/go.cmd\\\" \\\"test\\\" \\\"-json\\\" \\\"./orders\\\" \\\"-run\\\" \\\"^TestTaskContract$\\\"\" \"--task-id\" \"T-WALK\" \"--reason\" \"T-WALK verifies Add the zero-order-total boundary case without changing production.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"orders/service_test.go\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"orders/service_test.go\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/go.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for orders/service_test.go.\\\"}]}\""
+      ]
+    },
+    {
+      "id": "stack-cmake-a1-generic",
+      "outcome": "done",
+      "commands": [
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"2\" --task-summary \"Change order total behavior and guard the result.\" --provider \"Codex\" --repo-root \".\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/ctest.cmd\\\" \\\"--test-dir\\\" \\\"out/build\\\" \\\"--output-on-failure\\\" \\\"-R\\\" \\\"^(order_test)$\\\"\" \"--task-id\" \"T-WALK\" \"--reason\" \"T-WALK verifies Change order total behavior and guard the result.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"tests/orders/order_test.cpp\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"tests/orders/order_test.cpp\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/ctest.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for tests/orders/order_test.cpp.\\\"}]}\""
+      ]
+    },
+    {
+      "id": "stack-cmake-a2-generic",
+      "outcome": "done",
+      "commands": [
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"2\" --task-summary \"Add the zero-order-total boundary case without changing production.\" --provider \"Codex\" --repo-root \".\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/ctest.cmd\\\" \\\"--test-dir\\\" \\\"out/build\\\" \\\"--output-on-failure\\\" \\\"-R\\\" \\\"^(order_test)$\\\"\" \"--task-id\" \"T-WALK\" \"--reason\" \"T-WALK verifies Add the zero-order-total boundary case without changing production.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"tests/orders/order_test.cpp\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"tests/orders/order_test.cpp\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/ctest.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for tests/orders/order_test.cpp.\\\"}]}\""
+      ]
+    },
+    {
+      "id": "stack-polyglot-python-go-a1-generic",
+      "outcome": "done",
+      "commands": [
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"2\" --task-summary \"Change order total behavior and guard the result.\" --provider \"Codex\" --repo-root \".\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/pytest.cmd\\\" \\\"-q\\\" \\\"tests/orders/test_service.py::test_task_contract\\\" && \\\"./tools/go.cmd\\\" \\\"test\\\" \\\"-json\\\" \\\"./orders\\\" \\\"-run\\\" \\\"^TestTaskContract$\\\"\" \"--task-id\" \"T-WALK\" \"--reason\" \"T-WALK verifies Change order total behavior and guard the result.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"tests/orders/test_service.py\" \"--focused-required-test-path\" \"orders/service_test.go\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"tests/orders/test_service.py\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/pytest.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for tests/orders/test_service.py.\\\"},{\\\"path\\\":\\\"orders/service_test.go\\\",\\\"invocation\\\":1,\\\"entrypoint\\\":\\\"./tools/go.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for orders/service_test.go.\\\"}]}\""
+      ]
+    },
+    {
+      "id": "stack-polyglot-python-go-a2-generic",
+      "outcome": "done",
+      "commands": [
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"2\" --task-summary \"Add the zero-order-total boundary case without changing production.\" --provider \"Codex\" --repo-root \".\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/pytest.cmd\\\" \\\"-q\\\" \\\"tests/orders/test_service.py::test_task_contract\\\" && \\\"./tools/go.cmd\\\" \\\"test\\\" \\\"-json\\\" \\\"./orders\\\" \\\"-run\\\" \\\"^TestTaskContract$\\\"\" \"--task-id\" \"T-WALK\" \"--reason\" \"T-WALK verifies Add the zero-order-total boundary case without changing production.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"tests/orders/test_service.py\" \"--focused-required-test-path\" \"orders/service_test.go\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"tests/orders/test_service.py\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/pytest.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for tests/orders/test_service.py.\\\"},{\\\"path\\\":\\\"orders/service_test.go\\\",\\\"invocation\\\":1,\\\"entrypoint\\\":\\\"./tools/go.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for orders/service_test.go.\\\"}]}\""
+      ]
+    },
+    {
+      "id": "stack-go-a3-generic",
+      "outcome": "done",
+      "commands": [
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"2\" --task-summary \"Change order total and partner isolation together; both components must pass.\" --provider \"Codex\" --repo-root \".\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/go.cmd\\\" \\\"test\\\" \\\"-json\\\" \\\"./orders\\\" \\\"./partners\\\" \\\"-run\\\" \\\"^TestTaskContract$\\\"\" \"--task-id\" \"T-WALK\" \"--reason\" \"T-WALK verifies Change order total and partner isolation together; both components must pass.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"orders/service_test.go\" \"--focused-required-test-path\" \"partners/service_test.go\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"orders/service_test.go\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/go.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for orders/service_test.go.\\\"},{\\\"path\\\":\\\"partners/service_test.go\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/go.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for partners/service_test.go.\\\"}]}\""
+      ]
+    },
+    {
+      "id": "stack-go-a6-generic",
+      "outcome": "done",
+      "commands": [
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"2\" --task-summary \"Retain an unattributed failed broad run, narrow to task targets and materialize debt.\" --provider \"Codex\" --repo-root \".\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/go.cmd\\\" \\\"test\\\" \\\"./...\\\"\" \"--task-id\" \"T-WALK\" \"--reason\" \"T-WALK verifies Retain an unattributed failed broad run, narrow to task targets and materialize debt.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"orders/service_test.go\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"orders/service_test.go\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/go.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for orders/service_test.go.\\\"}]}\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/go.cmd\\\" \\\"test\\\" \\\"-json\\\" \\\"./orders\\\" \\\"-run\\\" \\\"^TestTaskContract$\\\"\" \"--task-id\" \"T-WALK\" \"--reason\" \"T-WALK verifies Retain an unattributed failed broad run, narrow to task targets and materialize debt.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"orders/service_test.go\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"orders/service_test.go\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/go.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for orders/service_test.go.\\\"}]}\""
+      ]
+    },
+    {
+      "id": "stack-cmake-a3-generic",
+      "outcome": "done",
+      "commands": [
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"2\" --task-summary \"Change order total and partner isolation together; both components must pass.\" --provider \"Codex\" --repo-root \".\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/ctest.cmd\\\" \\\"--test-dir\\\" \\\"out/build\\\" \\\"--output-on-failure\\\" \\\"-R\\\" \\\"^(order_test|partner_test)$\\\"\" \"--task-id\" \"T-WALK\" \"--reason\" \"T-WALK verifies Change order total and partner isolation together; both components must pass.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"tests/orders/order_test.cpp\" \"--focused-required-test-path\" \"tests/partners/partner_test.cpp\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"tests/orders/order_test.cpp\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/ctest.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for tests/orders/order_test.cpp.\\\"},{\\\"path\\\":\\\"tests/partners/partner_test.cpp\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/ctest.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for tests/partners/partner_test.cpp.\\\"}]}\""
+      ]
+    },
+    {
+      "id": "stack-cmake-a5-generic",
+      "outcome": "done",
+      "commands": [
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"2\" --task-summary \"Observe a failing order regression, repair only its source, and rerun the selection.\" --provider \"Codex\" --repo-root \".\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/ctest.cmd\\\" \\\"--test-dir\\\" \\\"out/build\\\" \\\"--output-on-failure\\\" \\\"-R\\\" \\\"^(order_test)$\\\"\" \"--task-id\" \"T-WALK\" \"--reason\" \"T-WALK verifies Observe a failing order regression, repair only its source, and rerun the selection.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"tests/orders/order_test.cpp\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"tests/orders/order_test.cpp\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/ctest.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for tests/orders/order_test.cpp.\\\"}]}\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/ctest.cmd\\\" \\\"--test-dir\\\" \\\"out/build\\\" \\\"--output-on-failure\\\" \\\"-R\\\" \\\"^(order_test)$\\\"\" \"--task-id\" \"T-WALK\" \"--reason\" \"T-WALK verifies Observe a failing order regression, repair only its source, and rerun the selection.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"tests/orders/order_test.cpp\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"tests/orders/order_test.cpp\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/ctest.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for tests/orders/order_test.cpp.\\\"}]}\""
+      ]
+    },
+    {
+      "id": "stack-polyglot-python-go-a3-generic",
+      "outcome": "done",
+      "commands": [
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"2\" --task-summary \"Change order total and partner isolation together; both components must pass.\" --provider \"Codex\" --repo-root \".\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/pytest.cmd\\\" \\\"-q\\\" \\\"tests/orders/test_service.py::test_task_contract\\\" && \\\"./tools/go.cmd\\\" \\\"test\\\" \\\"-json\\\" \\\"./orders\\\" \\\"-run\\\" \\\"^TestTaskContract$\\\"\" \"--task-id\" \"T-WALK\" \"--reason\" \"T-WALK verifies Change order total and partner isolation together; both components must pass.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"tests/orders/test_service.py\" \"--focused-required-test-path\" \"orders/service_test.go\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"tests/orders/test_service.py\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/pytest.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for tests/orders/test_service.py.\\\"},{\\\"path\\\":\\\"orders/service_test.go\\\",\\\"invocation\\\":1,\\\"entrypoint\\\":\\\"./tools/go.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for orders/service_test.go.\\\"}]}\""
+      ]
+    },
+    {
+      "id": "stack-polyglot-python-go-a5-generic",
+      "outcome": "done",
+      "commands": [
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"2\" --task-summary \"Observe a failing order regression, repair only its source, and rerun the selection.\" --provider \"Codex\" --repo-root \".\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/pytest.cmd\\\" \\\"-q\\\" \\\"tests/orders/test_service.py::test_task_contract\\\" && \\\"./tools/go.cmd\\\" \\\"test\\\" \\\"-json\\\" \\\"./orders\\\" \\\"-run\\\" \\\"^TestTaskContract$\\\"\" \"--task-id\" \"T-WALK\" \"--reason\" \"T-WALK verifies Observe a failing order regression, repair only its source, and rerun the selection.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"tests/orders/test_service.py\" \"--focused-required-test-path\" \"orders/service_test.go\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"tests/orders/test_service.py\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/pytest.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for tests/orders/test_service.py.\\\"},{\\\"path\\\":\\\"orders/service_test.go\\\",\\\"invocation\\\":1,\\\"entrypoint\\\":\\\"./tools/go.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for orders/service_test.go.\\\"}]}\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/pytest.cmd\\\" \\\"-q\\\" \\\"tests/orders/test_service.py::test_task_contract\\\" && \\\"./tools/go.cmd\\\" \\\"test\\\" \\\"-json\\\" \\\"./orders\\\" \\\"-run\\\" \\\"^TestTaskContract$\\\"\" \"--task-id\" \"T-WALK\" \"--reason\" \"T-WALK verifies Observe a failing order regression, repair only its source, and rerun the selection.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"tests/orders/test_service.py\" \"--focused-required-test-path\" \"orders/service_test.go\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"tests/orders/test_service.py\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/pytest.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for tests/orders/test_service.py.\\\"},{\\\"path\\\":\\\"orders/service_test.go\\\",\\\"invocation\\\":1,\\\"entrypoint\\\":\\\"./tools/go.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for orders/service_test.go.\\\"}]}\""
+      ]
+    },
+    {
+      "id": "stack-go-a8-generic",
+      "outcome": "done",
+      "commands": [
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"2\" --task-summary \"Harden partner authorization and refactor access checks; resolve a focused test finding.\" --provider \"Codex\" --repo-root \".\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/go.cmd\\\" \\\"test\\\" \\\"-json\\\" \\\"./orders\\\" \\\"./partners\\\" \\\"-run\\\" \\\"^TestTaskContract$\\\"\" \"--task-id\" \"T-WALK\" \"--reason\" \"T-WALK verifies Harden partner authorization and refactor access checks; resolve a focused test finding.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"orders/service_test.go\" \"--focused-required-test-path\" \"partners/service_test.go\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"orders/service_test.go\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/go.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for orders/service_test.go.\\\"},{\\\"path\\\":\\\"partners/service_test.go\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/go.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for partners/service_test.go.\\\"}]}\""
+      ]
+    },
+    {
+      "id": "stack-cmake-a6-generic",
+      "outcome": "done",
+      "commands": [
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"2\" --task-summary \"Retain an unattributed failed broad run, narrow to task targets and materialize debt.\" --provider \"Codex\" --repo-root \".\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/ctest.cmd\\\" \\\"--test-dir\\\" \\\"out/build\\\" \\\"--output-on-failure\\\"\" \"--task-id\" \"T-WALK\" \"--reason\" \"T-WALK verifies Retain an unattributed failed broad run, narrow to task targets and materialize debt.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"tests/orders/order_test.cpp\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"tests/orders/order_test.cpp\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/ctest.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for tests/orders/order_test.cpp.\\\"}]}\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/ctest.cmd\\\" \\\"--test-dir\\\" \\\"out/build\\\" \\\"--output-on-failure\\\" \\\"-R\\\" \\\"^(order_test)$\\\"\" \"--task-id\" \"T-WALK\" \"--reason\" \"T-WALK verifies Retain an unattributed failed broad run, narrow to task targets and materialize debt.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"tests/orders/order_test.cpp\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"tests/orders/order_test.cpp\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/ctest.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for tests/orders/order_test.cpp.\\\"}]}\""
+      ]
+    },
+    {
+      "id": "stack-cmake-a8-generic",
+      "outcome": "done",
+      "commands": [
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"2\" --task-summary \"Harden partner authorization and refactor access checks; resolve a focused test finding.\" --provider \"Codex\" --repo-root \".\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/ctest.cmd\\\" \\\"--test-dir\\\" \\\"out/build\\\" \\\"--output-on-failure\\\" \\\"-R\\\" \\\"^(order_test|partner_test)$\\\"\" \"--task-id\" \"T-WALK\" \"--reason\" \"T-WALK verifies Harden partner authorization and refactor access checks; resolve a focused test finding.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"tests/orders/order_test.cpp\" \"--focused-required-test-path\" \"tests/partners/partner_test.cpp\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"tests/orders/order_test.cpp\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/ctest.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for tests/orders/order_test.cpp.\\\"},{\\\"path\\\":\\\"tests/partners/partner_test.cpp\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/ctest.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for tests/partners/partner_test.cpp.\\\"}]}\""
+      ]
+    },
+    {
+      "id": "stack-polyglot-python-go-a6-generic",
+      "outcome": "done",
+      "commands": [
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"2\" --task-summary \"Retain an unattributed failed broad run, narrow to task targets and materialize debt.\" --provider \"Codex\" --repo-root \".\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/pytest.cmd\\\" && \\\"./tools/go.cmd\\\" \\\"test\\\" \\\"./...\\\"\" \"--task-id\" \"T-WALK\" \"--reason\" \"T-WALK verifies Retain an unattributed failed broad run, narrow to task targets and materialize debt.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"tests/orders/test_service.py\" \"--focused-required-test-path\" \"orders/service_test.go\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"tests/orders/test_service.py\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/pytest.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for tests/orders/test_service.py.\\\"},{\\\"path\\\":\\\"orders/service_test.go\\\",\\\"invocation\\\":1,\\\"entrypoint\\\":\\\"./tools/go.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for orders/service_test.go.\\\"}]}\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/pytest.cmd\\\" \\\"-q\\\" \\\"tests/orders/test_service.py::test_task_contract\\\" && \\\"./tools/go.cmd\\\" \\\"test\\\" \\\"-json\\\" \\\"./orders\\\" \\\"-run\\\" \\\"^TestTaskContract$\\\"\" \"--task-id\" \"T-WALK\" \"--reason\" \"T-WALK verifies Retain an unattributed failed broad run, narrow to task targets and materialize debt.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"tests/orders/test_service.py\" \"--focused-required-test-path\" \"orders/service_test.go\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"tests/orders/test_service.py\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/pytest.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for tests/orders/test_service.py.\\\"},{\\\"path\\\":\\\"orders/service_test.go\\\",\\\"invocation\\\":1,\\\"entrypoint\\\":\\\"./tools/go.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for orders/service_test.go.\\\"}]}\""
+      ]
+    },
+    {
+      "id": "stack-polyglot-python-go-a8-generic",
+      "outcome": "done",
+      "commands": [
+        "node garda-agent-orchestrator/bin/garda.js gate enter-task-mode --task-id \"T-WALK\" --entry-mode \"EXPLICIT_TASK_EXECUTION\" --requested-depth \"2\" --task-summary \"Harden partner authorization and refactor access checks; resolve a focused test finding.\" --provider \"Codex\" --repo-root \".\"",
+        "\"node\" \"garda-agent-orchestrator/bin/garda.js\" \"workflow\" \"set\" \"--task-test-command\" \"\\\"./tools/pytest.cmd\\\" \\\"-q\\\" \\\"tests/orders/test_service.py::test_task_contract\\\" && \\\"./tools/go.cmd\\\" \\\"test\\\" \\\"-json\\\" \\\"./orders\\\" \\\"-run\\\" \\\"^TestTaskContract$\\\"\" \"--task-id\" \"T-WALK\" \"--reason\" \"T-WALK verifies Harden partner authorization and refactor access checks; resolve a focused test finding.\" \"--target-root\" \".\" \"--focused-required-test-path\" \"tests/orders/test_service.py\" \"--focused-required-test-path\" \"orders/service_test.go\" \"--task-test-plan\" \"{\\\"targets\\\":[{\\\"path\\\":\\\"tests/orders/test_service.py\\\",\\\"invocation\\\":0,\\\"entrypoint\\\":\\\"./tools/pytest.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for tests/orders/test_service.py.\\\"},{\\\"path\\\":\\\"orders/service_test.go\\\",\\\"invocation\\\":1,\\\"entrypoint\\\":\\\"./tools/go.cmd\\\",\\\"reason\\\":\\\"T-WALK: this entrypoint verifies the declared task behavior for orders/service_test.go.\\\"}]}\""
+      ]
+    }
+  ]
+}

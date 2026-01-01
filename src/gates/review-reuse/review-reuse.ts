@@ -8,7 +8,8 @@ import * as childProcess from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DOMAIN_SCOPE_NAMES } from '../../core/domain-scope-contracts';
-import { declaredFileRole, isTestScopePath } from '../../core/file-role-bindings';
+import { bindTaskTestFileRoles, declaredFileRole, isTestScopePath } from '../../core/file-role-bindings';
+import { isClassifiedProductCodePath } from '../preflight/classify-change-scope-category';
 
 import { matchAnyRegex } from '../../gate-runtime/text-utils';
 import {
@@ -84,17 +85,18 @@ export function resolveReviewReuseClassificationConfig(
     repoRoot: string,
     explicitConfig?: ResolvedClassificationConfig
 ): ResolvedClassificationConfig {
-    if (explicitConfig) {
-        return explicitConfig;
-    }
     const profilePolicySnapshot = toRecord(preflight.profile_policy_snapshot);
     const reviewTriggerPolicy = toRecord(profilePolicySnapshot.review_trigger_policy);
-    return getClassificationConfig(
+    const config = explicitConfig ?? getClassificationConfig(
         repoRoot,
         Object.keys(reviewTriggerPolicy).length > 0
             ? { reviewTriggerPolicy: reviewTriggerPolicy as unknown as ReviewTriggerPolicy }
             : {}
     );
+    const targets = Array.isArray(preflight.declared_test_paths)
+        ? preflight.declared_test_paths.filter((file): file is string => typeof file === 'string') : [];
+    const additiveTargets = targets.filter(file => !isClassifiedProductCodePath(file, config));
+    return additiveTargets.length ? { ...config, file_roles: bindTaskTestFileRoles(config.file_roles, additiveTargets) } : config;
 }
 
 function toStringList(value: unknown): string[] {

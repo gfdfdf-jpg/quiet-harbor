@@ -1648,7 +1648,7 @@ describe('runUpdate', () => {
             assert.ok(compileSection.includes('.\\gradlew.bat clean testClasses --console=plain'));
             assert.ok(!/```bash\r?\nnpm run build\r?\n```/.test(compileSection));
             assert.ok(compileSection.includes('must be a compile/build/type-check command'));
-            assert.ok(compileSection.includes('Do not use full-suite test commands here'));
+            assert.ok(compileSection.includes('Do not use test commands here'));
 
             const workflowConfigPath = path.join(bundleRoot, 'live', 'config', 'workflow-config.json');
             const workflowConfig = JSON.parse(fs.readFileSync(workflowConfigPath, 'utf8')) as Record<string, unknown>;
@@ -1689,7 +1689,7 @@ describe('runUpdate', () => {
             assert.ok(compileSection.includes('npm run build'));
             assert.ok(!compileSection.includes('.\\gradlew.bat assemble'));
             assert.ok(compileSection.includes('must be a compile/build/type-check command'));
-            assert.ok(compileSection.includes('Do not use full-suite test commands here'));
+            assert.ok(compileSection.includes('Do not use test commands here'));
 
             const workflowConfigPath = path.join(bundleRoot, 'live', 'config', 'workflow-config.json');
             const workflowConfig = JSON.parse(fs.readFileSync(workflowConfigPath, 'utf8')) as Record<string, unknown>;

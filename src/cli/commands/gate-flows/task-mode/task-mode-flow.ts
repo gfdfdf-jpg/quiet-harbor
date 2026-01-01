@@ -1,3 +1,6 @@
+import { publishWorkspacePlannedFiles, workspacePlannedFilesDigest } from '../../../../core/workspace-planned-files';
+import { prepareNativeTaskEntryJson } from '../../../../core/task-entry-json';
+import { redactSecretText, serializeRedactedJson } from '../../../../core/redaction';
 import { assertProtectedTaskEntryStoreWritable } from '../../../../core/auth/protected-task-continuation';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -391,8 +394,14 @@ function runEnterTaskModeWithOwnershipLock(
         protectedPlannedFiles,
         workflowConfigPlannedFiles
     } = resolveTaskModeEntryScope(repoRoot, options.plannedChangedFiles);
+    const previousTaskMode = readImplementationTaskMode(repoRoot, taskId);
+    const preserveOwnershipBaseline = !!previousTaskMode && (
+        previousTaskMode.evidence_status !== 'EVIDENCE_FILE_MISSING' || !!previousTaskMode.timeline_artifact_path
+    );
+    const planSelection = selectTaskModePlan(repoRoot, taskId, String(options.planPath || '').trim(),
+        preserveOwnershipBaseline ? previousTaskMode?.plan ?? null : undefined);
     const currentDirtyWorkspaceBaseline = captureDirtyWorkspaceBaseline(
-        repoRoot, plannedChangedFiles, ownershipLock, { taskId, handle: taskPlanLock }
+        repoRoot, plannedChangedFiles, ownershipLock, { taskId, handle: taskPlanLock }, planSelection.plan?.scope_files
     );
     const orchestratorWork = parseBooleanOption(options.orchestratorWork, false);
     const workflowConfigWork = parseBooleanOption(options.workflowConfigWork, false);
@@ -431,10 +440,6 @@ function runEnterTaskModeWithOwnershipLock(
         validation_carry: capturePolicyValidationCarry(repoRoot, taskId)
     };
     const recoveryValidationCarry = approvedPolicyDigest === null ? capturePolicyValidationCarry(repoRoot, taskId, true) : null;
-    const previousTaskMode = readImplementationTaskMode(repoRoot, taskId);
-    const preserveOwnershipBaseline = !!previousTaskMode && (
-        previousTaskMode.evidence_status !== 'EVIDENCE_FILE_MISSING' || !!previousTaskMode.timeline_artifact_path
-    );
     const preservedScope = resolveTaskModeScopeUpgrade({
         repoRoot, taskId, artifactPath,
         requested: upgradeExistingTaskMode || preserveOwnershipBaseline,
@@ -445,15 +450,13 @@ function runEnterTaskModeWithOwnershipLock(
     });
     const scopeUpgrade = upgradeExistingTaskMode || activeTaskApproval ? preservedScope : null;
     const dirtyWorkspaceBaseline = preservedScope?.dirtyWorkspaceBaseline || currentDirtyWorkspaceBaseline;
-    const planSelection = selectTaskModePlan(repoRoot, taskId, String(options.planPath || '').trim(),
-        preserveOwnershipBaseline ? previousTaskMode?.plan ?? null : undefined);
 
     const equalFiles = (left: string[], right: string[]): boolean => JSON.stringify([...left].sort()) === JSON.stringify([...right].sort());
     const protectedContinuation = (upgradeExistingTaskMode || preserveOwnershipBaseline) && preservedScope && previousTaskMode
         && ['IN_PROGRESS', 'IN_REVIEW'].includes(String(readTaskQueueStatus(repoRoot, taskId)))
         && !String(options.operatorConfirmed || '').trim() && !String(options.operatorConfirmedAtUtc || '').trim()
         && previousTaskMode.orchestrator_work === orchestratorWork && previousTaskMode.workflow_config_work === workflowConfigWork
-        && previousTaskMode.provider === routingDecision.provider && previousTaskMode.task_summary === String(options.taskSummary || '')
+        && previousTaskMode.provider === routingDecision.provider && previousTaskMode.task_summary === redactSecretText(String(options.taskSummary || '').trim())
         && previousTaskMode.routed_to === routingDecision.routedTo
         && equalFiles(previousTaskMode.planned_changed_files, plannedChangedFiles)
         ? resolveProtectedTaskContinuation({ repoRoot, taskId, artifactPath, currentConfigHashes: workflowConfigFileHashes }) : null;
@@ -462,7 +465,8 @@ function runEnterTaskModeWithOwnershipLock(
         repoRoot,
         orchestratorRoot,
         taskId,
-        options: { ...options, provider: routingDecision.provider, routedTo: routingDecision.routedTo },
+        options: { ...options, taskSummary: redactSecretText(String(options.taskSummary || '').trim()),
+            provider: routingDecision.provider, routedTo: routingDecision.routedTo },
         plannedChangedFiles,
         protectedPlannedFiles,
         workflowConfigPlannedFiles,
@@ -594,7 +598,11 @@ function runEnterTaskModeWithOwnershipLock(
     if (orchestratorWork || workflowConfigWork) assertProtectedTaskEntryStoreWritable(repoRoot);
     // The pinned policy snapshot is large and is read on every navigation. Keep its
     // full redacted JSON and authenticated contents, without repeated indentation bytes.
-    writeReviewArtifactJson(artifactPath, taskModeArtifact, { compact: true });
+    const plannedSourceVisibilitySha256 = workspacePlannedFilesDigest(taskId,
+        [...plannedChangedFiles, ...(taskModeArtifact.plan?.scope_files ?? [])], taskModeArtifact.plan?.plan_sha256);
+    const nativeEntryJson = prepareNativeTaskEntryJson(taskModeArtifact);
+    const serializedNativeEntry = serializeRedactedJson(nativeEntryJson, 0);
+    writeReviewArtifactJson(artifactPath, nativeEntryJson, { compact: true });
 
     const metricsPath = options.metricsPath
         ? requireResolvedPath(resolvePathForWrite(options.metricsPath, repoRoot), 'MetricsPath')
@@ -668,6 +676,7 @@ function runEnterTaskModeWithOwnershipLock(
                 runtime_identity_violations: taskModeArtifact.runtime_identity_violations,
                 routed_to: taskModeArtifact.routed_to,
                 actor: taskModeArtifact.actor,
+                planned_source_visibility_sha256: plannedSourceVisibilitySha256,
                 plan_guided: !!taskModeArtifact.plan,
                 plan_path: taskModeArtifact.plan?.plan_path ?? null,
                 plan_sha256: taskModeArtifact.plan?.plan_sha256 ?? null,
@@ -738,7 +747,7 @@ function runEnterTaskModeWithOwnershipLock(
 
     try {
         if (orchestratorWork || workflowConfigWork) publishProtectedTaskContinuation({ repoRoot, taskId, artifactPath,
-            currentConfigHashes: workflowConfigFileHashes, expectedArtifact: taskModeArtifact,
+            currentConfigHashes: workflowConfigFileHashes, expectedArtifact: JSON.parse(serializedNativeEntry),
             operatorConfirmed: options.operatorConfirmed, operatorConfirmedAtUtc: options.operatorConfirmedAtUtc,
             previous: protectedContinuation });
     } catch (error) {
@@ -747,6 +756,10 @@ function runEnterTaskModeWithOwnershipLock(
             'Protected authority publication failed; task-mode artifact was invalidated.', { reason: getErrorMessage(error) });
         throw error;
     }
+
+    publishWorkspacePlannedFiles(repoRoot, taskId,
+        [...plannedChangedFiles, ...(taskModeArtifact.plan?.scope_files ?? [])], taskModeArtifact.plan?.plan_sha256,
+        gateHelpers.stringSha256(serializedNativeEntry) ?? '');
 
     if (routingDecision.provider && routingDecision.routedTo) {
         emitProviderRoutingEvent(

@@ -1,3 +1,4 @@
+import { readInvocationFileBytes } from '../../core/invocation-file-observation';
 import * as fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import * as path from 'node:path';
@@ -222,7 +223,7 @@ export function ruleFileContentSha256(repoRoot: string, ruleFile: string): strin
     const comparableCanonicalPath = process.platform === 'win32' ? canonicalPath.toLowerCase() : canonicalPath;
     if (comparablePath !== comparableCanonicalPath) return fileSha256(ruleFile);
     try {
-        const bytes = fs.readFileSync(ruleFile);
+        const bytes = readInvocationFileBytes(ruleFile);
         const header = GENERATED_MEMORY_HEADER_PATTERN.exec(bytes.toString('latin1'));
         const spanStart = header ? header[0].length - header[1].length : 0;
         const content = header ? Buffer.concat([

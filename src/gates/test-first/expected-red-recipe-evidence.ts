@@ -15,7 +15,9 @@ export function readRecipeExpectedRedObligations(options: {
     const cycle = native.events.slice(native.events.map(event => (countNextStepWork('visit:expected_red_recipe_event'), event.event_type)).lastIndexOf('TASK_MODE_ENTERED') + 1);
     const starts = new Map(cycle.filter(event => (countNextStepWork('visit:expected_red_recipe_event'), event.event_type === 'PROJECT_VALIDATION_STARTED'))
         .map(event => (countNextStepWork('visit:expected_red_recipe_event'), [event.details?.attempt_id, Number(event.integrity?.task_sequence)] as const)));
+    const relevantRecipes = new Set(current.map(obligation => obligation.recipe_id));
     const results = cycle.filter(event => (countNextStepWork('visit:expected_red_recipe_event'), event.event_type === 'PROJECT_VALIDATION_RESULTS_EVALUATED'))
+        .filter(event => relevantRecipes.has(String(event.details?.recipe_id)))
         .sort((left, right) => (countNextStepWork('visit:expected_red_recipe_event', 2),
             (starts.get(right.details?.attempt_id) ?? Infinity) - (starts.get(left.details?.attempt_id) ?? Infinity)
             || Number(right.integrity?.task_sequence) - Number(left.integrity?.task_sequence)));

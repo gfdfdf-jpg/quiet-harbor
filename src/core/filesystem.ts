@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import { ensureTrailingLineEnding, normalizeLineEndings } from './line-endings';
+import { readInvocationTextFile } from './invocation-file-observation';
 
 export interface WriteTextFileOptions {
     newline?: string;
@@ -32,7 +33,7 @@ export function pathExists(targetPath: string): boolean {
 }
 
 export function readTextFile(filePath: string): string {
-    return fs.readFileSync(filePath, 'utf8');
+    return readInvocationTextFile(filePath);
 }
 
 function createAtomicTempPath(filePath: string): string {

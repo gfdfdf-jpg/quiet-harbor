@@ -198,7 +198,7 @@ describe('next-step full-suite repair child handoff', () => {
         assert.match(result.reason, /no longer matches durable timeout repair lifecycle evidence/);
     });
 
-    it('blocks direct child startup when the current repair artifact did not time out', () => {
+    it('requires parent materialization before task-owned failure repair child startup', () => {
         const repoRoot = makeTempRepo();
         const { fullSuitePath } = seedExhaustedTimeout(repoRoot);
         const childTaskIds = [`${TASK_ID}-F1`, `${TASK_ID}-F2`];
@@ -210,7 +210,7 @@ describe('next-step full-suite repair child handoff', () => {
         const result = resolveNextStep({ taskId: childTaskIds[0], repoRoot });
 
         assert.equal(result.next_gate, 'full-suite-repair-child-handoff');
-        assert.match(result.reason, /no longer matches durable timeout repair lifecycle evidence/);
+        assert.match(result.reason, /authenticated one-or-more-child repair handoff is not current.*materialization artifact is missing/);
     });
 
     it('uses the active reviews root for repair child handoff discovery', () => {

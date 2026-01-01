@@ -6,6 +6,7 @@ import * as fs from 'node:fs';
 import { completePathFileIdentitySync, lstatFileIdentitySync } from '../../core/file-stat';
 import * as path from 'node:path';
 import { inspectTrustedWindowsWriteAuthority, inspectTrustedWindowsDirectoryFilePair } from './windows-acl-authority';
+import { isWindowsAclEvidenceUnavailable } from './windows-acl-batch';
 export { windowsAclOutputHasExplicitWriteGrant } from './windows-acl-authority';
 
 import {
@@ -292,7 +293,8 @@ function isEventsRootBoundaryCurrent(boundary: EventsRootBoundary): boolean {
             && sameNodeIdentity(boundary.eventsRootIdentity, currentIdentity)
             && sameResolvedPath(currentRealPath, boundary.realEventsRoot)
             && sameResolvedPath(currentRealPath, boundary.eventsRoot);
-    } catch {
+    } catch (error: unknown) {
+        if (isWindowsAclEvidenceUnavailable(error)) throw error;
         return false;
     }
 }
@@ -515,6 +517,7 @@ function readAuthenticatedTaskTimelineBoundedJsonlTail<T>(
             throw new Error(`Task timeline snapshot changed while reading: ${timelinePath}`);
         }
     } catch (error: unknown) {
+        if (isWindowsAclEvidenceUnavailable(error)) throw error;
         if (error instanceof Error && error.message.includes('snapshot changed while reading')) {
             throw error;
         }
@@ -614,7 +617,8 @@ function captureTaskTimelineRead(snapshot: ActiveTaskTimelineReadSnapshot): Cach
             sha256State,
             memoizedValues: new Map()
         };
-    } catch {
+    } catch (error: unknown) {
+        if (isWindowsAclEvidenceUnavailable(error)) throw error;
         return invalidCachedRead();
     } finally {
         if (fileDescriptor != null) {
@@ -662,7 +666,8 @@ function revalidateCachedRead(snapshot: ActiveTaskTimelineReadSnapshot, cachedRe
         ) {
             invalidateCachedRead(cachedRead);
         }
-    } catch {
+    } catch (error: unknown) {
+        if (isWindowsAclEvidenceUnavailable(error)) throw error;
         invalidateCachedRead(cachedRead);
     }
 }
@@ -801,7 +806,8 @@ export function readTaskTimelineFileSnapshot(filePath: string): TaskTimelineFile
     let cachedRead: CachedTaskTimelineRead;
     try {
         cachedRead = getCachedRead(snapshot);
-    } catch {
+    } catch (error: unknown) {
+        if (isWindowsAclEvidenceUnavailable(error)) throw error;
         return { active: true, exists: false, valid: false, content: null, sha256: null };
     }
     return {
@@ -821,7 +827,8 @@ export function readTaskTimelineFileMetadataSnapshot(filePath: string): TaskTime
     let cachedRead: CachedTaskTimelineRead;
     try {
         cachedRead = getCachedRead(snapshot);
-    } catch {
+    } catch (error: unknown) {
+        if (isWindowsAclEvidenceUnavailable(error)) throw error;
         return { active: true, exists: false, valid: false, sha256: null };
     }
     return {
@@ -928,7 +935,8 @@ export function captureTaskTimelineAppendAuthority(filePath: string): TaskTimeli
             timelinePath,
             timelineIdentity: afterCapture
         };
-    } catch {
+    } catch (error: unknown) {
+        if (isWindowsAclEvidenceUnavailable(error)) throw error;
         return failChangedAppendAuthority(timelinePath);
     }
 }
@@ -969,7 +977,8 @@ function assertTaskTimelineAppendAuthorityCurrent(
         ) {
             return failChangedAppendAuthority(authority.timelinePath);
         }
-    } catch {
+    } catch (error: unknown) {
+        if (isWindowsAclEvidenceUnavailable(error)) throw error;
         return failChangedAppendAuthority(authority.timelinePath);
     }
 }
@@ -1514,5 +1523,8 @@ export function readTaskTimelineSnapshotByteLength(filePath: string): number | n
     try {
         const cached = getCachedRead(snapshot);
         return cached.state === 'valid' && cached.content ? cached.content.length : null;
-    } catch { return null; }
+    } catch (error: unknown) {
+        if (isWindowsAclEvidenceUnavailable(error)) throw error;
+        return null;
+    }
 }

@@ -12,7 +12,8 @@ import {
     assertInvocationDependenciesCurrent, createInvocationReadMemoKey, memoizeInvocationRead, withInvocationReadObservation
 } from '../../../src/core/invocation-read-observation';
 import { withNextStepMeasurement, type NextStepMeasurement } from '../../../src/core/next-step-measurement';
-import { observedInvocationValue, readInvocationPathObservation } from '../../../src/core/invocation-file-observation';
+import { observedInvocationValue, readInvocationPathObservation, readInvocationTextFile } from '../../../src/core/invocation-file-observation';
+import { readJsonFile } from '../../../src/core/json';
 
 function fixture(t: TestContext): string {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'garda-scope-observation-'));
@@ -35,6 +36,37 @@ function measured(action: () => void): NextStepMeasurement {
 function counts(measurement: NextStepMeasurement, prefix: string): number[] {
     return Object.entries(measurement.work).filter(([key]) => key.startsWith(prefix)).map(([, count]) => count);
 }
+
+test('JSON, text and authenticated consumers read each config payload once per invocation', t => {
+    const root = fixture(t);
+    const names = ['profiles.json', 'paths.json', 'isolation-mode.json', 'package.json', 'review-capabilities.json', 'workflow-config.json'];
+    for (const name of names) fs.writeFileSync(path.join(root, name), '{"version":1}');
+    for (let invocation = 0; invocation < 2; invocation++) {
+        const measurement = measured(() => {
+            for (let repeat = 0; repeat < 38; repeat++) for (const name of names) {
+                const file = path.join(root, name);
+                assert.equal(readInvocationTextFile(file), '{"version":1}');
+                const parsed = readJsonFile(file) as { version: number };
+                assert.equal(parsed.version, 1);
+                parsed.version = 99;
+                assert.equal(readObservedValidationFile(root, name).bytes.toString(), '{"version":1}');
+            }
+        });
+        assert.deepEqual(counts(measurement, 'payload_read:'), names.map(() => 1));
+    }
+    const file = path.join(root, names[0]);
+    assert.throws(() => withInvocationReadObservation(() => {
+        assert.deepEqual(readJsonFile(file), { version: 1 });
+        fs.writeFileSync(file, '{"version":2}');
+        assertInvocationDependenciesCurrent();
+    }), /changed/iu);
+    assert.deepEqual(readJsonFile(file), { version: 2 });
+    assert.throws(() => withInvocationReadObservation(() => {
+        readJsonFile(file);
+        replaceFile(file, '{"version":3}');
+    }), /changed/iu);
+    assert.deepEqual(withInvocationReadObservation(() => readJsonFile(file)), { version: 3 });
+});
 
 test('scope paths and all hash entrypoints share exactly 64 observations at one and five lanes', t => {
     const root = fixture(t);
@@ -206,6 +238,20 @@ test('rejects a replaced repository root even when its source bytes are unchange
         const first = getSafeWorktreePathState(root, 'source.txt');
         fs.renameSync(root, moved); fs.mkdirSync(root); fs.writeFileSync(path.join(root, 'source.txt'), 'unchanged');
         assert.deepEqual(getSafeWorktreePathState(root, 'source.txt'), first);
+    }), /Invocation file observation changed/);
+});
+
+test('validation bindings retain final ancestor and hard-link checks through shared observations', t => {
+    const container = fixture(t), root = path.join(container, 'repo'), moved = path.join(container, 'moved');
+    fs.mkdirSync(root); fs.writeFileSync(path.join(root, 'source.txt'), 'unchanged');
+    assert.throws(() => withInvocationReadObservation(() => {
+        const first = readObservedValidationFile(root, 'source.txt');
+        fs.renameSync(root, moved); fs.mkdirSync(root); fs.writeFileSync(path.join(root, 'source.txt'), 'unchanged');
+        assert.deepEqual(readObservedValidationFile(root, 'source.txt'), first);
+    }), /Invocation file observation changed/);
+    assert.throws(() => withInvocationReadObservation(() => {
+        readObservedValidationFile(root, 'source.txt');
+        fs.linkSync(path.join(root, 'source.txt'), path.join(root, 'alias.txt'));
     }), /Invocation file observation changed/);
 });
 

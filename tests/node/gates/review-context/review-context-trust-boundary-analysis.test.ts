@@ -18,6 +18,7 @@ import {
 } from '../../../../src/core/workflow-config';
 import {
     TRUST_BOUNDARY_ANALYSIS_RULE_ID,
+    assessBoundTrustBoundaryMatrix,
     assessTrustBoundaryAnalysisApplicability
 } from '../../../../src/core/trust-boundary-analysis';
 import {
@@ -46,7 +47,7 @@ import { readValidationReviewObligations } from '../../../../src/gates/review/va
 import { buildReviewContext, getRulePack } from '../../../../src/gates/review-context/build-review-context';
 import { getReviewContextContractViolations, buildReviewContextPreflightDiffExpectations } from '../../../../src/gates/review-context/review-context-contract';
 import { buildReviewCoverageContract } from '../../../../src/gates/review/review-coverage-ledger';
-import { buildAuthoritativeReviewCoverageContract, resolveAuthoritativeReviewValidationObligations } from '../../../../src/gates/review-context/review-context-coverage';
+import { buildAuthoritativeReviewCoverageContract, buildDeclaredReviewCoverageContract, resolveAuthoritativeReviewValidationObligations } from '../../../../src/gates/review-context/review-context-coverage';
 import { getReusedReviewCoverageContractViolations } from '../../../../src/gates/review-reuse/review-reuse-materialization';
 import { buildFocusedRecoveryCoverageContractSha256 } from '../../../../src/gates/next-step/next-step';
 import { buildReviewCoverageAuditSummary } from '../../../../src/gates/task-audit/task-audit-summary-review-coverage';
@@ -239,7 +240,7 @@ describe('review-context trust-boundary handoff', () => {
         try {
             assert.equal((await f.execute()).status, 'PASSED');
             assert.equal(f.publish().exitCode, 0);
-            const options = { ...f, preflight: JSON.parse(fs.readFileSync(f.preflightPath, 'utf8')), reviewType: 'code' };
+            const options = { ...f, preflight: JSON.parse(fs.readFileSync(f.preflightPath, 'utf8')), reviewType: 'test' };
             withInvocationReadObservation(() => {
                 const first = resolveAuthoritativeReviewValidationObligations(options);
                 assert.ok(first?.length);
@@ -431,6 +432,45 @@ describe('review-context trust-boundary handoff', () => {
         } finally { await f.cleanup(); }
     });
 
+    it('binds test edits and repeated execution only to the semantic lane while retaining trust-boundary evidence', async () => {
+        const f = declaredReviewFixture('security', { extraTest: true, passing: true });
+        const contracts = () => {
+            const preflight = JSON.parse(fs.readFileSync(f.preflightPath, 'utf8'));
+            return Object.fromEntries(['code', 'test', 'security', 'refactor'].map(reviewType => [reviewType,
+                buildDeclaredReviewCoverageContract({ ...f, reviewType, preflight })]));
+        };
+        try {
+            assert.equal((await f.execute()).status, 'PASSED');
+            assert.equal(f.publish().exitCode, 0);
+            const before = contracts(), boundary = f.read();
+            const boundaryBinding = assessBoundTrustBoundaryMatrix(boundary.matrix, { repoRoot: f.repoRoot }).source_bindings_sha256;
+            assert.equal(boundary.required, true);
+            assert.equal(before.code.validationObligations, undefined);
+            assert.ok(before.test.validationObligations?.length);
+            for (const edit of [false, true]) {
+                if (edit) {
+                    fs.appendFileSync(path.join(f.repoRoot, 'RootSuite'), '\nfocused boundary assertion');
+                    f.refresh();
+                    assert.notEqual(f.read().status, 'current', 'Changed trust-boundary evidence must be refreshed.');
+                    const preflight = JSON.parse(fs.readFileSync(f.preflightPath, 'utf8'));
+                    assert.equal(resolveAuthoritativeReviewValidationObligations({ ...f, preflight, reviewType: 'code' }), undefined);
+                    assert.throws(() => resolveAuthoritativeReviewValidationObligations({ ...f, preflight, reviewType: 'test' }));
+                }
+                assert.equal((await f.execute()).status, 'PASSED');
+                assert.equal(f.publish().exitCode, 0);
+                const after = contracts();
+                for (const lane of ['code', 'security', 'refactor']) {
+                    assert.equal(after[lane].validationObligations, undefined, lane);
+                    assert.equal(after[lane].contract.contract_sha256, before[lane].contract.contract_sha256, lane);
+                }
+                assert.notEqual(after.test.contract.contract_sha256, before.test.contract.contract_sha256);
+            }
+            assert.equal(f.read().status, 'current');
+            assert.notEqual(assessBoundTrustBoundaryMatrix(f.read().matrix, { repoRoot: f.repoRoot }).source_bindings_sha256,
+                boundaryBinding);
+        } finally { await f.cleanup(); }
+    });
+
     it('rejects skipped lanes open findings risks and changed sources after accepted terminal coverage', async () => {
         const f = declaredReviewFixture('domain', { unchangedTarget: true, extraTest: true, passing: true });
         try {
@@ -447,7 +487,7 @@ describe('review-context trust-boundary handoff', () => {
                     reviewExecution: buildReviewRemediationReviewContract({ taskId: f.taskId, reviewType,
                         preflightSha256: fileSha256(f.preflightPath)!, fullReviewScope: scope.changedFiles }),
                     coverageContract: buildReviewCoverageContract({ reviewType, changedFiles: scope.changedFiles,
-                        categoryIds: scope.categoryIds, validationObligations: targets }) });
+                        categoryIds: scope.categoryIds, validationObligations: reviewType === 'test' ? targets : undefined }) });
                 artifacts[reviewType] = { content: fs.readFileSync(pkg.artifactPath, 'utf8'), receipt: pkg.receipt };
             }
             const options = { ...f, preflight, requiredReviews, artifacts };
@@ -460,7 +500,9 @@ describe('review-context trust-boundary handoff', () => {
             assert.deepEqual(getValidationTerminalViolations({ ...options, artifacts: reused }), []);
             const audit = buildReviewCoverageAuditSummary({ reviewsRoot, taskId: f.taskId, requiredReviews });
             assert.equal(audit.status, 'COMPLETE', JSON.stringify(audit));
-            assert.ok(getValidationTerminalViolations({ ...options, skipReviews: ['code'] }).some(v => /cannot be omitted or skipped/u.test(v)));
+            // This validator owns case semantics; the required-review gate still requires code review itself.
+            assert.deepEqual(getValidationTerminalViolations({ ...options, skipReviews: ['code'] }), []);
+            assert.ok(getValidationTerminalViolations({ ...options, skipReviews: ['test'] }).some(v => /cannot be omitted or skipped/u.test(v)));
             const report = JSON.parse(artifacts.test.content);
             const target = report.coverage_ledger.entries.find((entry: { obligation_id: string }) => entry.obligation_id.startsWith('VALIDATION-'));
             target.finding_ids = ['F-001'];
@@ -483,9 +525,10 @@ describe('review-context trust-boundary handoff', () => {
             assert.equal(f.phases().obligations[0].result_status, 'UNRESOLVED');
             assert.ok(f.phases().obligations[0].case_execution);
             const missingSemantics = (messages: string[]) => {
-                for (const lane of ['code', 'test']) assert.ok(messages.some(message => message.includes(
-                    `Declared validation terminal ${lane}: independent semantic report is missing or unreadable.`
+                assert.ok(messages.some(message => message.includes(
+                    'Declared validation terminal test: independent semantic report is missing or unreadable.'
                 )), messages.join('\n'));
+                assert.ok(!messages.some(message => message.includes('Declared validation terminal code:')));
             };
             const preflight = JSON.parse(fs.readFileSync(f.preflightPath, 'utf8'));
             const reviewsRoot = path.join(f.orchestratorRoot, 'runtime/reviews');
@@ -504,8 +547,8 @@ describe('review-context trust-boundary handoff', () => {
                 { status: 'PASSED', outcome: 'PASS', preflight_path: f.preflightPath, violations: [] });
             const audit = buildReviewCoverageAuditSummary({ reviewsRoot, taskId: f.taskId, requiredReviews: required });
             assert.equal(audit.status, 'INCOMPLETE');
-            for (const lane of ['code', 'test']) assert.ok(audit.visible_summary_line.includes(
-                `Declared validation terminal ${lane}: independent semantic coverage is not accepted.`
+            assert.ok(audit.visible_summary_line.includes(
+                'Declared validation terminal test: independent semantic coverage is not accepted.'
             ));
         } finally { await f.cleanup(); }
     });
@@ -595,7 +638,7 @@ describe('review-context trust-boundary handoff', () => {
                 reviewExecution: buildReviewRemediationReviewContract({ taskId: f.taskId, reviewType: 'code',
                     preflightSha256, fullReviewScope: codeScope.changedFiles }),
                 coverageContract: buildReviewCoverageContract({ reviewType: 'code', changedFiles: codeScope.changedFiles,
-                    categoryIds: codeScope.categoryIds, validationObligations: current.targets }) });
+                    categoryIds: codeScope.categoryIds }) });
             const audit = () => buildReviewCoverageAuditSummary({ reviewsRoot, taskId: f.taskId, requiredReviews: { code: true, test: true } });
             publish(current.targets);
             const valid = audit(); assert.equal(valid.status, 'COMPLETE', JSON.stringify(valid));

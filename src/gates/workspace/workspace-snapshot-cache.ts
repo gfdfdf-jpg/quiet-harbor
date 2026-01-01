@@ -1,5 +1,6 @@
-import { readInvocationFileContent, readInvocationPathObservation } from '../../core/invocation-file-observation';
-import { createInvocationReadMemoKey, isInvocationReadObservationActive, memoizeInvocationRead } from '../../core/invocation-read-observation';
+import { captureWorkspacePlannedFiles, assertWorkspacePlannedFilesCurrent } from '../../core/workspace-planned-files';
+import { observedInvocationValue, readInvocationFileContent, readInvocationPathObservation } from '../../core/invocation-file-observation';
+import { createInvocationReadMemoKey, isInvocationReadObservationActive, memoizeInvocationRead, registerInvocationDependency } from '../../core/invocation-read-observation';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
@@ -18,7 +19,7 @@ import { normalizeGitChangeClassificationEvidence } from '../../core/git-change-
 import { canonicalPathList, pathListSha256 } from '../shared/canonical-path-list';
 
 // Bind excluded build outputs separately. Version 8 is reserved by feature/2.0.
-const CACHE_VERSION = 9;
+const CACHE_VERSION = 10;
 const CACHE_INTEGRITY_SCHEMA_VERSION = 3;
 const CACHE_RELATIVE_PATH = path.join('runtime', 'cache', 'workspace-snapshot.json');
 const CACHE_AUTH_KEY_RELATIVE_PATH = path.join('garda-agent-orchestrator', 'workspace-snapshot-cache.key');
@@ -48,6 +49,7 @@ export interface WorkspaceSnapshotCacheEntry {
         detection_source: string;
         include_untracked: boolean;
         explicit_changed_files_hash: string | null;
+        planned_source_visibility_sha256: string;
     };
     git_state: {
         head_sha: string | null;
@@ -115,7 +117,7 @@ function normalizeExplicitChangedFiles(explicitChangedFiles: string[]): string[]
     );
 }
 
-function normalizeExplicitRequestFiles(repoRoot: string, explicitChangedFiles: string[]): string[] {
+function normalizeExplicitRequestFiles(repoRoot: string, explicitChangedFiles: string[], cacheRelativePath?: () => string): string[] {
     return [...new Set(
         (explicitChangedFiles || [])
             .map((filePath) => normalizePath(filePath))
@@ -123,7 +125,7 @@ function normalizeExplicitRequestFiles(repoRoot: string, explicitChangedFiles: s
             .filter((filePath) => (
                 !!filePath
                 && filePath !== '.'
-                && !isInternalSnapshotCachePath(repoRoot, filePath)
+                && filePath !== (cacheRelativePath ? cacheRelativePath() : resolveSnapshotCacheRepoRelativePath(repoRoot))
             ))
     )].sort();
 }
@@ -254,6 +256,7 @@ function normalizeCacheParams(
     return {
         repo_root: normalizeRepoCacheKey(repoRoot),
         detection_source: normalizedSource,
+        planned_source_visibility_sha256: captureWorkspacePlannedFiles(repoRoot).digest,
         include_untracked: normalizedSource === 'git_staged_only' ? false : !!includeUntracked,
         explicit_changed_files_hash: stringSha256(normalizedExplicit.join('\n')) || ''
     };
@@ -378,14 +381,16 @@ function normalizeSnapshotRequestKey(
     repoRoot: string,
     detectionSource: string,
     includeUntracked: boolean,
-    explicitChangedFiles: string[]
+    explicitChangedFiles: string[],
+    cacheRelativePath: () => string
 ): string {
     const normalizedSource = String(detectionSource || 'git_auto').trim().toLowerCase() || 'git_auto';
     const effectiveIncludeUntracked = normalizedSource === 'git_staged_only' ? false : includeUntracked;
     return JSON.stringify([
         normalizedSource,
         effectiveIncludeUntracked,
-        normalizeExplicitRequestFiles(repoRoot, explicitChangedFiles)
+        normalizeExplicitRequestFiles(repoRoot, explicitChangedFiles, cacheRelativePath),
+        captureWorkspacePlannedFiles(repoRoot).digest
     ]);
 }
 
@@ -530,13 +535,38 @@ export function createWorkspaceSnapshotRequest(repoRoot: string): WorkspaceSnaps
         () => createWorkspaceSnapshotRequestUncached(repoRoot)).value;
 }
 
+/** Bind a native workspace generation only if a route actually consumes workspace facts.
+ * Once acquired, the ordinary immutable generation and every freshness check apply. */
+export function createDeferredWorkspaceSnapshotRequest(repoRoot: string, beforeRead: () => void): WorkspaceSnapshotRequest {
+    const resolvedRoot = path.resolve(repoRoot);
+    let retained: { request: WorkspaceSnapshotRequest } | { error: unknown } | undefined;
+    const current = (): WorkspaceSnapshotRequest => {
+        if (!retained) {
+            try { beforeRead(); retained = { request: createWorkspaceSnapshotRequest(resolvedRoot) }; }
+            catch (error) { retained = { error }; }
+        }
+        if ('error' in retained) throw retained.error;
+        return retained.request;
+    };
+    const request: WorkspaceSnapshotRequest = Object.freeze({ repo_root: normalizePath(resolvedRoot),
+        hasHeadChanges: (files: readonly string[]) => current().hasHeadChanges(files),
+        hasUnstagedChanges: (files: readonly string[]) => current().hasUnstagedChanges(files),
+        read: (source: string, untracked: boolean, files: string[]) => current().read(source, untracked, files) });
+    workspaceSnapshotRequestRoots.set(request, normalizeRepoCacheKey(resolvedRoot));
+    return request;
+}
+
 function createWorkspaceSnapshotRequestUncached(repoRoot: string): WorkspaceSnapshotRequest {
     const resolvedRepoRoot = path.resolve(repoRoot);
+    const plannedFiles = captureWorkspacePlannedFiles(resolvedRepoRoot);
+    // The cache location belongs to this read generation, just like the Git observation.
+    let cacheRelativePath: string | undefined;
     const entries = new Map<string, WorkspaceSnapshotRequestEntry>();
     const gitGeneration = createWorkspaceSnapshotGitGeneration(resolvedRepoRoot);
     const request = Object.freeze({
         repo_root: normalizePath(resolvedRepoRoot),
         hasHeadChanges(relativePaths: readonly string[]): boolean {
+            assertWorkspacePlannedFilesCurrent(resolvedRepoRoot, plannedFiles);
             const keys = new Set(relativePaths.map(normalizePath));
             // Reuse the fingerprint's invocation-memoized status read. A clean
             // scope needs no separate diff; dirty index/worktree layers can
@@ -549,6 +579,7 @@ function createWorkspaceSnapshotRequestUncached(repoRoot: string): WorkspaceSnap
             return !!diff.error || diff.timedOut || diff.status !== 0;
         },
         hasUnstagedChanges(relativePaths: readonly string[]): boolean {
+            assertWorkspacePlannedFilesCurrent(resolvedRepoRoot, plannedFiles);
             const keys = new Set(relativePaths.map(normalizePath));
             return gitGeneration.readClassification([]).changes.some(change => change.layer === 'unstaged'
                 && (!keys.size || keys.has(change.path) || (change.previousPath !== null && keys.has(change.previousPath))));
@@ -558,11 +589,13 @@ function createWorkspaceSnapshotRequestUncached(repoRoot: string): WorkspaceSnap
             includeUntracked: boolean,
             explicitChangedFiles: string[]
         ): ResolvedWorkspaceSnapshot {
+            assertWorkspacePlannedFilesCurrent(resolvedRepoRoot, plannedFiles);
             const key = normalizeSnapshotRequestKey(
                 resolvedRepoRoot,
                 detectionSource,
                 includeUntracked,
-                explicitChangedFiles
+                explicitChangedFiles,
+                () => cacheRelativePath ??= resolveSnapshotCacheRepoRelativePath(resolvedRepoRoot)
             );
             const existing = entries.get(key);
             if (existing) {
@@ -676,7 +709,8 @@ function authenticateWorkspaceSnapshotCacheGeneration(
     generation: WorkspaceSnapshotCacheGeneration
 ): void {
     if (
-        !workspaceSnapshotCacheGenerations.has(generation)
+        generation.params.planned_source_visibility_sha256 !== captureWorkspacePlannedFiles(repoRoot).digest
+        || !workspaceSnapshotCacheGenerations.has(generation)
         || generation.repoKey !== normalizeRepoCacheKey(repoRoot)
         || generation.workspaceIdentitySha256 !== buildWorkspaceIdentitySha256(
             generation.repoKey,
@@ -851,37 +885,95 @@ function forgetInProcessSnapshots(repoRoot: string): boolean {
  */
 const INVOCATION_HEAD = createInvocationReadMemoKey<string | null | undefined>('workspace-head');
 
+/** Deliberately only recognize the ordinary v0 files backend, not the entire Git config grammar.
+ * Includes, extensions, continuations and unfamiliar syntax must be interpreted by Git itself. */
+function hasOrdinaryFilesRefConfig(config: string | null): boolean {
+    if (!config) return false;
+    let section = '', formatSeen = false;
+    for (const raw of config.split(/\r?\n/u)) {
+        const line = raw.trim();
+        if (!line || /^[#;]/u.test(line)) continue;
+        const header = /^\[([a-zA-Z0-9.-]+)(?: "[^"\\]*")?\]$/u.exec(line);
+        if (header) {
+            section = header[1].toLowerCase();
+            if (['include', 'includeif', 'extensions'].includes(section)) return false;
+            continue;
+        }
+        const entry = /^([a-zA-Z][a-zA-Z0-9-]*)\s*=\s*([^\\]*)$/u.exec(line);
+        if (!section || !entry || !/^(?:[^"\\#;]*|"[^"\\]*")(?:\s*[#;].*)?$/u.test(entry[2])) return false;
+        if (section === 'core' && entry[1].toLowerCase() === 'repositoryformatversion') {
+            if (formatSeen || entry[2].trim() !== '0') return false;
+            formatSeen = true;
+        }
+    }
+    return formatSeen;
+}
+
+function isOrdinaryRefName(ref: string): boolean {
+    return /^refs\/[A-Za-z0-9_./-]+$/u.test(ref)
+        && !ref.split('/').some(part => !part || part.startsWith('.') || part.endsWith('.lock'))
+        && !ref.includes('..') && !ref.endsWith('.');
+}
+
 /** Reuse native file observations for the files ref backend; unknown backends retain live Git. */
 function readInvocationHead(repoRoot: string): string | null | undefined {
     if (!isInvocationReadObservationActive()) return undefined;
+    // These can redirect discovery, configuration or ref resolution. Do not approximate Git's rules.
+    const hasRedirect = () => Object.keys(process.env).some(key => /^GIT_(?:DIR|WORK_TREE|COMMON_DIR|NAMESPACE|CONFIG.*|OBJECT_DIRECTORY|CEILING_DIRECTORIES|DISCOVERY_ACROSS_FILESYSTEM)$/iu.test(key));
+    if (hasRedirect()) return undefined;
     return memoizeInvocationRead(INVOCATION_HEAD, path.resolve(repoRoot), () => {
+        registerInvocationDependency({}, () => {
+            if (hasRedirect()) throw new Error('Invocation Git discovery environment changed.');
+        });
         const text = (file: string): string | null => {
             readInvocationPathObservation(file);
-            try { return readInvocationFileContent(file, 16 * 1024 * 1024)?.copyBytes().toString('utf8').trim() ?? null; }
+            try { return readInvocationFileContent(file, 16 * 1024 * 1024)?.copyBytes().toString('utf8') ?? null; }
             catch (error) {
                 if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') return null;
                 throw error;
             }
         };
+        const singleLine = (file: string): string | null => text(file)?.replace(/\r?\n$/u, '') ?? null;
         try {
             const dotGit = path.join(path.resolve(repoRoot), '.git');
-            readInvocationPathObservation(dotGit);
-            if (fs.lstatSync(dotGit).isFile()) text(dotGit);
-            const gitDir = resolveGitMetadataDirectory(repoRoot);
+            const gitStat = observedInvocationValue(readInvocationPathObservation(dotGit)!.stat);
+            const pointer = gitStat.isFile() ? /^gitdir: ([^\r\n]+)$/u.exec(singleLine(dotGit) ?? '')?.[1] : null;
+            const gitDir = gitStat.isDirectory() ? dotGit : pointer ? path.resolve(repoRoot, pointer) : null;
             if (!gitDir) return undefined;
-            const common = text(path.join(gitDir, 'commondir'));
+            const common = singleLine(path.join(gitDir, 'commondir'));
+            if (common !== null && (!common || /[\r\n]/u.test(common))) return undefined;
             const commonDir = common ? path.resolve(gitDir, common) : gitDir;
-            let value = text(path.join(gitDir, 'HEAD'));
-            for (let depth = 0; depth < 8 && value; depth++) {
-                if (/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(value)) return value;
+            if (!hasOrdinaryFilesRefConfig(text(path.join(commonDir, 'config')))) return undefined;
+            for (const name of ['objects', 'refs']) {
+                if (!observedInvocationValue(readInvocationPathObservation(path.join(commonDir, name))!.stat).isDirectory()) return undefined;
+            }
+            for (const dir of new Set([gitDir, commonDir])) {
+                const table = readInvocationPathObservation(path.join(dir, 'reftable'))!;
+                if ('value' in table.stat || !('code' in (table.stat.error as NodeJS.ErrnoException))
+                    || (table.stat.error as NodeJS.ErrnoException).code !== 'ENOENT') return undefined;
+            }
+            let value = singleLine(path.join(gitDir, 'HEAD'));
+            for (let depth = 0; depth < 2 && value; depth++) {
+                if (/^[a-f0-9]{40}$/u.test(value)) return value;
+                if (depth !== 0) return undefined; // Let Git resolve symbolic-ref chains and their depth rules.
                 const ref = /^ref: (refs\/[A-Za-z0-9_./-]+)$/u.exec(value)?.[1];
-                if (!ref || ref.split('/').some(part => !part || part === '.' || part === '..') || ref.includes('..')) return undefined;
+                if (!ref || !isOrdinaryRefName(ref)) return undefined;
                 const refDir = /^refs\/(?:bisect|worktree|rewritten)\//u.test(ref) ? gitDir : commonDir;
-                value = text(path.join(refDir, ref));
-                if (!value) {
+                value = singleLine(path.join(refDir, ref));
+                if (value === null) {
                     const packed = text(path.join(commonDir, 'packed-refs'));
-                    value = packed?.split(/\r?\n/u).map(line => line.split(' '))
-                        .find(parts => parts.length === 2 && parts[1] === ref)?.[0] ?? null;
+                    const matches: string[] = [];
+                    let previous = '', canPeel = false;
+                    for (const line of packed?.replace(/\r?\n$/u, '').split(/\r?\n/u) ?? []) {
+                        if (line.startsWith('#')) continue;
+                        if (canPeel && /^\^[a-f0-9]{40}$/u.test(line)) { canPeel = false; continue; }
+                        const entry = /^([a-f0-9]{40}) (refs\/[^\s]+)$/u.exec(line);
+                        if (!entry || !isOrdinaryRefName(entry[2]) || entry[2] <= previous) return undefined;
+                        previous = entry[2]; canPeel = true;
+                        if (entry[2] === ref) matches.push(entry[1]);
+                    }
+                    if (matches.length !== 1) return undefined;
+                    value = matches[0];
                 }
             }
             return undefined;
@@ -892,17 +984,15 @@ function readInvocationHead(repoRoot: string): string | null | undefined {
 export function readHeadSha(repoRoot: string): string | null {
     const observed = readInvocationHead(repoRoot);
     if (observed !== undefined) return observed;
-    try {
-        const result = spawnSyncWithTimeout('git', ['-C', String(repoRoot), 'rev-parse', 'HEAD'], {
-            encoding: 'utf8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-            timeoutMs: DEFAULT_GIT_TIMEOUT_MS
-        });
-        if (result.status !== 0 || result.timedOut || result.error) return null;
-        return String(result.stdout || '').trim() || null;
-    } catch {
-        return null;
+    const args = ['-C', String(repoRoot), 'rev-parse', 'HEAD'];
+    const result = spawnSyncWithTimeout('git', args, {
+        encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeoutMs: DEFAULT_GIT_TIMEOUT_MS
+    });
+    if (result.status !== 0 || result.timedOut || result.error || result.signal
+        || typeof result.stdout !== 'string' || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})\r?\n?$/u.test(result.stdout)) {
+        throw new Error(formatGitFingerprintProbeFailure(repoRoot, args, result));
     }
+    return result.stdout.trim();
 }
 
 /**
@@ -988,7 +1078,7 @@ function readGitFingerprintStatusEntries(
         timeoutMs: DEFAULT_GIT_TIMEOUT_MS,
         maxBuffer: 10 * 1024 * 1024
     });
-    if (result.status !== 0 || result.timedOut || result.error) {
+    if (result.status !== 0 || result.timedOut || result.error || result.signal || typeof result.stdout !== 'string') {
         throw new Error(formatGitFingerprintProbeFailure(repoRoot, args, result));
     }
 
@@ -1113,7 +1203,9 @@ function formatGitFingerprintProbeFailure(repoRoot: string, args: string[], resu
         : result.error
             ? String(result.error)
             : String(result.stderr || result.stdout || `exit status ${result.status}`).trim();
-    return `Unable to compute workspace snapshot cache fingerprint: git ${displayArgs.join(' ')} failed in '${normalizePath(repoRoot)}' (${reason}).`;
+    const quote = (value: string) => "'" + value.replace(/'/gu, process.platform === 'win32' ? "''" : "'\"'\"'") + "'";
+    return `Unable to compute workspace snapshot cache fingerprint: git ${displayArgs.join(' ')} failed in '${normalizePath(repoRoot)}' (${reason}). `
+        + `Diagnose with: git -C ${quote(repoRoot)} ${displayArgs.map(quote).join(' ')}\nAfter repairing Git authority, retry the original gate.`;
 }
 
 function readGitCachedRawDiff(repoRoot: string): string {
@@ -1134,7 +1226,7 @@ function readGitCachedRawDiff(repoRoot: string): string {
         timeoutMs: DEFAULT_GIT_TIMEOUT_MS,
         maxBuffer: 10 * 1024 * 1024
     });
-    if (result.status !== 0 || result.timedOut || result.error) {
+    if (result.status !== 0 || result.timedOut || result.error || result.signal || typeof result.stdout !== 'string') {
         throw new Error(formatGitFingerprintProbeFailure(repoRoot, args, result));
     }
     return String(result.stdout || '').trimEnd();

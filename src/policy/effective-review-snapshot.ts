@@ -1,3 +1,4 @@
+import { taskValidationSemanticReviewLanes } from '../core/task-validation-plan';
 import { createHash } from 'node:crypto';
 
 import type {
@@ -103,23 +104,7 @@ export interface EffectiveReviewSnapshot {
 export function resolveValidationSemanticReviewLanes(snapshot: EffectiveReviewSnapshot): Array<'code' | 'test'> {
     const violations = getEffectiveReviewSnapshotViolations(snapshot);
     if (violations.length > 0) throw new Error(`Validation semantic review snapshot is invalid: ${violations.join(' ')}`);
-    const lanes = snapshot.lanes.filter(lane => lane.definition.built_in
-        && (lane.id === 'code' || lane.id === 'test') && lane.selection === 'required');
-    const incapable = lanes.filter(lane => !lane.profile.capability_enabled).map(lane => lane.id);
-    if (lanes.length === 0 || incapable.length > 0) {
-        // Name the exact lanes and remedy; otherwise next-step can only repeat the failing command.
-        throw new Error('Declared validation requires capable mandatory code or test review lanes'
-            + (incapable.length > 0
-                ? `; capability disabled: ${incapable.join(', ')}. Install a matching review skill `
-                    + '(the baseline `test-review` skill covers test; `garda init` restores it if missing), then run '
-                    + `\`garda review-capabilities enable ${incapable.join(' ')}\`; the task's frozen review policy only `
-                    + 'includes the lane after task mode is entered again.'
-                : '. Task/validation contract conflict: the frozen task policy selects no mandatory code/test lane '
-                    + '(docs-only rules suppress both), but case-bearing validation requires independent semantic review. '
-                    + 'Ask the operator to resolve the task scope or validation contract, then reset the task and enter it again. '
-                    + 'Changing the profile alone cannot override docs-only scope rules.'));
-    }
-    return lanes.map(lane => lane.id as 'code' | 'test').sort();
+    return taskValidationSemanticReviewLanes(snapshot.lanes);
 }
 
 export interface BuildEffectiveReviewSnapshotOptions {

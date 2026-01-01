@@ -57,7 +57,7 @@ describe('gates/full-suite-validation', () => {
             assert.equal(forecast.recommended_timeout_seconds, 90);
             assert.equal(forecast.safety_margin_seconds, 30);
             assert.equal(forecast.recommendation_source, 'history');
-            assert.match(formatFullSuiteTimeoutForecast(forecast), /Recommended full-suite command timeout: 90s/);
+            assert.match(formatFullSuiteTimeoutForecast(forecast), /Recommended task test command timeout: 90s/);
             assert.match(formatFullSuiteTimeoutForecast(forecast), /max 60s/);
         });
 
@@ -233,7 +233,7 @@ describe('gates/full-suite-validation', () => {
             assert.equal(forecast.sample_count, 0);
             assert.equal(forecast.excluded_sample_count, 2);
             const text = formatFullSuiteTimeoutForecast(forecast);
-            assert.match(text, /no eligible recent matching full-suite duration history/);
+            assert.match(text, /no eligible recent matching task test duration history/);
             assert.match(text, /2 matching run\(s\) excluded from forecast/);
             assert.match(text, /interrupted_or_cancelled=1/);
             assert.match(text, /timed_out=1/);

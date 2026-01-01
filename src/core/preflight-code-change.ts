@@ -1,4 +1,4 @@
-import * as fs from 'node:fs';
+import { readInvocationTextFile } from './invocation-file-observation';
 import * as path from 'node:path';
 
 import {
@@ -110,7 +110,7 @@ function readLegacyClassificationConfig(repoRoot: string): LegacyClassificationC
     };
     try {
         const configPath = joinOrchestratorPath(repoRoot, 'live/config/paths.json');
-        const parsed = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<string, unknown>;
+        const parsed = JSON.parse(readInvocationTextFile(configPath)) as Record<string, unknown>;
         const triggers = parsed.triggers && typeof parsed.triggers === 'object' && !Array.isArray(parsed.triggers)
             ? parsed.triggers as Record<string, unknown>
             : {};
@@ -171,7 +171,7 @@ function getDefaultProtectedControlPlaneRoots(repoRoot: string): string[] {
     let sourceCheckout = isBundleRootLike(repoRoot);
     try {
         const packageJson = JSON.parse(
-            fs.readFileSync(joinOrchestratorPath(repoRoot, 'package.json'), 'utf8')
+            readInvocationTextFile(joinOrchestratorPath(repoRoot, 'package.json'))
         ) as Record<string, unknown>;
         sourceCheckout ||= isRecognizedPackageName(packageJson.name);
     } catch {

@@ -19,7 +19,7 @@ import { resolveTaskProfileReviewTriggerPolicy } from '../../policy/task-profile
 import { classifyChange, getClassificationConfig } from '../preflight/classify-change';
 import { isSafeOrdinaryDocumentationPath } from '../preflight/classify-change-doc-safety';
 import { isOrchestratorSourceCheckout } from '../shared/helpers';
-import { reviewRemediationDeltaInternals, type ReviewRemediationDeltaClassification, type ReviewRemediationFileDelta } from './review-remediation-delta';
+import { resolveRemediationTaskRoleConfig, reviewRemediationDeltaInternals, type ReviewRemediationDeltaClassification, type ReviewRemediationFileDelta } from './review-remediation-delta';
 import { collectReviewRemediationChangedLineEvidence } from './review-remediation-readable-diff';
 
 const TRIGGERED_REVIEW_TYPES = ['db', 'security', 'refactor', 'api', 'performance', 'infra', 'dependency', 'test'];
@@ -82,6 +82,7 @@ export function getReviewRemediationScopeReviewTypesViolations(options: {
     repoRoot: string;
     delta: ReviewRemediationDeltaClassification;
     profilePolicySnapshot: unknown;
+    authenticatedPreflightSha256?: string;
 }): string[] {
     const { delta } = options;
     const recorded = resolveReviewRemediationScopeReviewTypes(delta.mode_policy_assessment);
@@ -95,7 +96,12 @@ export function getReviewRemediationScopeReviewTypesViolations(options: {
             rawConfig.dependency_trigger_regexes, rawConfig.infra_trigger_regexes]) {
             patterns.forEach((pattern) => new RegExp(pattern, 'i'));
         }
-        const config = getClassificationConfig(options.repoRoot, reviewTriggerPolicy ? { reviewTriggerPolicy } : {});
+        const baseConfig = getClassificationConfig(options.repoRoot, reviewTriggerPolicy ? { reviewTriggerPolicy } : {});
+        const config = delta.task_role_preflight_text === undefined ? baseConfig : resolveRemediationTaskRoleConfig({
+            repoRoot: options.repoRoot, taskId: delta.task_id, preflightText: delta.task_role_preflight_text,
+            authenticatedPreflightHashes: options.authenticatedPreflightSha256 ? [options.authenticatedPreflightSha256] : [],
+            config: baseConfig
+        });
         if (delta.documents_only && (!delta.changed_files.length || delta.changed_files.some((file) =>
             !isSafeOrdinaryDocumentationPath(file, config) || !delta.file_deltas.some((entry) => entry.path === file
                 && ['text', 'missing'].includes(entry.baseline_status) && ['text', 'missing'].includes(entry.current_status)
@@ -127,6 +133,11 @@ export function getReviewRemediationScopeReviewTypesViolations(options: {
                 structuralThreshold: config.test_refactor_changed_lines_threshold
             })
         }));
+        if (delta.task_role_preflight_text !== undefined && !delta.documents_only
+            && (delta.file_deltas.some((entry, index) => entry.category !== fileDeltas[index].category)
+                || delta.category !== reviewRemediationDeltaInternals.aggregateFileCategories(fileDeltas))) {
+            return ['remediation task-role categories do not match independently classified fix paths.'];
+        }
         const newTestsOnly = fileDeltas.length && fileDeltas.every((entry) =>
             entry.operation === 'added' && entry.category === 'leaf_test');
         const owners = [...new Set(newTestsOnly ? [] : signals.flatMap((signal) => PROTECTED_BOUNDARY_SIGNAL_OWNERS[signal] ?? []))].sort();
@@ -264,8 +275,33 @@ export function collectRemediationLaneHistory(options: {
     const timingEvents: ReviewTimingTrustEventLike[] = [];
     const trustedReceipts = new Set<string>();
     let boundaryReached = false;
+    let classifiedPreflight: { path: string; hash: string } | null = null;
+    let authenticatedPreflightSha256: string | null = null;
+    const pathKey = (value: unknown): string => {
+        const resolved = path.resolve(options.repoRoot, String(value || ''));
+        return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+    };
     const integrity = inspectTaskEventFile(timelinePath, options.taskId, {
         onIntegrityEvent: (event) => {
+            if (['TASK_MODE_ENTERED', 'TASK_RESET', 'TASK_DISCARDED', 'PREFLIGHT_STARTED', 'PREFLIGHT_FAILED'].includes(String(event.event_type))) {
+                classifiedPreflight = null;
+                authenticatedPreflightSha256 = null;
+            } else if (event.event_type === 'PREFLIGHT_CLASSIFIED') {
+                classifiedPreflight = event.actor === 'gate' && ['INFO', 'PASS'].includes(String(event.outcome))
+                    && isPlainRecord(event.details) && typeof event.details.output_path === 'string' && event.details.output_path
+                    ? { path: pathKey(event.details.output_path), hash: String(event.details.output_sha256 || '').toLowerCase() } : null;
+                authenticatedPreflightSha256 = null;
+            } else if (event.event_type === 'COMPILE_GATE_PASSED') {
+                authenticatedPreflightSha256 = null;
+                if (event.actor === 'gate' && event.outcome === 'PASS' && isPlainRecord(event.details) && classifiedPreflight) {
+                    const hash = String(event.details.preflight_hash_sha256 || '').toLowerCase();
+                    authenticatedPreflightSha256 = event.details.task_id === options.taskId
+                        && typeof event.details.preflight_path === 'string' && pathKey(event.details.preflight_path) === classifiedPreflight.path
+                        && /^[a-f0-9]{64}$/u.test(hash) && (!classifiedPreflight.hash || classifiedPreflight.hash === hash) ? hash : null;
+                }
+            } else if (['COMPILE_GATE_FAILED', 'COMPILE_GATE_REFUSED'].includes(String(event.event_type))) {
+                authenticatedPreflightSha256 = null;
+            }
             if (!boundaryReached && event.event_type === 'REVIEWER_INVOCATION_ATTESTED') timingEvents.push(event);
             if (event.event_type === 'REVIEW_CYCLE_RESTARTED' && isPlainRecord(event.details)
                 && isPlainRecord(event.details.authoritative_review_decision)
@@ -304,7 +340,7 @@ export function collectRemediationLaneHistory(options: {
             if (details.receipt_sha256) recordsByReceipt.set(lane + ':' + String(details.receipt_sha256), record);
         }
     });
-    return { integrity, lanes, timingEvents, trustedReceipts };
+    return { integrity, lanes, timingEvents, trustedReceipts, authenticatedPreflightSha256 };
 }
 
 /** The latest recorded review of a lane in the task timeline. */

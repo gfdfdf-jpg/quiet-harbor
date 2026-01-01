@@ -1,3 +1,4 @@
+import { readInvocationFileBytes, readInvocationFileContent } from '../core/invocation-file-observation';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -117,7 +118,7 @@ export function computeSkillsHeadlinesSourceStateSha256(bundleRoot: string): str
         const relativePath = path.relative(normalizedBundleRoot, filePath).replace(/\\/g, '/');
         hash.update(relativePath, 'utf8');
         hash.update('\0', 'utf8');
-        hash.update(fs.readFileSync(filePath));
+        hash.update(readInvocationFileBytes(filePath));
         hash.update('\0', 'utf8');
     }
     return hash.digest('hex');
@@ -130,7 +131,8 @@ export function computeSkillsHeadlinesSourceStateHintSha256(bundleRoot: string):
         const relativePath = path.relative(normalizedBundleRoot, filePath).replace(/\\/g, '/');
         hash.update(relativePath, 'utf8');
         hash.update('\0', 'utf8');
-        hash.update(createHash('sha256').update(fs.readFileSync(filePath)).digest('hex'), 'utf8');
+        hash.update(readInvocationFileContent(filePath)?.sha256
+            ?? createHash('sha256').update(readInvocationFileBytes(filePath)).digest('hex'), 'utf8');
         hash.update('\0', 'utf8');
     }
     return hash.digest('hex');

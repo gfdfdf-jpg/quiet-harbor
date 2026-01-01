@@ -31,6 +31,7 @@ import {
     runFullSuiteRunMarkerRecoveryCommand
 } from '../../../../src/cli/commands/gate-flows/full-suite/full-suite-run-marker-recovery';
 import { fileSha256, normalizePath } from '../../../../src/gates/shared/helpers';
+import { DEFAULT_FULL_SUITE_VALIDATION_CONFIG } from '../../../../src/core/full-suite-validation-config';
 import { resolveFullSuiteDurationHistoryPath } from '../../../../src/gates/full-suite/full-suite-validation';
 
 function writeCurrentMarker(options: {
@@ -354,6 +355,7 @@ describe('full-suite validation run marker', () => {
             const fullSuiteArtifactPath = path.join(reviewsRoot, `${taskId}-full-suite-validation.json`);
             const fullSuiteArtifact = JSON.parse(fs.readFileSync(fullSuiteArtifactPath, 'utf8')) as Record<string, unknown>;
             assert.equal(fullSuiteArtifact.status, 'FAILED');
+            assert.equal(fullSuiteArtifact.placement, DEFAULT_FULL_SUITE_VALIDATION_CONFIG.placement);
             assert.equal(fullSuiteArtifact.timed_out, true);
             const timeoutPolicy = fullSuiteArtifact.timeout_policy as Record<string, unknown>;
             assert.equal(timeoutPolicy.timeout_blocker, true);
@@ -382,13 +384,13 @@ describe('full-suite validation run marker', () => {
             const compactSummary = fullSuiteArtifact.compact_summary;
             assert.ok(Array.isArray(compactSummary));
             const compactSummaryText = compactSummary.join('\n');
-            assert.match(compactSummaryText, /no eligible recent matching full-suite duration history/u);
+            assert.match(compactSummaryText, /no eligible recent matching task test duration history/u);
             assert.match(compactSummaryText, /1 matching run\(s\) excluded from forecast \(timed_out=1\)/u);
             assert.match(compactSummaryText, new RegExp(`NextRecoveryCommand: .+next-step "${taskId}" --repo-root "\\."`, 'u'));
             assert.match(compactSummaryText, new RegExp(`CleanupCommand: .+gate full-suite-run-marker-recovery --task-id "${taskId}"`, 'u'));
             const outputLog = fs.readFileSync(path.join(reviewsRoot, `${taskId}-full-suite-output.log`), 'utf8');
             assert.match(outputLog, /FULL_SUITE_INTERRUPTED_TIMEOUT_RECOVERY/u);
-            assert.match(outputLog, /no eligible recent matching full-suite duration history/u);
+            assert.match(outputLog, /no eligible recent matching task test duration history/u);
             assert.match(outputLog, /1 matching run\(s\) excluded from forecast \(timed_out=1\)/u);
             assert.match(outputLog, new RegExp(`CleanupCommand: .+gate full-suite-run-marker-recovery --task-id "${taskId}"`, 'u'));
             const timeline = fs.readFileSync(path.join(repoRoot, 'garda-agent-orchestrator', 'runtime', 'task-events', `${taskId}.jsonl`), 'utf8');

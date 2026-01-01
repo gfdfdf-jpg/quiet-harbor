@@ -1,6 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fx from './next-step-review-reuse-fixtures';
+import { compileReviewDependencyGraph } from '../../../../src/core/review-dependency-graph';
+import { readReviewArtifactState } from '../../../../src/gates/next-step/next-step-review-artifact-readers';
+import { findDownstreamReviewNeedingDependencyRebind } from '../../../../src/gates/next-step/next-step-review-evidence';
 import {
     isFullSuiteSatisfiedBySemanticCycleResume,
     isReviewSatisfiedBySemanticCycleResume
@@ -99,6 +102,83 @@ function materializeCurrentStrictReuse(repoRoot: string, taskId: string, reviewT
 }
 
 describe('gates/next-step review reuse rebind routing', () => {
+    it('uses declared dependencies instead of adding strict-mode edges to preserved lanes', () => {
+        const repoRoot = makeTempRepo();
+        const lanes = ['code', 'security', 'refactor', 'test'];
+        seedStartedTask(repoRoot, TASK_ID);
+        const requiredReviews = { ...ALL_REVIEW_FLAGS, code: true, security: true, refactor: true, test: true };
+        const preflightPath = writePreflight(repoRoot, TASK_ID, requiredReviews,
+            { reviewPolicyMode: 'strict_sequential', includeDomainScopeFingerprints: true });
+        seedCompilePass(repoRoot, TASK_ID);
+        for (const reviewType of [...lanes, 'security']) {
+            appendEvent(repoRoot, TASK_ID, 'REVIEW_PHASE_STARTED', 'INFO', { review_type: reviewType });
+            writeReviewEvidence(repoRoot, TASK_ID, reviewType);
+            appendEvent(repoRoot, TASK_ID, 'REVIEW_RECORDED', 'PASS', { review_type: reviewType });
+        }
+        const preflight = JSON.parse(fs.readFileSync(preflightPath, 'utf8')) as Record<string, unknown>;
+        const reviewStates = lanes.map(lane => readReviewArtifactState(reviewsRoot(repoRoot), TASK_ID, lane,
+            preflightPath, fileSha256(preflightPath), preflight, repoRoot));
+        assert.ok(reviewStates.every(state => state.ready), 'All preserved receipts remain intact');
+        const dependencyGraph = compileReviewDependencyGraph({ catalogLaneIds: lanes, activeLaneIds: lanes,
+            requiredReviewIds: lanes, mode: 'strict_sequential', declaration: {
+                preparation_order: lanes, dependencies: { code: [], security: [], refactor: [], test: ['security'] }
+            } });
+        const inputs = { eventsRoot: fx.eventsRoot(repoRoot), taskId: TASK_ID, requiredReviewTypes: lanes,
+            requiredReviews, policyMode: 'strict_sequential' as const, reviewStates, dependencyGraph };
+
+        const rebind = findDownstreamReviewNeedingDependencyRebind(inputs);
+        assert.equal(rebind?.downstreamState.reviewType, 'test');
+        assert.equal(rebind?.upstreamReviewType, 'security');
+    });
+
+    it('rebinds preserved lanes before repeating test after lost security and validation evidence', () => {
+        const repoRoot = makeTempRepo();
+        seedStartedTask(repoRoot, TASK_ID);
+        writePreflight(repoRoot, TASK_ID, {
+            ...ALL_REVIEW_FLAGS, code: true, security: true, refactor: true, test: true
+        }, { reviewPolicyMode: 'strict_sequential', includeDomainScopeFingerprints: true });
+        fx.writeStrictDecompositionDecision(repoRoot, TASK_ID, {
+            taskProfile: 'balanced', expectedReviewTypes: ['code', 'security', 'refactor', 'test']
+        });
+        seedCompilePass(repoRoot, TASK_ID);
+        seedFullSuiteValidation(repoRoot, TASK_ID, 'PASSED');
+        const recordPass = (reviewType: string): void => {
+            appendEvent(repoRoot, TASK_ID, 'REVIEW_PHASE_STARTED', 'INFO', { review_type: reviewType });
+            writeReviewEvidence(repoRoot, TASK_ID, reviewType);
+            appendEvent(repoRoot, TASK_ID, 'REVIEW_RECORDED', 'PASS', { review_type: reviewType });
+        };
+        for (const reviewType of ['code', 'security', 'refactor', 'test']) recordPass(reviewType);
+
+        fs.unlinkSync(path.join(reviewsRoot(repoRoot), `${TASK_ID}-security-receipt.json`));
+        fs.unlinkSync(path.join(reviewsRoot(repoRoot), `${TASK_ID}-full-suite-validation.json`));
+        // Evidence-only recovery invalidates security and test, preserving code/refactor and compile.
+        fs.unlinkSync(path.join(reviewsRoot(repoRoot), `${TASK_ID}-test-receipt.json`));
+        seedFullSuiteValidation(repoRoot, TASK_ID, 'PASSED');
+        recordPass('security');
+
+        const rebind = resolveNextStep({ taskId: TASK_ID, repoRoot });
+        assert.equal(rebind.next_gate, 'build-review-context', rebind.reason);
+        assert.match(rebind.commands[0].command, /--review-type "refactor"/u);
+        assert.match(rebind.reason, /latest review phase predates the upstream review record/u);
+
+        appendEvent(repoRoot, TASK_ID, 'REVIEW_CONTEXT_REUSE_ACCEPTED', 'PASS', {
+            review_type: 'refactor', current_pass_review_evidence: true,
+            output_path: path.join(reviewsRoot(repoRoot), `${TASK_ID}-refactor-review-context.json`)
+        });
+        const repeatTest = resolveNextStep({ taskId: TASK_ID, repoRoot });
+        assert.equal(repeatTest.review.next_review_type, 'test', repeatTest.reason);
+        recordPass('test');
+
+        const completed = resolveNextStep({ taskId: TASK_ID, repoRoot });
+        assert.equal(completed.next_gate, 'required-reviews-check', completed.reason);
+        const events = fs.readFileSync(path.join(fx.eventsRoot(repoRoot), `${TASK_ID}.jsonl`), 'utf8')
+            .trim().split('\n').map(line => JSON.parse(line) as { event_type: string; details: { review_type?: string } });
+        for (const [reviewType, expected] of [['code', 1], ['security', 2], ['refactor', 1], ['test', 2]] as const) {
+            assert.equal(events.filter(event => event.event_type === 'REVIEWER_INVOCATION_ATTESTED'
+                && event.details.review_type === reviewType).length, expected, reviewType);
+        }
+    });
+
     it('accepts only review lanes named by a reusable semantic-cycle transaction', () => {
         assert.equal(isReviewSatisfiedBySemanticCycleResume({
             reviewType: 'security',

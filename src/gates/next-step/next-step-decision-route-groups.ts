@@ -475,18 +475,18 @@ function resolveCompletedFullSuiteRepairWipRestoreRoute(options: {
     return {
             status: 'BLOCKED',
             nextGate: 'restore-full-suite-repair-wip',
-            title: 'Restore suspended full-suite repair WIP before resuming parent.',
+            title: 'Restore suspended task test repair WIP before resuming parent.',
             reason:
-                `All linked full-suite repair children are DONE (${childTaskIds.join(', ')}) and materialized repair evidence is current. ` +
-                'Restore the suspended parent WIP before running parent classify, compile, review, full-suite, completion, or final closeout gates. ' +
+                `All linked task test repair children are DONE (${childTaskIds.join(', ')}) and materialized repair evidence is current. ` +
+                'Restore the suspended parent WIP before running parent classify, compile, review, task test validation, completion, or final closeout gates. ' +
                 'The restore gate validates manifest paths, artifact hashes, stale base, tracked workspace cleanliness, and untracked target conflicts before applying the parent WIP.',
             commands: [
                 buildCommand(
-                    'Dry-run full-suite repair WIP restore',
+                    'Dry-run task test repair WIP restore',
                     `${options.cliPrefix} gate restore-full-suite-repair-wip ${restoreBindingFlags} --manifest-path "${evidence.wip_manifest_path}" --dry-run --repo-root "."`
                 ),
                 buildCommand(
-                    'Restore full-suite repair WIP and resume parent',
+                    'Restore task test repair WIP and resume parent',
                     `${options.cliPrefix} gate restore-full-suite-repair-wip ${restoreBindingFlags} --manifest-path "${evidence.wip_manifest_path}" --repo-root "."`
                 )
             ],
@@ -662,6 +662,23 @@ export function resolveTaskQueueTerminalDecisionRoute(options: {
         };
     }
 
+    // A decomposed timeout-repair parent must restore its authenticated suspended WIP
+    // before parent acceptance inspects that restore. The restore gate still qualifies
+    // every completed child SOURCE, manifest binding and workspace conflict itself.
+    if (isTaskQueueDecomposedStatus(taskQueueStatus) && permanentSplitRequiredLatchEvidence?.valid
+        && permanentSplitRequiredLatchEvidence.guard_kind === 'full_suite_repair') {
+        const repairRestoreRoute = resolveCompletedFullSuiteRepairWipRestoreRoute({
+            repoRoot: options.repoRoot,
+            reviewsRoot: options.reviewsRoot,
+            taskId: options.taskId,
+            cliPrefix: options.cliPrefix,
+            taskEntries: options.taskEntries,
+            taskEntry: options.taskEntry,
+            fullSuiteArtifactPath: options.fullSuiteArtifactPath
+        });
+        if (repairRestoreRoute) return { ...repairRestoreRoute, presentArtifacts: options.corePresentArtifacts };
+    }
+
     const parentAuditRoute = resolveParentAuditNavigation(options);
     if (parentAuditRoute) return { ...parentAuditRoute, presentArtifacts: options.corePresentArtifacts };
 
@@ -693,8 +710,8 @@ export function resolveTaskQueueTerminalDecisionRoute(options: {
                 if (latchEvidence.valid && evidence.materialized) {
                     return {
                         status: 'BLOCKED', nextGate: 'child-task',
-                        title: 'Continue the linked full-suite repair task.',
-                        reason: `The authenticated full-suite repair handoff contains one independent child (${repairChildTaskId}). `
+                        title: 'Continue the linked task test repair task.',
+                        reason: `The authenticated task test repair handoff contains one independent child (${repairChildTaskId}). `
                             + 'Parent WIP remains suspended and the repair latch remains active until the child is DONE and parent WIP is restored. '
                             + 'Continue the child, then return to the parent navigator; passing validation is still required before DONE.',
                         commands: [buildContinueChildCommand(options.cliPrefix, { taskId: repairChildTaskId })!],
@@ -944,23 +961,6 @@ export function resolveTaskQueueTerminalDecisionRoute(options: {
         const tasksToComplete = completionState?.hasLinkedChildren && completionState.complete
             ? [...new Set([...completionState.completedDecomposedTaskIds, options.taskId])]
             : [];
-        if (completionState?.hasLinkedChildren && completionState.complete) {
-            const repairRestoreRoute = resolveCompletedFullSuiteRepairWipRestoreRoute({
-                repoRoot: options.repoRoot,
-                reviewsRoot: options.reviewsRoot,
-                taskId: options.taskId,
-                cliPrefix: options.cliPrefix,
-                taskEntries: options.taskEntries,
-                taskEntry: options.taskEntry,
-                fullSuiteArtifactPath: options.fullSuiteArtifactPath
-            });
-            if (repairRestoreRoute) {
-                return {
-                    ...repairRestoreRoute,
-                    presentArtifacts: options.corePresentArtifacts
-                };
-            }
-        }
         const syncResult = tasksToComplete.length > 0
             ? effects.run({
                 kind: 'complete-decomposed-parents',

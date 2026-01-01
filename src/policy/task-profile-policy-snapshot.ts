@@ -1,3 +1,4 @@
+import { readInvocationFileBytes, readInvocationFileContent } from '../core/invocation-file-observation';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -301,7 +302,8 @@ function fileSha256OrNull(filePath: string): string | null {
         if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
             return null;
         }
-        return createHash('sha256').update(fs.readFileSync(filePath)).digest('hex').toLowerCase();
+        return readInvocationFileContent(filePath)?.sha256
+            ?? createHash('sha256').update(readInvocationFileBytes(filePath)).digest('hex').toLowerCase();
     } catch {
         return null;
     }

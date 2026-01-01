@@ -8,7 +8,7 @@ export interface FullSuiteCommandContractResult {
 }
 
 export function validateFullSuiteCommandContract(command: string): FullSuiteCommandContractResult {
-    const admission = inspectValidationCommand(command, 'test');
+    const admission = inspectValidationCommand(command, 'test', { allowConjunction: true });
     return { supported: admission.supported, violation: admission.violation,
         provenance: { schema_version: 1, source: 'workflow_config.full_suite_validation.command',
             execution_mode: 'DIRECT_ARGV', validation_status: admission.supported ? 'PASSED' : 'REJECTED',

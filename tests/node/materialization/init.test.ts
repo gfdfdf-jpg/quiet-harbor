@@ -681,7 +681,7 @@ describe('runInit', () => {
                 path.join(bundleRoot, 'live', 'docs', 'agent-rules', '40-commands.md'),
                 'utf8'
             );
-            const fullSuiteSection = extractMarkdownSection(discovery, 'Suggested Full-Suite Validation Commands (Candidates)');
+            const fullSuiteSection = extractMarkdownSection(discovery, 'Suggested Task Test Validation Commands (Candidates)');
             const compileSection = extractMarkdownSection(discovery, 'Suggested Compile Gate Commands (Heuristic)');
 
             assert.equal(workflowConfig.full_suite_validation.command, UNCONFIGURED_FULL_SUITE_VALIDATION_COMMAND);

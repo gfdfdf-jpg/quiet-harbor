@@ -20,8 +20,13 @@ function nativeRealpathErrorCode(error: unknown): string {
 export function readNativeRealpath(pathValue: string): string {
     if (!isInvocationReadObservationActive()) return fs.realpathSync.native(pathValue);
     const resolved = path.resolve(pathValue);
+    const pathObservation = readInvocationPathObservation(resolved)!;
+    // Regular Windows files already use native realpath in the shared path
+    // observation, including its original error and final freshness validation.
+    if (process.platform === 'win32' && 'value' in pathObservation.stat && pathObservation.stat.value.isFile()) {
+        return observedInvocationValue(pathObservation.realPath);
+    }
     const observation = memoizeInvocationRead(NATIVE_REALPATH_OBSERVATIONS, resolved, () => {
-        readInvocationPathObservation(resolved);
         countNextStepWork('native_realpath_observation:' + resolved);
         const original = observeDerivationInput('native-realpath', 1, { path: resolved },
             () => captureNativeRealpath(pathValue), result => {

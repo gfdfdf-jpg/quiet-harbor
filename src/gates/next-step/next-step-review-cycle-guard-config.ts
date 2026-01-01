@@ -1,3 +1,4 @@
+import { readInvocationTextFile } from '../../core/invocation-file-observation';
 import * as fs from 'node:fs';
 import { normalizeReviewCycleGuardConfig } from '../../core/review-cycle-guard';
 import { buildDefaultWorkflowConfig } from '../../core/workflow-config';
@@ -17,7 +18,7 @@ function readWorkflowConfigRecordForReviewCycleGuard(repoRoot: string): Record<s
 
     let workflowConfig: unknown;
     try {
-        workflowConfig = JSON.parse(fs.readFileSync(workflowConfigPath, 'utf8'));
+        workflowConfig = JSON.parse(readInvocationTextFile(workflowConfigPath));
     } catch (error: unknown) {
         throw new Error(
             `Workflow config at '${toRepoDisplayPath(repoRoot, workflowConfigPath)}' is not valid JSON: ${error instanceof Error ? error.message : String(error)}`

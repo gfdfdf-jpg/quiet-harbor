@@ -921,7 +921,7 @@ describe('gates/next-step review cycle guard attempts', () => {
 
             assert.equal(result.timelineValid, true);
             assert.equal(result.attempts.length, 2);
-            assert.equal(reviewDirectoryReads, 1);
+            assert.equal(reviewDirectoryReads, 0, 'Exact snapshot membership must not enumerate the review catalog');
             assert.equal(immutableSnapshotReads.get(artifactSnapshotKey), 1);
             assert.equal(immutableSnapshotReads.get(receiptSnapshotKey), 1);
         } finally {

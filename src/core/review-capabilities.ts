@@ -1,3 +1,4 @@
+import { readInvocationTextFile } from './invocation-file-observation';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { readInvocationPathObservation } from './invocation-file-observation';
@@ -163,7 +164,7 @@ export function readReviewCapabilitiesConfigFile(configPath: string): ReviewCapa
 
     let parsed: unknown;
     try {
-        parsed = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        parsed = JSON.parse(readInvocationTextFile(configPath));
     } catch (error: unknown) {
         throw new Error(
             `Review capabilities config at '${configPath}' is not valid JSON: ${error instanceof Error ? error.message : String(error)}`

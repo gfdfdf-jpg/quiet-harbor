@@ -8,12 +8,20 @@ import { joinOrchestratorPath, normalizePath } from '../../core/orchestrator-pat
 import { isPlainRecord } from '../../core/records';
 import { readInvocationFileContent } from '../../core/invocation-file-observation';
 import { appendMandatoryTaskEvent, readTaskTimelineJsonlEntries } from '../../gate-runtime/task-events';
-import { readRecordedOutOfScopeFailures, type RecordedOutOfScopeFailure } from './recorded-out-of-scope-failures';
+import { readRecordedOutOfScopeFailures, recordedFailureAttributionText, type RecordedOutOfScopeFailure } from './recorded-out-of-scope-failures';
 
 const EVENT = 'OUT_OF_SCOPE_FOLLOW_UP_MATERIALIZED';
 const marker = (taskId: string, failure: RecordedOutOfScopeFailure) =>
     `out_of_scope_parent=${taskId} out_of_scope_failure=${failure.failure_event_sha256}`;
 const GROUPED_TYPE = 'out_of_scope_follow_up=grouped';
+
+const tableText = (text: string) => text.replace(/[\r\n|]/gu, ' ');
+function failureDescription(taskId: string, record: RecordedOutOfScopeFailure, legacy = false): string {
+    const attribution = legacy
+        ? (record.failing_tests.length ? `Failing tests: ${record.failing_tests.join(', ')}` : 'Tests: not attributed')
+        : recordedFailureAttributionText(record.failing_tests);
+    return tableText(`${marker(taskId, record)}; Failed command: ${record.command}; Artifact: ${record.artifact_path} (sha256 ${record.artifact_sha256}); ${attribution}`);
+}
 
 function isGroupedFollowUp(taskId: string, row: { taskId: string; notes: string | null }): boolean {
     return isCanonicalTaskId(row.taskId) && row.taskId !== taskId
@@ -62,31 +70,53 @@ export function materializeRecordedOutOfScopeFollowUps(repoRoot: string, taskId:
         if (!queue.found || queue.diagnostics?.length || !parent) {
             return { outputLines: [`Canonical follow-up parent queue is missing or ambiguous; repair TASK.md. ${followUpRoute(taskId)}`], exitCode: 1 };
         }
-        const lines = content.split(/\r?\n/u);
+        const lines = content.split('\n');
         const bindings: Array<{ failure_event_sha256: string; task_id: string }> = [];
         const claims = records.map(record => ({ record, rows: queue.rows.filter(row => row.notes.includes(marker(taskId, record))) }));
         if (claims.some(({ rows }) => rows.length > 1 || (rows.length === 1 && !isGroupedFollowUp(taskId, rows[0])))) {
             return { outputLines: [`Invalid or ambiguous recorded out-of-scope follow-up binding; retain the marker only on a distinct grouped child task. ${followUpRoute(taskId)}`], exitCode: 1 };
         }
+        const refreshed = new Set<string>();
+        const warnings: string[] = [];
         const missing = claims.filter(({ rows }) => !rows.length).map(({ record }) => record);
         for (const { record, rows } of claims) {
-            if (rows.length) bindings.push({ failure_event_sha256: record.failure_event_sha256, task_id: rows[0].taskId });
+            if (!rows.length) continue;
+            const row = rows[0];
+            bindings.push({ failure_event_sha256: record.failure_event_sha256, task_id: row.taskId });
+            const legacy = failureDescription(taskId, record, true);
+            const current = failureDescription(taskId, record);
+            if (legacy === current || row.notes.includes(current)) continue;
+            const line = lines[row.lineIndex];
+            const at = line.indexOf(legacy);
+            const suffix = at < 0 ? '' : line.slice(at + legacy.length);
+            // Replace only an exact owned segment at its original generated boundary.
+            // Edited/ambiguous text remains operator-owned; do not rebuild the row.
+            if (at >= 0 && line.indexOf(legacy, at + 1) < 0
+                && /^(?:; Evidence: |; out_of_scope_parent=)/u.test(suffix)) {
+                lines[row.lineIndex] = line.slice(0, at) + current + suffix;
+                refreshed.add(row.taskId);
+            } else if (row.notes.includes('Failing tests:')) {
+                warnings.push(`WARNING: ${row.taskId}: legacy failure description was edited or is unrecognized; kept unchanged. Original references are diagnostic, not confirmed failing tests; inspect the authenticated artifact.`);
+            }
         }
         if (missing.length) {
             // A normal task ID keeps this evidence separate from reviewer -F provenance.
             const child = allocateNextParentDerivedTaskId({ parentTaskId: taskId, kind: 'child', existingTaskIds: queue.rows.map(row => row.taskId) });
             const notes = `Child of \`${taskId}\`. ${GROUPED_TYPE}; `
-                + missing.map(record => `${marker(taskId, record)}; Failing tests: ${record.failing_tests.join(', ').replace(/[\r\n|]/gu, ' ')}`).join('; ');
+                + missing.map(record => failureDescription(taskId, record)).join('; ');
             const evidence = normalizePath(path.relative(repoRoot, joinOrchestratorPath(repoRoot, `runtime/task-events/${taskId}.jsonl`)));
             const row = `| ${child} | TODO | P1 | tests | Resolve recorded out-of-scope test failures | unassigned | ${new Date().toISOString().slice(0, 10)} | ${parent.profile} | ${notes}; Evidence: ${evidence} (authenticated selection records retain commands, failing tests and full-suite artifacts). |`;
             lines.splice(queue.rows.at(-1)!.lineIndex + 1, 0, row);
-            writeTaskQueueFile(taskPath, formatActiveTaskQueueTable(lines.join('\n')));
             bindings.push(...missing.map(record => ({ failure_event_sha256: record.failure_event_sha256, task_id: child })));
         }
+        if (missing.length || refreshed.size) {
+            writeTaskQueueFile(taskPath, missing.length ? formatActiveTaskQueueTable(lines.join('\n'))
+                : lines.join('\n'));
+        }
         appendMandatoryTaskEvent(joinOrchestratorPath(repoRoot, ''), taskId, EVENT, 'PASS',
-            'Recorded out-of-scope failures have follow-up tasks independent of review policy.', { bindings }, { actor: 'gate' });
+            'Recorded out-of-scope failures have follow-up tasks independent of review policy.', { bindings, presentation_refreshed_task_ids: [...refreshed] }, { actor: 'gate' });
         const violations = recordedOutOfScopeFollowUpViolations(repoRoot, taskId, true);
-        return { outputLines: violations.length ? violations : [`RECORDED_OUT_OF_SCOPE_FOLLOW_UP_MATERIALIZED ${[...new Set(bindings.map(binding => binding.task_id))].join(', ')}`],
+        return { outputLines: violations.length ? violations : [`RECORDED_OUT_OF_SCOPE_FOLLOW_UP_MATERIALIZED ${[...new Set(bindings.map(binding => binding.task_id))].join(', ')}`, ...warnings],
             exitCode: violations.length ? 1 : 0 };
     });
 }

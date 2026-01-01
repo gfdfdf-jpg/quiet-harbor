@@ -1,4 +1,4 @@
-import { createInvocationReadMemoKey, isInvocationReadObservationActive, memoizeInvocationRead, registerInvocationDependency } from './invocation-read-observation';
+import { createInvocationReadMemoKey, isInvocationReadObservationActive, memoizeInvocationRead } from './invocation-read-observation';
 import { observedInvocationValue, readInvocationFileContent, readInvocationPathObservation } from './invocation-file-observation';
 import { countNextStepWork } from './next-step-measurement';
 import * as fs from 'node:fs';
@@ -57,7 +57,9 @@ function observedValidationBinding(root: string, target: string): ContainedDesti
         }
         if (existing.length === 0) throw new Error('Destination root does not exist: ' + resolvedRoot);
         const binding = Object.freeze({ root: resolvedRoot, path: resolvedTarget, existing: Object.freeze(existing), missingAt });
-        registerInvocationDependency(binding, () => assertExistingPathIdentity(binding));
+        // Each component already has an invocation dependency from readInvocationPathObservation.
+        // Its final check includes the bound identity, link count, permissions and real path.
+        // Re-registering the whole chain here would recheck shared ancestors for every file.
         return binding;
     }).value;
 }

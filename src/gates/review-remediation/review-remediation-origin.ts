@@ -2,6 +2,7 @@ import * as path from 'node:path';
 
 import { isPathRealpathInsideRoot, joinOrchestratorPath } from '../../core/orchestrator-paths';
 import { validateReviewRemediationBaselineArtifact } from './review-remediation-baseline';
+import { readReviewValidationBytes } from '../review-context/review-validation-invocation';
 import { collectRemediationLaneHistory, readAuthenticatedRemediationLaneReceipt } from './review-remediation-scope-review-types';
 
 export interface RemediationOriginCandidate {
@@ -23,11 +24,23 @@ export function collectRemediationOriginCandidates(options: {
     taskId: string;
     requiredReviewTypes: readonly string[];
 }): RemediationOriginCandidate[] {
+    return [...iterateRemediationOriginCandidates(options)];
+}
+
+/** Validate in newest-first order so a consumer taking the first usable origin need not read older, unused evidence. */
+export function* iterateRemediationOriginCandidates(options: {
+    repoRoot: string;
+    taskId: string;
+    requiredReviewTypes: readonly string[];
+    /** Reject unused candidates before authenticating their referenced artifacts; this never admits a candidate. */
+    mayIncludeBaseline?: (baseline: unknown) => boolean;
+}): Generator<RemediationOriginCandidate> {
     const history = collectRemediationLaneHistory({ repoRoot: options.repoRoot, taskId: options.taskId });
-    if (history.integrity.status !== 'PASS') return [];
+    if (history.integrity.status !== 'PASS') return;
     const reviewsRoot = joinOrchestratorPath(options.repoRoot, 'runtime/reviews');
-    const candidates: RemediationOriginCandidate[] = [];
-    for (const reviewType of new Set(options.requiredReviewTypes)) {
+    const reviewTypes = [...new Set(options.requiredReviewTypes)].sort((left, right) =>
+        (history.lanes.get(right)?.sequence ?? -1) - (history.lanes.get(left)?.sequence ?? -1));
+    for (const reviewType of reviewTypes) {
         const lane = history.lanes.get(reviewType);
         const details = lane?.details;
         const snapshotPathValue = String(details?.remediation_baseline_snapshot_path || '').trim();
@@ -37,6 +50,11 @@ export function collectRemediationOriginCandidates(options: {
         const expectedName = `${options.taskId}-${reviewType}-remediation-baseline-${snapshotSha256}.json`.toLowerCase();
         if (path.basename(snapshotPath).toLowerCase() !== expectedName
             || !isPathRealpathInsideRoot(snapshotPath, reviewsRoot, { allowMissing: false })) continue;
+        if (options.mayIncludeBaseline) {
+            try {
+                if (!options.mayIncludeBaseline(JSON.parse(readReviewValidationBytes(snapshotPath).toString('utf8')))) continue;
+            } catch { continue; }
+        }
         const baseline = validateReviewRemediationBaselineArtifact({
             artifactPath: snapshotPath,
             expectedArtifactSha256: snapshotSha256,
@@ -51,13 +69,12 @@ export function collectRemediationOriginCandidates(options: {
             timingEvents: history.timingEvents, trustedReceipts: history.trustedReceipts
         });
         if (!receipt.authenticated) continue;
-        candidates.push({
+        yield {
             reviewType,
             sequence: lane.sequence,
             failed: !receipt.passed || baseline.artifact.fix_now_items.length > 0
-        });
+        };
     }
-    return candidates.sort((left, right) => right.sequence - left.sequence);
 }
 
 /**

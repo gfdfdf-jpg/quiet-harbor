@@ -1,3 +1,4 @@
+import { readInvocationTextFile } from './invocation-file-observation';
 import * as fs from 'node:fs';
 import { assertWorkflowTransactionReadable } from './workflow-transaction-state';
 import * as path from 'node:path';
@@ -251,7 +252,7 @@ export function resolveTaskResetAvailability(repoRoot: string): TaskResetAvailab
     }
 
     try {
-        const configText = fs.readFileSync(configPath, 'utf8');
+        const configText = readInvocationTextFile(configPath);
         const parsed = JSON.parse(configText) as unknown;
         const validated = validateWorkflowConfig(parsed);
         const defaultTaskReset = buildDefaultWorkflowConfig().task_reset as unknown as Record<string, unknown>;

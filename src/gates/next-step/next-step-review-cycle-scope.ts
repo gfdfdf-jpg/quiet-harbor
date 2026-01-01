@@ -1,3 +1,4 @@
+import { readInvocationTextFile } from '../../core/invocation-file-observation';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -32,7 +33,7 @@ export function readCurrentReviewCyclePreflightFingerprints(
         return null;
     }
     try {
-        const preflight = JSON.parse(fs.readFileSync(preflightPath, 'utf8')) as Record<string, unknown>;
+        const preflight = JSON.parse(readInvocationTextFile(preflightPath)) as Record<string, unknown>;
         const metrics = isPlainRecord(preflight.metrics) ? preflight.metrics : {};
         return normalizeDomainScopeFingerprints(metrics.domain_scope_fingerprints);
     } catch {

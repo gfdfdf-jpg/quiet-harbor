@@ -168,7 +168,7 @@ function isLowerHumanSummaryHeading(line: string): boolean {
     return LOWER_HUMAN_SUMMARY_HEADINGS.has(line.trim());
 }
 
-function findFirstCanonicalQueueTableIndexes(lines: readonly string[]): {
+export function findFirstCanonicalQueueTableIndexes(lines: readonly string[]): {
     headerIndex: number;
     separatorIndex: number;
     rowsStartIndex: number;

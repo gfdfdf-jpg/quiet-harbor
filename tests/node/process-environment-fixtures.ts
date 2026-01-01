@@ -1,6 +1,8 @@
 import type { FullSuiteValidationRunMarkerInspectionOptions } from '../../src/gates/full-suite/full-suite-validation-run-marker';
 
 export const TEST_RUNNER_ENV_KEYS = [
+    // Nested `node --test` otherwise exits successfully without running its files.
+    'NODE_TEST_CONTEXT',
     'GARDA_NODE_FOUNDATION_TEST_SHARDS',
     'GARDA_NODE_FOUNDATION_TEST_SHARD_LOG_DIR',
     'GARDA_NODE_FOUNDATION_TEST_SHARD_TIMEOUT_MS',
@@ -15,7 +17,8 @@ export const TEST_RUNNER_ENV_KEYS = [
 
 function isTestRunnerEnvironmentKey(key: string): boolean {
     const normalized = key.toUpperCase();
-    return normalized.startsWith('GARDA_NODE_FOUNDATION_') || normalized === 'GARDA_BUILD_SCRIPTS_PROCESS_TIMEOUT_MS';
+    return normalized.startsWith('GARDA_NODE_FOUNDATION_') || normalized === 'GARDA_BUILD_SCRIPTS_PROCESS_TIMEOUT_MS'
+        || normalized === 'NODE_TEST_CONTEXT';
 }
 
 export function isolateTestRunnerEnvironment(environment: NodeJS.ProcessEnv = process.env): () => void {

@@ -429,7 +429,7 @@ export function resolveStrictDecompositionContinuationRoute(params: {
             nextGate: 'record-strict-decomposition-decision',
             title: 'Record guarded decomposition decision before implementation.',
             reason:
-                'This task has frozen guarded decomposition enabled and is risky or umbrella-shaped, so next-step requires a current decomposition decision before ordinary classify, compile, review, full-suite, completion, or implementation continuation. ' +
+                'This task has frozen guarded decomposition enabled and is risky or umbrella-shaped, so next-step requires a current decomposition decision before ordinary classify, compile, review, task test validation, completion, or implementation continuation. ' +
                 `Capability provenance: ${formatNextStepInlineValue(params.requirement.taskDecompositionProvenance)}. ` +
                 `Evidence status: ${formatNextStepInlineValue(evidence.evidence_status)}. ` +
                 `Risk signals: ${formatNextStepInlineList(params.requirement.riskSignals)}. ` +
@@ -534,7 +534,7 @@ export function resolveStrictDecompositionContinuationRoute(params: {
             nextGate: 'strict-decomposition-split-routing',
             title: 'Strict decomposition split decision is active.',
             reason:
-                'A current strict decomposition decision says split-required, so ordinary classify, compile, review, full-suite, completion, and implementation continuation are suppressed. ' +
+                'A current strict decomposition decision says split-required, so ordinary classify, compile, review, task test validation, completion, and implementation continuation are suppressed. ' +
                 `Risk signals: ${riskSignals}. ` +
                 `Proposed child tasks: ${formatNextStepInlineList(evidence.proposed_child_task_ids)}. ` +
                 `Root-cause work packages: ${formatNextStepInlineList(evidence.work_package_root_cause_areas)}. ` +

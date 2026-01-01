@@ -1,5 +1,6 @@
 import { createInvocationReadMemoKey, isInvocationReadObservationActive, memoizeInvocationRead, registerInvocationDependency } from '../../core/invocation-read-observation';
 import { countNextStepWork } from '../../core/next-step-measurement';
+import { invocationExpectedStatMatches, readInvocationFileContent, readInvocationFileContentWithObservation } from '../../core/invocation-file-observation';
 import { createHash } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import * as fs from 'node:fs';
@@ -81,6 +82,9 @@ interface ReviewArtifactReadBarrierState {
 }
 
 const inProcessReviewArtifactReadBarriers = new Map<string, ReviewArtifactReadBarrierState>();
+const INVOCATION_REVIEW_GENERATIONS = createInvocationReadMemoKey<Map<string, Set<ReviewArtifactReadBarrierState>>>(
+    'review-artifact-generations'
+);
 
 interface ReviewArtifactReadBarrierParticipantAuthority {
     active: boolean;
@@ -1107,6 +1111,12 @@ function assertReviewArtifactByteBudget(snapshot: ReviewArtifactReadSnapshotStat
 
 function readReviewArtifactBytesBounded(filePath: string, identity: fs.Stats): Buffer | null {
     countNextStepWork('artifact_bytes:' + filePath);
+    const observed = readInvocationFileContentWithObservation(filePath, identity.size);
+    if (observed) {
+        // Snapshot admission still checks live identity, containment, byte/count bounds and ACLs.
+        // Share bytes with other readers only when they describe that exact admitted file.
+        return invocationExpectedStatMatches(observed.alias, identity) ? observed.content.copyBytes() : null;
+    }
     const handle = fs.openSync(filePath, 'r');
     try {
         const openedIdentity = fs.fstatSync(handle);
@@ -1190,7 +1200,8 @@ function readReviewArtifactCanonicalSnapshot(filePath: string): ReviewArtifactFi
         if (!sameReviewArtifactFileIdentity(completeIdentity, afterRead)) {
             return cacheInvalidReviewArtifactRead(snapshot, cacheKey, true, resolvedPath);
         }
-        const sha256 = createHash('sha256').update(content).digest('hex').toLowerCase();
+        const sha256 = readInvocationFileContent(resolvedPath)?.sha256
+            ?? createHash('sha256').update(content).digest('hex').toLowerCase();
         snapshot.reads.set(cacheKey, {
             content,
             exists: true,
@@ -1291,8 +1302,25 @@ function captureOptionalReviewArtifactIdentity(targetPath: string): fs.Stats | n
     }
 }
 
-function captureReviewArtifactGeneration(reviewsDir: string): ReviewArtifactGenerationCapture {
-    const canonicalReviewsDir = resolveCanonicalReviewsDirectoryPath(reviewsDir);
+function resolveLiveReviewArtifactGenerationDirectory(reviewsDir: string): string {
+    const missing: string[] = [];
+    let candidate = path.resolve(reviewsDir);
+    while (true) {
+        try { return path.join(fs.realpathSync.native(candidate), ...missing); }
+        catch (error: unknown) {
+            if (!reviewArtifactPathLookupIsMissing(error)) throw error;
+            const parent = path.dirname(candidate);
+            if (parent === candidate) throw error;
+            missing.unshift(path.basename(candidate));
+            candidate = parent;
+        }
+    }
+}
+
+function captureReviewArtifactGeneration(reviewsDir: string, livePath = false): ReviewArtifactGenerationCapture {
+    const canonicalReviewsDir = livePath
+        ? resolveLiveReviewArtifactGenerationDirectory(reviewsDir)
+        : resolveCanonicalReviewsDirectoryPath(reviewsDir);
     return {
         reviewsDirectoryIdentity: captureOptionalReviewArtifactIdentity(canonicalReviewsDir),
         indexIdentity: captureOptionalReviewArtifactIdentity(resolveIndexPath(canonicalReviewsDir))
@@ -1318,16 +1346,23 @@ function prepareActiveReviewArtifactReadBarrierMutation(
     reviewsDir: string
 ): ReviewArtifactReadBarrierState | null {
     const barrier = findReviewArtifactReadBarrier(reviewsDir);
-    if (
-        barrier
-        && (barrier.invalidated
-            || !reviewArtifactGenerationMatches(barrier.expectedGeneration, captureReviewArtifactGeneration(reviewsDir)))
-    ) {
-        throw new Error('Review artifact read snapshot was invalidated by a concurrent review publication.');
+    const retained = invocationReviewArtifactGenerations(reviewsDir);
+    const generations = new Set([...retained, ...(barrier ? [barrier] : [])]);
+    if (generations.size > 0) {
+        // Read-only invocation path observations cannot authorize a write after
+        // an alias has moved. Resolve the write target again while holding its lock.
+        const current = captureReviewArtifactGeneration(reviewsDir, true);
+        for (const generation of generations) {
+            if (generation.invalidated || !reviewArtifactGenerationMatches(generation.expectedGeneration, current)) {
+                throw new Error('Review artifact read snapshot was invalidated by a concurrent review publication.');
+            }
+        }
     }
     if (barrier) {
         registerReviewArtifactReadBarrierKeys(barrier, reviewsDir);
     }
+    // Only an active barrier may advance on an owned write. A released
+    // invocation generation remains bound to its original observation.
     return barrier;
 }
 
@@ -1381,6 +1416,19 @@ function findReviewArtifactReadBarrier(reviewsDir: string): ReviewArtifactReadBa
     return null;
 }
 
+function invocationReviewArtifactGenerations(reviewsDir: string): Set<ReviewArtifactReadBarrierState> {
+    if (!isInvocationReadObservationActive()) return new Set();
+    const registry = memoizeInvocationRead(INVOCATION_REVIEW_GENERATIONS, '',
+        () => new Map<string, Set<ReviewArtifactReadBarrierState>>()).value;
+    const key = normalizeReviewArtifactReadSnapshotKey(resolveCanonicalReviewsDirectoryPath(reviewsDir));
+    let generations = registry.get(key);
+    if (!generations) {
+        generations = new Set();
+        registry.set(key, generations);
+    }
+    return generations;
+}
+
 function registerReviewArtifactReadBarrierKeys(
     barrier: ReviewArtifactReadBarrierState,
     reviewsDir: string
@@ -1419,6 +1467,7 @@ function runReviewArtifactReadBarrierParticipant<T>(
     barrier: ReviewArtifactReadBarrierState,
     options: ReviewArtifactLockOptions
 ): T {
+    invocationReviewArtifactGenerations(reviewsDir).add(barrier);
     registerInvocationDependency(barrier, () => {
         if (barrier.invalidated) throw new Error('Review artifact read snapshot was invalidated by a concurrent review publication.');
         assertReviewArtifactGenerationUnchanged(reviewsDir, barrier.expectedGeneration, options);
@@ -1506,7 +1555,12 @@ function assertReviewArtifactReadBarrierParticipantGeneration(
     if (transactionContext && (!transactionContext.settled || !transactionContext.succeeded)) {
         throw new Error('Review artifact read snapshot was invalidated by a concurrent review publication.');
     }
-    assertReviewArtifactGenerationUnchanged(reviewsDir, barrier.expectedGeneration, options);
+    // Invocation consumers verify their retained generation at observation exit.
+    // Transactions still check the live generation under their write lock, even
+    // when an earlier participant has already released its barrier.
+    if (!isInvocationReadObservationActive()) {
+        assertReviewArtifactGenerationUnchanged(reviewsDir, barrier.expectedGeneration, options);
+    }
 }
 
 function captureReviewArtifactGenerationUnderLock(
@@ -1563,18 +1617,18 @@ export function withReviewArtifactReadBarrier<T>(
     if (hasReviewArtifactReadSnapshotForRoot(snapshotKey)) {
         return withReviewArtifactReadSnapshot(reviewsDir, callback, options);
     }
-    const generationCapture = captureReviewArtifactGenerationUnderLock(reviewsDir, options);
-    const barrierState: ReviewArtifactReadBarrierState = {
-        expectedGeneration: generationCapture,
+    // Separate nested/sequential read scopes in one invocation consume the same
+    // captured generation. The participant registers its final validator once.
+    const barrierState = invocationReviewArtifactGenerations(reviewsDir).values().next().value ?? {
+        expectedGeneration: captureReviewArtifactGenerationUnderLock(reviewsDir, options),
         registeredKeys: new Set<string>(),
         activeParticipants: 0,
         invalidated: false
     };
+    if (barrierState.invalidated) {
+        throw new Error('Review artifact read snapshot was invalidated by a concurrent review publication.');
+    }
     registerReviewArtifactReadBarrierKeys(barrierState, reviewsDir);
-    registerInvocationDependency(barrierState, () => {
-        if (barrierState.invalidated) throw new Error('Review artifact read snapshot was invalidated by a concurrent review publication.');
-        assertReviewArtifactGenerationUnchanged(reviewsDir, barrierState.expectedGeneration, options);
-    });
     return runReviewArtifactReadBarrierParticipant(reviewsDir, callback, barrierState, options);
 }
 

@@ -12,6 +12,7 @@ import {
     readWorkflowConfigForMerge
 } from '../../core/workflow-config';
 import { getTaskModeRuleSectionMigrations, RuleContractSectionMigration } from '../../materialization/rule-contracts';
+import { getRuleContractSnippetAlternatives } from '../../materialization/rule-contract-snippets';
 import { validateCompileGateCommand } from '../../gates/compile/compile-gate';
 
 export interface ContractMigrationResult {
@@ -80,7 +81,8 @@ function getMissingSectionSnippets(content: string, migration: RuleContractSecti
     }
 
     const sectionContent = content.slice(bounds.start, bounds.end);
-    return migration.requiredSnippets.filter((snippet) => !sectionContent.includes(snippet));
+    return migration.requiredSnippets.filter((snippet) =>
+        !getRuleContractSnippetAlternatives(snippet).some(candidate => sectionContent.includes(candidate)));
 }
 
 function normalizeComparableSection(content: string): string {

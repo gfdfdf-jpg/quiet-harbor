@@ -40,6 +40,7 @@ export interface NextStepPostPreflightRulePackRoutingOptions extends NextStepRea
 
 export interface NextStepCompileGateRoutingOptions extends NextStepReadinessState {
     compileGatePassed: boolean;
+    compileCommandUnconfigured?: boolean;
     recoveryGate?: 'classify-change' | 'enter-task-mode';
     restartTaskModeCommand: string;
     refreshPreflightCommand: string;
@@ -352,7 +353,7 @@ export function resolveNextStepQualityChecklistRoute(
             title: 'Resolve quality checklist action items.',
             reason:
                 `${options.reason}${actionSummary} Address the required quality checklist follow-up in implementation, ` +
-                'then refresh preflight if the workspace changed before rerunning compile, review, full-suite, or completion gates.',
+                'then refresh preflight if the workspace changed before rerunning compile, review, task test validation, or completion gates.',
             commands: []
         };
     }
@@ -421,6 +422,26 @@ export function resolveNextStepCompileGateRoute(
             commands: [
                 buildCommand('Run compile gate accepting the plan drift',
                     `${options.compileCommand} --allow-plan-drift --allow-plan-drift-reason "<why these files belong to this task>"`)
+            ]
+        };
+    }
+
+    if (/Not-applicable cannot close a failed required compile/u.test(options.reason)) {
+        return {
+            status: 'BLOCKED', nextGate: 'compile-gate', title: 'Fix and rerun the required task compile.',
+            reason: options.reason,
+            commands: [buildCommand('Rerun the required task compile',
+                `${options.compileCommand} --compile-command "<task-compile-command>"`)]
+        };
+    }
+
+    if (options.compileCommandUnconfigured || /Compile gate command is unconfigured/u.test(options.reason)) {
+        return {
+            status: 'BLOCKED', nextGate: 'compile-gate', title: 'Declare task-local compile applicability.',
+            reason: options.reason,
+            commands: [
+                buildCommand('Run this task compile command', `${options.compileCommand} --compile-command "<task-compile-command>"`),
+                buildCommand('Record no separate compile phase', `${options.compileCommand} --compile-not-applicable-reason "<why this stack has no separate compile phase>"`)
             ]
         };
     }

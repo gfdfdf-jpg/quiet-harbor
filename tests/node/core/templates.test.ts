@@ -15,16 +15,14 @@ import {
 } from '../../../src/core/templates';
 import { reviewFindingsReportJsonSchema } from '../../../src/gates/review/review-findings-schema';
 import { getRepoRoot } from '../../../scripts/node-foundation/build';
+import { buildReviewerFocusedSelfValidationContractLines } from '../../../src/gates/review/reviewer-execution-contract';
 
 const normalizeLf = (value: string): string => value.replace(/\r\n/gu, '\n');
 
 test('built-in reviewer prompt supports focused test and validation commands', () => {
     const definition = getMessageTemplateDefinition('reviewer-prompt');
 
-    assert.ok(definition.builtinContent.includes('focused test or validation execution'));
-    assert.ok(definition.builtinContent.includes('focused test or validation command yourself'));
-    assert.ok(definition.builtinContent.includes('failed command must link finding_ids'));
-    assert.ok(definition.builtinContent.includes('share at least one exact changed-file evidence location'));
+    assert.ok(definition.builtinContent.includes(buildReviewerFocusedSelfValidationContractLines().join('\n')));
     assert.ok(definition.builtinContent.includes(
         '[garda:evidence-only:missing-focused-validation] test=<exact-repository-relative-test-path>; action=run-and-record-focused-test'
     ));

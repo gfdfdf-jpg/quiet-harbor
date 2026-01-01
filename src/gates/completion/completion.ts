@@ -2,6 +2,8 @@ import { recordedOutOfScopeNotice } from '../full-suite/recorded-out-of-scope-fa
 import { recordedOutOfScopeFollowUpViolations } from '../full-suite/recorded-out-of-scope-follow-ups';
 import { resolveRestartTaskIntentFromPreflightPath } from '../review-context/review-context-task-criteria-binding';
 import * as path from 'node:path';
+import { taskValidationSemanticReviewViolations } from '../../core/task-validation-plan';
+import { resolveReviewReuseClassificationConfig } from '../review-reuse/review-reuse';
 import {
     computeProtectedSnapshotDigest,
     normalizePath,
@@ -207,6 +209,11 @@ export function runCompletionGate(options: RunCompletionGateOptions) {
         frozenGraphContractRequired
     );
     const taskFullSuite = loadTaskFullSuiteConfig(repoRoot, resolvedTaskId);
+    const validationPlan = taskFullSuite.selection.plan ?? taskFullSuite.selection.reviewedPreflight?.plan;
+    if (validationPlan) errors.push(...taskValidationSemanticReviewViolations(validationPlan,
+        Array.isArray(preflight.changed_files) ? preflight.changed_files.map(String) : [],
+        resolveReviewReuseClassificationConfig(preflight, repoRoot).test_trigger_regexes,
+        toPlainRecord(preflight.required_reviews) || {}));
     const fullSuiteValidationConfig = bindFullSuiteValidationBarrier(
         taskFullSuite.config,
         reviewDependencyGraph
@@ -639,7 +646,7 @@ export function runCompletionGate(options: RunCompletionGateOptions) {
         errors
     });
     if (fullSuiteValidationRequired && taskFullSuite.selection.status !== 'current') {
-        const violation = taskFullSuite.selection.status === 'stale' ? STALE_TASK_TEST_SELECTION : MISSING_TASK_TEST_SELECTION;
+        const violation = taskFullSuite.selection.status === 'stale' ? taskFullSuite.selection.reason || STALE_TASK_TEST_SELECTION : MISSING_TASK_TEST_SELECTION;
         errors.push(violation);
         fullSuiteValidationEvidence.violations.push(violation);
     }

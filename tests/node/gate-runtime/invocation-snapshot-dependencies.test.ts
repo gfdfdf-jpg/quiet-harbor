@@ -8,6 +8,8 @@ import * as path from 'node:path';
 import { withInvocationReadObservation } from '../../../src/core/invocation-read-observation';
 import { appendTaskEvent, readTaskTimelineFileSnapshot, withTaskTimelineReadSnapshot } from '../../../src/gate-runtime/task-events';
 import { readReviewArtifactJsonSnapshot, withReviewArtifactReadSnapshot } from '../../../src/gate-runtime/review-artifacts';
+import { readJsonFile } from '../../../src/core/json';
+import { withNextStepMeasurement } from '../../../src/core/next-step-measurement';
 
 function fixture(t: TestContext) {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'garda-invocation-snapshots-'));
@@ -58,13 +60,36 @@ test('A1 follows the existing authenticated append transition on the retained ow
     })));
 });
 
+for (const first of ['ordinary', 'snapshot'] as const) {
+    test(`review snapshots and ordinary readers share payloads with ${first} admission first`, t => {
+        const { reviewsRoot } = fixture(t), file = path.join(reviewsRoot, 'T-A1-code-receipt.json');
+        fs.writeFileSync(file, '{"accepted":true}');
+        withNextStepMeasurement(() => withInvocationReadObservation(() => {
+            const snapshot = () => withReviewArtifactReadSnapshot(reviewsRoot, () => {
+                assert.equal(readReviewArtifactJsonSnapshot(file).valid, true);
+            });
+            if (first === 'ordinary') readJsonFile(file);
+            else snapshot();
+            for (let repeat = 0; repeat < 3; repeat++) {
+                assert.deepEqual(readJsonFile(file), { accepted: true });
+                snapshot();
+            }
+        }), measurement => assert.equal(measurement.work['payload_read:' + file], 1));
+        assert.throws(() => withInvocationReadObservation(() => {
+            readJsonFile(file);
+            fs.writeFileSync(file, '{"accepted":false}');
+            withReviewArtifactReadSnapshot(reviewsRoot, () => assert.equal(readReviewArtifactJsonSnapshot(file).valid, false));
+        }), /observation changed|snapshot changed/iu);
+    });
+}
+
 test('A1 retains review file observations after their snapshot is released', t => {
     const { reviewsRoot } = fixture(t), file = path.join(reviewsRoot, 'T-A1-code-receipt.json');
     fs.writeFileSync(file, '{"accepted":true}');
     assert.throws(() => withInvocationReadObservation(() => {
         withReviewArtifactReadSnapshot(reviewsRoot, () => assert.equal(readReviewArtifactJsonSnapshot(file).valid, true));
         fs.writeFileSync(file, '{"accepted":false}');
-    }), /Review artifact read snapshot/);
+    }), /Review artifact read snapshot|Invocation file observation changed/);
 });
 
 test('A1 retains review path absence after its snapshot is released', t => {

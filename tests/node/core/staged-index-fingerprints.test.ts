@@ -5,7 +5,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { readStagedBlobFingerprints } from '../../../src/core/staged-index-fingerprints';
+import { parseStageIndexAuthority, readStagedBlobFingerprints } from '../../../src/core/staged-index-fingerprints';
 
 function runGit(repoRoot: string, args: string[]): void {
     const result = childProcess.spawnSync('git', ['-C', repoRoot, ...args], {
@@ -16,6 +16,21 @@ function runGit(repoRoot: string, args: string[]): void {
 }
 
 describe('core/staged-index-fingerprints', () => {
+    it('preserves POSIX backslashes while rejecting Windows separators and traversal', () => {
+        const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+        const record = (file: string) => `100644 ${'a'.repeat(40)} 0\t${file}\0`;
+        try {
+            Object.defineProperty(process, 'platform', { value: 'linux' });
+            assert.equal(parseStageIndexAuthority(record('literal\\name.txt'))[0].path, 'literal\\name.txt');
+            for (const file of ['../escape', '/absolute', 'src/../escape', 'src//empty'])
+                assert.throws(() => parseStageIndexAuthority(record(file)), /malformed record/u);
+            Object.defineProperty(process, 'platform', { value: 'win32' });
+            assert.throws(() => parseStageIndexAuthority(record('literal\\name.txt')), /malformed record/u);
+        } finally {
+            Object.defineProperty(process, 'platform', platform);
+        }
+    });
+
     it('reads requested staged blobs in one index snapshot and ignores dirty worktree content', () => {
         const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'garda-staged-index-fingerprints-'));
         try {
@@ -46,13 +61,11 @@ describe('core/staged-index-fingerprints', () => {
         }
     });
 
-    it('returns no staged fingerprints outside a Git worktree', () => {
+    it('rejects nonempty staged authority outside a Git worktree', () => {
         const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'garda-staged-index-no-repo-'));
         try {
-            assert.deepEqual(
-                [...readStagedBlobFingerprints(repoRoot, ['src/missing.ts'])],
-                []
-            );
+            assert.throws(() => readStagedBlobFingerprints(repoRoot, ['src/missing.ts']), /git .*ls-files.*failed/u);
+            assert.deepEqual([...readStagedBlobFingerprints(repoRoot, [])], []);
         } finally {
             fs.rmSync(repoRoot, { recursive: true, force: true });
         }

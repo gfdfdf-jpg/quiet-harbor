@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { withInvocationReadObservation } from '../../../../src/core/invocation-read-observation';
 
 import { UNCONFIGURED_FULL_SUITE_VALIDATION_COMMAND } from '../../../../src/core/constants';
 import {
@@ -24,6 +25,16 @@ function createConfigFixture(context: TestContext, value: unknown): { root: stri
     return { root, configPath };
 }
 describe('gates/full-suite-validation', () => {
+    it('shares invocation config reads while rejecting replacement before return and refreshing the next call', context => {
+        const fixture = createConfigFixture(context, { full_suite_validation: { enabled: true, command: 'first-suite' } });
+        assert.throws(() => withInvocationReadObservation(() => {
+            assert.equal(loadCoreConfig(fixture.root).command, 'first-suite');
+            assert.equal(loadCoreConfig(fixture.root).command, 'first-suite');
+            fs.writeFileSync(fixture.configPath, JSON.stringify({ full_suite_validation: { enabled: true, command: 'second-suite' } }));
+        }), /observation changed|input changed/i);
+        withInvocationReadObservation(() => assert.equal(loadCoreConfig(fixture.root).command, 'second-suite'));
+    });
+
     it('binds declared report paths and byte limits to the suite config signature', context => {
         const fixture = createConfigFixture(context, { full_suite_validation: {
             enabled: true, command: 'custom-suite', report_files: [{ path: 'reports/suite.xml', max_bytes: 4096 }]

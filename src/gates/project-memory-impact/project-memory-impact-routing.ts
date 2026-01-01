@@ -1,3 +1,4 @@
+import { readInvocationTextFile } from '../../core/invocation-file-observation';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { isRecognizedBundleName } from '../../core/constants';
@@ -256,7 +257,7 @@ export function readCompactState(memoryDir: string, maxChars: number): ProjectMe
             status: 'MISSING'
         };
     }
-    const content = fs.readFileSync(compactPath, 'utf8');
+    const content = readInvocationTextFile(compactPath);
     return {
         path: normalizePath(compactPath),
         exists: true,

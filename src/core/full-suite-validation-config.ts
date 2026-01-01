@@ -1,8 +1,10 @@
-import { createInvocationReadMemoKey, memoizeInvocationRead, registerInvocationDependency } from './invocation-read-observation';
+import { createInvocationReadMemoKey, isInvocationReadObservationActive, memoizeInvocationRead, registerInvocationDependency } from './invocation-read-observation';
+import { observedInvocationValue, readInvocationFileContent, readInvocationPathObservation } from './invocation-file-observation';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { assertWorkflowTransactionReadable } from './workflow-transaction-state';
 import { parseValidationReportFiles, type ValidationReportFile } from './validation-report-contract';
+import { normalizeTaskValidationConfigNames } from './task-validation-names';
 
 import { ensurePlainObject, normalizeBooleanLike, normalizeInteger } from '../schemas/shared';
 import {
@@ -49,6 +51,7 @@ export const DEFAULT_FULL_SUITE_VALIDATION_CONFIG: FullSuiteValidationConfig = O
 });
 
 const WORKFLOW_CONFIG_PATH = createInvocationReadMemoKey<string>('full-suite-workflow-config-path');
+const WORKFLOW_CONFIG_CONTENT = createInvocationReadMemoKey<Record<string, unknown> | undefined>('full-suite-workflow-config-content');
 
 export function resolveWorkflowConfigPath(repoRoot: string): string {
     return memoizeInvocationRead(WORKFLOW_CONFIG_PATH, path.resolve(repoRoot), () => {
@@ -68,7 +71,8 @@ function resolveWorkflowConfigPathUncached(repoRoot: string): string {
 export function loadFullSuiteValidationConfig(repoRoot: string): FullSuiteValidationConfig {
     const configPath = resolveWorkflowConfigPath(repoRoot);
     assertWorkflowTransactionReadable(path.dirname(path.dirname(path.dirname(configPath))));
-    const config = readWorkflowConfig(configPath);
+    const raw = readWorkflowConfig(configPath);
+    const config = raw && normalizeTaskValidationConfigNames(raw);
     if (config?.full_suite_validation === undefined) {
         return { ...DEFAULT_FULL_SUITE_VALIDATION_CONFIG };
     }
@@ -79,9 +83,14 @@ export function loadFullSuiteValidationConfig(repoRoot: string): FullSuiteValida
 }
 
 function readWorkflowConfig(configPath: string): Record<string, unknown> | undefined {
+    return memoizeInvocationRead(WORKFLOW_CONFIG_CONTENT, path.resolve(configPath), () => readWorkflowConfigUncached(configPath)).value;
+}
+
+function readWorkflowConfigUncached(configPath: string): Record<string, unknown> | undefined {
+    const observed = isInvocationReadObservationActive() ? readInvocationPathObservation(configPath) : null;
     let fileInfo: fs.Stats;
     try {
-        fileInfo = fs.lstatSync(configPath);
+        fileInfo = observed ? observedInvocationValue(observed.stat) : fs.lstatSync(configPath);
     } catch (error) {
         if (isMissingPathError(error)) {
             assertConfigAncestorsReadable(configPath);
@@ -91,10 +100,10 @@ function readWorkflowConfig(configPath: string): Record<string, unknown> | undef
     }
     let contents: string;
     try {
-        if (!(fileInfo.isSymbolicLink() ? fs.statSync(configPath) : fileInfo).isFile()) {
+        if (!(fileInfo.isSymbolicLink() ? observed ? observedInvocationValue(observed.targetStat) : fs.statSync(configPath) : fileInfo).isFile()) {
             throw new Error('Not a regular file.');
         }
-        contents = fs.readFileSync(configPath, 'utf8');
+        contents = observed ? readInvocationFileContent(configPath)!.copyBytes().toString('utf8') : fs.readFileSync(configPath, 'utf8');
     } catch {
         throw new Error('workflow-config cannot be read as a regular file.');
     }

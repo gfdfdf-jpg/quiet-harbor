@@ -1,5 +1,9 @@
+import { NATIVE_RECOVERY_WALK_SCENARIOS } from './walk-native-recovery-scenarios';
+import { UNKNOWN_STACK_CONTRACT_SCENARIOS } from './walk-unknown-stack-contract';
+import { STACK_WALK_SCENARIOS, STACK_REVIEW_VARIANTS } from './walk-stack-scenarios';
 import type { WalkEdit, WalkScenario } from './navigator-walk';
 import { TEST_SELECTION_WALK_SCENARIOS } from './walk-test-selection-scenarios';
+import { OPAQUE_RUNNER_WALK_SCENARIOS } from './walk-opaque-runner-scenarios';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { COVERAGE_WALK_SCENARIOS } from './walk-coverage-scenarios';
@@ -14,6 +18,9 @@ import { BOUNDARY_COVERAGE_WALK_SCENARIOS } from './walk-boundary-coverage-scena
 import { OWNER_COVERAGE_WALK_SCENARIOS } from './walk-owner-coverage-scenarios';
 import { PUBLICATION_COVERAGE_WALK_SCENARIOS } from './walk-publication-coverage-scenarios';
 import { ROUTE_CLOSURE_WALK_SCENARIOS } from './walk-route-closure-scenarios';
+import { narrowLegacyFailure } from './walk-legacy-task-contract';
+import { STACK_COMPACT_REVIEW_SCENARIOS, STACK_DEEP_REVIEW_SCENARIOS } from './walk-stack-review-scenarios';
+import { FIELD_CASE_SCENARIOS } from './walk-field-cases';
 
 const SOURCE_EDIT: WalkEdit = { path: 'src/app.ts', append: 'export const changed = true;\n' };
 const TEST_EDIT: WalkEdit = { path: 'tests/app.test.ts', append: '// covered\n' };
@@ -37,7 +44,11 @@ const FOUR_LANE_EDITS: WalkEdit[] = [
 // a small fix without a protected signal repeats in DELTA, a larger one restarts from the first review in FULL,
 // reviews the fix did not reach stay accepted, and documents never trigger a review.
 export const WALK_SCENARIOS: readonly WalkScenario[] = [
+    ...FIELD_CASE_SCENARIOS,
+    ...STACK_COMPACT_REVIEW_SCENARIOS,
+    ...STACK_DEEP_REVIEW_SCENARIOS,
     ...TEST_SELECTION_WALK_SCENARIOS,
+    ...OPAQUE_RUNNER_WALK_SCENARIOS,
     ...OWNER_COVERAGE_WALK_SCENARIOS,
     ...PUBLICATION_COVERAGE_WALK_SCENARIOS,
     ...BOUNDARY_COVERAGE_WALK_SCENARIOS,
@@ -50,6 +61,7 @@ export const WALK_SCENARIOS: readonly WalkScenario[] = [
     ...EVIDENCE_EDGE_WALK_SCENARIOS,
     ...REUSE_COVERAGE_WALK_SCENARIOS,
     ...ROUTE_CLOSURE_WALK_SCENARIOS,
+    ...NATIVE_RECOVERY_WALK_SCENARIOS,
     // These are invalid operator inputs, not fabricated gate-owned lifecycle evidence. The routing
     // contract requires an exact repair handoff before any lifecycle command may execute.
     ...[
@@ -132,6 +144,14 @@ export const WALK_SCENARIOS: readonly WalkScenario[] = [
     },
     ...['db', 'security', 'refactor', 'api', 'performance', 'infra', 'dependency'].map((lane): WalkScenario => ({
         id: lane + '-failed-small-production-fix', edits: BASE_EDITS, requiredLanes: [lane],
+        // API was absent from the later task-selection calibration. Keep the original route budgets;
+        // name these two independently measured fixture input states instead of widening every task.
+        get counterState() {
+            if (lane !== 'api') return undefined;
+            const source = path.join(process.cwd(), SOURCE_FIX.path);
+            return fs.existsSync(source) && fs.readFileSync(source, 'utf8').includes(SOURCE_FIX.append!)
+                ? 'native-api-selected-remediation' : 'native-api-selected-initial';
+        },
         failures: { [lane]: 1 }, fix: [SOURCE_FIX],
         expectedReviews: { code: 2, [lane]: 2, test: 1 },
         expectedModes: ['code:FULL', lane + ':FULL', 'code:DELTA', lane + ':DELTA', 'test:FULL']
@@ -204,6 +224,14 @@ export const WALK_SCENARIOS: readonly WalkScenario[] = [
             { path: 'tests/helpers/render.ts', append: '// shared fixture change\n' }], requiredLanes: ['security', 'refactor'],
         expectedModes: ['code:FULL', 'security:FULL', 'refactor:FULL', 'test:FULL'],
         expectedReviews: { code: 1, security: 1, refactor: 1, test: 1 }
+    },
+    {
+        // This edited leaf is outside NODE_WALK_FIXTURE's auth-case matrix evidence.
+        // Keep already-passed security/refactor lanes while the failed test reviews its delta.
+        id: 'leaf-test-fix-keeps-security-refactor', counterState: 'leaf-test-review-reuse', edits: BASE_EDITS, requiredLanes: ['security', 'refactor'],
+        failures: { test: 1 }, fix: [TEST_FIX],
+        expectedModes: ['code:FULL', 'security:FULL', 'refactor:FULL', 'test:FULL', 'test:DELTA'],
+        expectedReviews: { code: 1, security: 1, refactor: 1, test: 2 }
     },
     {
         id: 'test-failed-fixed-in-test', edits: BASE_EDITS, failures: { test: 1 }, fix: [TEST_FIX],
@@ -289,10 +317,10 @@ export const WALK_SCENARIOS: readonly WalkScenario[] = [
         id: 'compile-fails-once', edits: BASE_EDITS, disturbances: [{ kind: 'fail-compile' }],
         expectedModes: ['code:FULL', 'test:FULL'], expectedReviews: { code: 1, test: 1 }, expectedFailingGates: ['compile-gate']
     },
-    {
+    narrowLegacyFailure({
         id: 'full-suite-fails-once', edits: BASE_EDITS, disturbances: [{ kind: 'fail-full-suite' }],
         expectedModes: ['code:FULL', 'test:FULL'], expectedReviews: { code: 1, test: 1 }, expectedFailingGates: ['full-suite-validation']
-    },
+    }),
     {
         id: 'finished-commands-repeat', edits: BASE_EDITS,
         disturbances: [{ kind: 'repeat-command', gate: 'compile-gate' }, { kind: 'repeat-command', gate: 'record-review-result' }],
@@ -329,5 +357,8 @@ export const WALK_SCENARIOS: readonly WalkScenario[] = [
     {
         id: 'reviewer-too-fast', edits: BASE_EDITS, disturbances: [{ kind: 'fast-reviewer', lane: 'test' }],
         expectedModes: ['code:FULL', 'test:FULL', 'test:FULL'], expectedReviews: { code: 1, test: 2 }, expectedFailingGates: ['record-review-result', 'complete-reviewer-launch']
-    }
+    },
+    ...UNKNOWN_STACK_CONTRACT_SCENARIOS,
+    ...STACK_WALK_SCENARIOS,
+    ...STACK_REVIEW_VARIANTS
 ];

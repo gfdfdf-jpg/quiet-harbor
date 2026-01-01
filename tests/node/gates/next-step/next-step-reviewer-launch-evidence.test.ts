@@ -439,6 +439,21 @@ describe('next-step reviewer launch evidence helpers', () => {
         assert.equal(artifactEvidence.launchInputArtifactSha256, null);
     });
 
+    for (const replacement of ['missing', 'directory'] as const) it(`rejects a ${replacement} pinned reviewer input`, () => {
+        const repoRoot = makeTempRepo();
+        const contextPath = path.join(reviewsRoot(repoRoot), `${TASK_ID}-${REVIEW_TYPE}-review-context.json`);
+        writeJson(contextPath, { task_id: TASK_ID, review_type: REVIEW_TYPE });
+        seedPreparedLaunchArtifact(repoRoot, contextPath);
+        const input = reviewScratchPath(repoRoot, TASK_ID, REVIEW_TYPE, 'reviewer-launch-input.json');
+        fs.unlinkSync(input);
+        if (replacement === 'directory') fs.mkdirSync(input);
+        const evidence = getCurrentReviewerLaunchArtifactEvidenceForInvocation(
+            repoRoot, eventsRoot(repoRoot), TASK_ID, makeReviewState(contextPath));
+        assert.equal(evidence.state, 'orphaned');
+        assert.equal(evidence.orphanedReason, 'launch_input_changed_before_launch_completed');
+        assert.equal(evidence.launchInputArtifactSha256, null);
+    });
+
     it('rejects prepared launch control metadata that swaps both reviewer input path and hash', () => {
         const repoRoot = makeTempRepo();
         const contextPath = path.join(reviewsRoot(repoRoot), `${TASK_ID}-${REVIEW_TYPE}-review-context.json`);
@@ -644,6 +659,22 @@ describe('next-step reviewer launch evidence helpers', () => {
         });
 
         assert.equal(getCurrentReviewerLaunchArtifactEvidenceForInvocation(repoRoot, eventsRoot(repoRoot), TASK_ID, state).state, 'launched');
+        let filteredMeasurement: NextStepMeasurement | undefined;
+        let rejected = 0;
+        withNextStepMeasurement(() => withInvocationReadObservation(() => {
+            const filtered = getCurrentReviewerLaunchArtifactEvidenceForInvocation(repoRoot, eventsRoot(repoRoot), TASK_ID, state, launch => {
+                assert.equal(launch.sha256, launchArtifactSha256);
+                assert.equal(launch.reviewContextSha256, fileSha256(contextPath));
+                rejected += 1;
+                return true;
+            });
+            assert.equal(filtered.state, 'missing_or_invalid');
+        }), measurement => { filteredMeasurement = measurement; });
+        assert.equal(rejected, 1);
+        const inputPath = String(JSON.parse(fs.readFileSync(launchArtifactPath, 'utf8')).reviewer_launch_input_artifact_path);
+        assert.equal(filteredMeasurement?.work['timeline_capture:' + inputPath] ?? 0, 0,
+            'A rejected consumed launch does not open its ACL-protected input snapshot.');
+        assert.equal(getCurrentReviewerLaunchArtifactEvidenceForInvocation(repoRoot, eventsRoot(repoRoot), TASK_ID, state, () => false).state, 'launched');
         assert.equal(timelineHasDelegatedReviewInvocationForCurrentContext(repoRoot, eventsRoot(repoRoot), TASK_ID, state), true);
         assert.match(
             buildReviewerReadinessChainSummary(

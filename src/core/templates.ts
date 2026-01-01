@@ -1,6 +1,69 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+export const REVIEWER_INLINE_INTERPRETER_REASON =
+    'run inline interpreter code with unauditable side effects';
+
+export const REVIEWER_INLINE_INTERPRETER_COMMAND_PATTERN =
+    /^\s*(?:(?:node|deno|bun|python(?:3)?|ruby|perl|php)\s+(?:-e|-c|-p|--eval|--print)\b|php\s+-r\b|(?:powershell|pwsh)\s+(?:-command|-encodedcommand)\b|(?:bash|sh|zsh|cmd)\s+(?:-c|\/c)\b)/iu;
+
+export const REVIEWER_INLINE_INTERPRETER_EXAMPLES = [
+    'node -e', 'node --eval', 'python -c', 'ruby -e', 'perl -e', 'php -r',
+    'pwsh -Command', 'powershell -EncodedCommand', 'bash -c', 'cmd /c'
+] as const;
+
+export function hasReviewerInlineInterpreterOption(firstToken: string, tokens: readonly string[]): boolean {
+    if (/^(?:node(?:\.exe)?|deno|bun|python(?:3)?|ruby|perl|php)$/iu.test(firstToken)) {
+        return tokens.slice(1).some((token) => (
+            /^(?:-e|-c|-p|--eval|--print)(?:$|=|[^a-z0-9-])/iu.test(token)
+            || (/^php$/iu.test(firstToken) && /^-r(?:$|=|[^a-z0-9-])/iu.test(token))
+        ));
+    }
+    if (/^(?:powershell|pwsh)$/iu.test(firstToken)) {
+        return tokens.slice(1).some((token) => /^(?:-command|-encodedcommand)(?:$|=)/iu.test(token));
+    }
+    if (/^(?:bash|sh|zsh|cmd(?:\.exe)?)$/iu.test(firstToken)) {
+        return tokens.slice(1).some((token) => /^(?:-c|\/c)$/iu.test(token));
+    }
+    return false;
+}
+
+export function buildReviewerFocusedRunnerPolicyLines(): string[] {
+    return [
+        '- Use the declared task command and its existing configuration for the exact relevant repository targets. One command may bind multiple targets. Do not create temporary runner scripts or substitute custom compilation, transpilation, dynamic module loading, or an in-memory runner for that declared invocation.',
+        '- For an admitted project recipe, use the exact authenticated executable/arguments and declared test role with the current task identity. A source input or filename extension cannot substitute for that declaration; a passed claim requires the current native PASSED result.',
+        `- Never ${REVIEWER_INLINE_INTERPRETER_REASON}. Prohibited invocation examples: ${REVIEWER_INLINE_INTERPRETER_EXAMPLES.map((example) => `\`${example}\``).join(', ')}. This reviewer rule applies to every stack; these examples are not an exhaustive list of interpreters.`,
+        '- Normal runtime compilation or transformation inside the configured test tool is permitted. This rule does not prohibit a configured TypeScript loader, Python assertion rewriting, or ordinary runtime compilation by the project toolchain.',
+        '- The focused evidence handoff includes validator-compatible command hints only when an exact current authenticated command is available. Hints describe existing evidence, do not authorize automatic execution, and must not be used to duplicate current gate-owned validation.',
+        '- An absent command hint is not proof of missing or unavailable execution. If the project-configured focused invocation cannot be executed, record its exact attempted command and concrete unavailable/prohibited diagnostics; never invent a substitute compiler or relax a mandatory gate.'
+    ];
+}
+
+export const REVIEWER_FOCUSED_SELF_VALIDATION_TOPIC = 'focused-self-validation';
+export const REVIEWER_MISSING_FOCUSED_VALIDATION_MARKER =
+    '[garda:evidence-only:missing-focused-validation]';
+export const REVIEWER_MISSING_FOCUSED_TEST_ACTION = 'run-and-record-focused-test';
+export const REVIEWER_MISSING_FOCUSED_VALIDATION_ACTION = 'run-and-record-focused-validation';
+export const REVIEWER_MISSING_FOCUSED_TEST_MARKER_TEMPLATE =
+    `${REVIEWER_MISSING_FOCUSED_VALIDATION_MARKER} test=<exact-repository-relative-test-path>; `
+    + `action=${REVIEWER_MISSING_FOCUSED_TEST_ACTION}`;
+export const REVIEWER_MISSING_FOCUSED_VALIDATION_MARKER_TEMPLATE =
+    `${REVIEWER_MISSING_FOCUSED_VALIDATION_MARKER} target=<exact-repository-relative-validation-path>; `
+    + `action=${REVIEWER_MISSING_FOCUSED_VALIDATION_ACTION}`;
+
+export function buildReviewerFocusedSelfValidationContractLines(): string[] {
+    return [
+        '- Missing prior focused execution evidence is not by itself a finding or residual risk.',
+        '- Only when the prospective finding is specifically that a relevant focused check may not have run, execute the smallest safe relevant local test or validation command yourself for its declared repository test or validation target files, with no unrelated or directory target, before deciding whether a finding exists.',
+        '- The focused self-check must stay inside the authenticated review scope and must not invoke Garda, access network services implicitly, start background services, mutate source or control artifacts, use shell command chaining, substitution, or expansion, run a broad build/full suite, or duplicate current gate-owned evidence.',
+        ...buildReviewerFocusedRunnerPolicyLines(),
+        '- Record the exact attempted command, command_outcome (`passed`, `failed`, `unavailable`, or `prohibited`), and concise non-placeholder diagnostics that state the concrete result, failure, or prohibition in a validation_notes entry whose topic is `focused-self-validation`. The command must identify every exact check target. Its authenticated changed-file evidence must explain why each target is relevant. For a passed command, evidence does not need to repeat the target paths, even when the review reports a separate finding.',
+        '- For a failed, unavailable, or prohibited focused command, keep evidence.location as a concrete path:line inside the assigned lane\'s authenticated changed-file evidence domain. Put the exact command target path and its concrete relationship to changed behavior in one clause of evidence.observation when the target itself is outside that domain; for example: `<exact-target> validates the changed behavior at this source location.` The target, `affected`/`changed`/`modified`/`new`/`updated` (or the current task id), and a relationship verb such as `validates`/`covers`/`exercises`/`asserts` must appear in that clause. Semicolons, newlines, sentence punctuation, and contrastive conjunctions `but`/`however`/`whereas`/`while` start a new clause. Reuse a finding\'s exact changed-file evidence location when finding_ids links the note. Naming the target only in note, command, or diagnostics does not satisfy the evidence contract.',
+        '- If the focused command passes, do not report missing prior execution as a finding or residual risk. If it exposes an actual defect or test failure, report that defect as an ordinary severity finding rather than as evidence-only F-000, link the failed validation note to the exact ordinary finding through finding_ids, and reuse at least one exact changed-file evidence location from each linked finding in that note.',
+        `- Use reserved id \`F-000\` only after a real focused attempt is unavailable or prohibited. Put the exact canonical marker \`${REVIEWER_MISSING_FOCUSED_TEST_MARKER_TEMPLATE}\` or \`${REVIEWER_MISSING_FOCUSED_VALIDATION_MARKER_TEMPLATE}\` in its title or description, replacing only the angle-bracketed path. For multiple required targets, put each canonical marker on a separate description line; every target needs an associated attempted command and evidence. A \`failed\` check represents actual failure evidence and must use an ordinary severity finding. The focused-self-validation note must preserve the exact command and actionable diagnostics.`
+    ];
+}
+
 function escapeRegex(text: string): string {
     return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -134,8 +197,7 @@ Review context path: {{REVIEW_CONTEXT_PATH}}
 Output mode: verdict-free findings-only JSON.
 Return exactly one JSON object that follows the generated output template and completes every coverage-ledger obligation.
 Do not add verdict, pass/fail, status, downstream disposition, or remediation fields.
-Missing prior focused test or validation execution is not itself a finding. Only when that is the prospective finding, run the smallest safe local focused test or validation command yourself for exactly one relevant repository target file with no unrelated or directory target, record its exact command/outcome and concrete non-placeholder diagnostics in validation_notes, and decide from the actual result; authenticated changed-file evidence must name that exact target, and a failed command must link finding_ids to the exact ordinary defect finding and share at least one exact changed-file evidence location with each linked finding.
-For an unavailable or prohibited attempt, use reserved id F-000 and make either its title or description exactly \`[garda:evidence-only:missing-focused-validation] test=<exact-repository-relative-test-path>; action=run-and-record-focused-test\` or \`[garda:evidence-only:missing-focused-validation] target=<exact-repository-relative-validation-path>; action=run-and-record-focused-validation\`, replacing only the angle-bracketed path.
+${buildReviewerFocusedSelfValidationContractLines().join('\n')}
 Write the JSON to ReviewOutputPath and run the exact read-only \`record-review-result --check-only\` command in the launch handoff as the required last step. Fix every diagnostic and repeat until it passes, then return that same object. Do not run any other Garda command, launch descendants, mutate source or control evidence, access network services implicitly, start background services, or use shell command chaining, substitution, or expansion. The launcher owns result recording and downstream workflow.
 <!-- garda:protected-end findings-contract -->
 

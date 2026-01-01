@@ -1,3 +1,4 @@
+import { readInvocationTextFile } from '../../core/invocation-file-observation';
 import { countNextStepWork } from '../../core/next-step-measurement';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -92,7 +93,7 @@ function readWorkflowConfigProtectedManifestCandidates(repoRoot: string): string
         return [];
     }
     try {
-        const parsed = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as Record<string, unknown>;
+        const parsed = JSON.parse(readInvocationTextFile(manifestPath)) as Record<string, unknown>;
         const protectedSnapshot = parsed.protected_snapshot
             && typeof parsed.protected_snapshot === 'object'
             && !Array.isArray(parsed.protected_snapshot)
@@ -124,7 +125,7 @@ function readChangedWorkflowConfigProtectedManifestFiles(
     try {
         const gitChangedFileSet = new Set(gitChangedFiles.map((entry) => normalizePath(entry)).filter(Boolean));
         const requireCurrentWorkspaceSignal = repoHasGitMetadata(repoRoot);
-        const parsed = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as Record<string, unknown>;
+        const parsed = JSON.parse(readInvocationTextFile(manifestPath)) as Record<string, unknown>;
         const protectedSnapshot = parsed.protected_snapshot
             && typeof parsed.protected_snapshot === 'object'
             && !Array.isArray(parsed.protected_snapshot)

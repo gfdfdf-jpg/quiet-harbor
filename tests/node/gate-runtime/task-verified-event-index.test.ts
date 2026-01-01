@@ -1,3 +1,4 @@
+import { selectVerifiedEvents } from '../../../src/gate-runtime/timeline/task-verified-event-index';
 import { readStartupCycleReadiness } from '../../../src/gates/next-step/next-step-startup-readiness';
 import { getHiddenReviewTimingTrustRemediation, readCompleteReviewTimelineEvidence } from '../../../src/gates/next-step/next-step-review-evidence';
 import type { ReviewArtifactState } from '../../../src/gates/next-step/next-step-review-artifact-readers';
@@ -48,7 +49,7 @@ test('complete review history keeps old proof while repeated consumers avoid ful
     assert.equal(measured!.work.timeline_verify, 1);
     assert.equal(measured!.work.timeline_parse, 1);
     assert.equal(measured!.work['visit:next-step-review-evidence:63'] || 0, 0);
-    assert.equal(measured!.work['visit:review_evidence_compile_candidate'], 8);
+    assert.equal(measured!.work['visit:review_evidence_compile_candidate'] || 0, 0);
 });
 
 test('complete review history retains strict legacy compile boundaries and raw sequence values', t => {
@@ -278,4 +279,36 @@ test('real startup readiness queries event types without revisiting unrelated hi
     }
     assert.deepEqual(samples[0].output, samples[1].output);
     assert.equal(samples[0].visits, samples[1].visits);
+});
+
+
+test('ordered and normalized consumers reuse canonical type views and memoize merged selections', t => {
+    const f = fixture(t); f.append('TASK_MODE_ENTERED'); f.append('PREFLIGHT_CLASSIFIED');
+    let measured: NextStepMeasurement | undefined;
+    withNextStepMeasurement(() => withInvocationReadObservation(() => {
+        const index = readInvocationVerifiedEventIndex(f.file, f.taskId)!;
+        assert.equal(selectVerifiedEvents(index, ['TASK_MODE_ENTERED', 'ABSENT'], { ordered: true }), index.byType.TASK_MODE_ENTERED);
+        assert.deepEqual(selectVerifiedEvents(index, ['TASK_MODE_ENTERED'], { normalized: true, ordered: true }), index.byType.TASK_MODE_ENTERED);
+        const merged = selectVerifiedEvents(index, ['PREFLIGHT_CLASSIFIED', 'TASK_MODE_ENTERED'], { ordered: true });
+        assert.deepEqual(merged.map(event => event.event_type), ['TASK_MODE_ENTERED', 'PREFLIGHT_CLASSIFIED']);
+        assert.ok(Object.isFrozen(merged));
+        assert.equal(selectVerifiedEvents(index, ['TASK_MODE_ENTERED', 'PREFLIGHT_CLASSIFIED', 'TASK_MODE_ENTERED'], { ordered: true }), merged);
+    }), value => { measured = value; });
+    assert.equal(measured!.work.timeline_verify, 1);
+    assert.equal(measured!.work['visit:verified_timeline_selected_event'], 2, 'Only the first merged view visits its selected events.');
+});
+
+
+test('native composed execution views are filled during the single verified pass', t => {
+    const f = fixture(t); f.append('INTERMEDIATE_COMMAND_STARTED'); f.append('INTERMEDIATE_COMMAND_RUN');
+    let measured: NextStepMeasurement | undefined;
+    withNextStepMeasurement(() => withInvocationReadObservation(() => {
+        const index = readInvocationVerifiedEventIndex(f.file, f.taskId)!;
+        const attempts = selectVerifiedEvents(index, ['INTERMEDIATE_COMMAND_RUN', 'INTERMEDIATE_COMMAND_STARTED'], { ordered: true });
+        const cases = selectVerifiedEvents(index, ['INTERMEDIATE_COMMAND_RUN', 'INTERMEDIATE_COMMAND_STARTED', 'TEST_FIRST_EXPECTED_FAILURE_RECORDED', 'REVIEW_RECORDED']);
+        assert.deepEqual(attempts, index.events); assert.deepEqual(cases, index.events);
+        assert.ok(Object.isFrozen(attempts)); assert.ok(Object.isFrozen(cases));
+    }), value => { measured = value; });
+    assert.equal(measured!.work.timeline_verify, 1); assert.equal(measured!.work.timeline_parse, 1);
+    assert.equal(measured!.work['visit:verified_timeline_selected_event'] ?? 0, 0);
 });

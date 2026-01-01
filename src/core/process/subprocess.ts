@@ -992,13 +992,15 @@ function getWindowsCommandProcessor(): string {
 
 export function buildWindowsBatchCommandLine(executablePath: string, args: readonly string[] = []): string {
     const batchCommandToken = assertBatchCommandToken(executablePath, 'Batch command token');
-    const commandParts = ['call', formatWindowsBatchToken(batchCommandToken)];
+    const commandParts = [formatWindowsBatchToken(batchCommandToken, true)];
     for (let index = 0; index < args.length; index += 1) {
         const argument = String(args[index] ?? '');
         assertSafeWindowsBatchLiteral(argument, `Batch argument #${index + 1}`);
         commandParts.push(formatWindowsBatchToken(argument));
     }
-    return commandParts.join(' ');
+    // /s /c strips this outer quote pair. Invoke the batch file directly:
+    // CALL adds another expansion pass and doubles quoted carets before batch entry.
+    return `"${commandParts.join(' ')}"`;
 }
 
 function attachDecodedOutput(

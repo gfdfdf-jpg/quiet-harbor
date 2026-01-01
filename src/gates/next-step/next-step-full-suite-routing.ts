@@ -55,6 +55,7 @@ export interface NextStepFullSuiteValidationRoutingOptions {
     timeoutRepairTaskProposal: string | null;
     repeatedTimeoutBlockerAnalysis?: string | null;
     timeoutRepairTaskCommand?: string | null;
+    taskRepairCommand?: string;
     timeoutRepairTaskMaterialized?: boolean;
     timedOutRetryAvailable: boolean;
     transientRetryEvidenceAvailable: boolean;
@@ -64,9 +65,13 @@ export interface NextStepFullSuiteValidationRoutingOptions {
     configPath: string;
     commandText: string;
     testSelectionViolations?: readonly string[];
+    executionIntegrityViolations?: readonly string[];
     testSelectionCommand: string;
     testSelectionRequiresConfirmation: boolean;
-    outOfScopeFailure?: { refs: readonly string[]; repairCommand: string; narrowCommand?: string; widenScopeCommand: string; restoredRepairValidationCommand?: string } | null;
+    testSelectionReferenceCommand?: string;
+    /** Offer a fresh selection for a project-wide command or after a failed opaque selection. */
+    testSelectionReselectCommand?: string;
+    outOfScopeFailure?: { refs: readonly string[]; repairCommand: string; narrowCommand?: string; widenScopeCommand: string; restoredRepairValidationCommand?: string; followUpCommand?: string; referenceCommand?: string; failedCommand?: string } | null;
     timeoutForecastLine: string | null;
     command: string;
     runMarkerRecoveryCommand: string;
@@ -79,18 +84,32 @@ export interface NextStepFullSuiteValidationRoutingOptions {
 
 export const TASK_TEST_SELECTION_GUIDANCE =
     'Choose the tests that verify this task\'s changes and acceptance criteria; the selection applies to this task only. '
-    + 'Keep the configured command or choose a task-scoped command with focused test targets. ';
+    + 'Supply a command that runs only this task\'s tests and relevant regressions. Every changed test and every target carried from a failed selection must run. '
+    + 'For opaque entrypoints declare target and helper/data mappings with --task-test-plan (JSON or @file). Several literal commands may be joined by &&; each needs bound targets. '
+    + 'Use the configured project command only as a reference to narrow from. ';
 
 export function resolveNextStepFullSuiteValidationRoute(
     options: NextStepFullSuiteValidationRoutingOptions
 ): NextStepFullSuiteValidationRoute | null {
+    const requiresEvidenceNow = shouldRunFullSuiteAfterCompileBeforeReviews(options.enabled, options.placement,
+        options.notRequiredForCurrentScope) || shouldRunFullSuiteBeforeTestReview(options.enabled, options.placement,
+        options.notRequiredForCurrentScope) && options.nextReviewType === 'test';
+    // An unsatisfied test run cannot preempt an independent lane or hide its own repair handoff.
+    const pendingTimeoutRepair = options.timeoutBlockerExhausted && !isTimeoutBlockerResolvedByRepairTask(options);
+    if (requiresEvidenceNow && options.executionIntegrityViolations?.length && !pendingTimeoutRepair)
+        return { status: 'BLOCKED', nextGate: 'full-suite-validation',
+            title: options.placement === 'after_compile_before_reviews'
+                ? 'Run task test validation after compile before reviews with current task execution evidence.'
+                : 'Run task test validation before test review with current task execution evidence.',
+            reason: options.executionIntegrityViolations.join(' '),
+            commands: [buildCommand('Run selected own task tests with fresh process evidence', options.command)] };
     if (shouldRunFullSuiteAfterCompileBeforeReviews(
         options.enabled,
         options.placement,
         options.notRequiredForCurrentScope
     )) {
         return resolveTestSelectionRoute(options) ?? resolveOutOfScopeFullSuiteRoute(options.outOfScopeFailure)
-            ?? resolveAfterCompileBeforeReviewsRoute(options);
+            ?? withTaskTestReselection(resolveAfterCompileBeforeReviewsRoute(options), options);
     }
 
     if (
@@ -102,22 +121,42 @@ export function resolveNextStepFullSuiteValidationRoute(
         && options.nextReviewType === 'test'
     ) {
         return resolveTestSelectionRoute(options) ?? resolveOutOfScopeFullSuiteRoute(options.outOfScopeFailure)
-            ?? resolveBeforeTestReviewRoute(options);
+            ?? withTaskTestReselection(resolveBeforeTestReviewRoute(options), options);
     }
 
     return null;
 }
 
+/** A task that selected the project-wide command can always switch to its own tests before running it. */
+function withTaskTestReselection(
+    route: NextStepFullSuiteValidationRoute | null, options: NextStepFullSuiteValidationRoutingOptions
+): NextStepFullSuiteValidationRoute | null {
+    if (!route || route.nextGate !== 'full-suite-validation' || !options.testSelectionReselectCommand) return route;
+    return {
+        ...route,
+        reason: route.reason + ' The current task selection is the configured project-wide command. If this task has its own '
+            + 'tests, first select only them with the second command (replace its command placeholder), then run task test '
+            + 'validation; keep the project command only when it is exactly this task\'s own test command.',
+        commands: [...route.commands, buildCommand('Select only this task\'s tests', options.testSelectionReselectCommand)]
+    };
+}
+
 export function resolveOutOfScopeFullSuiteRoute(
     failure: NextStepFullSuiteValidationRoutingOptions['outOfScopeFailure']
-): (NextStepFullSuiteValidationRoute & { status: 'BLOCKED'; nextGate: 'task-test-selection' | 'materialize-full-suite-repair-task' | 'full-suite-validation' }) | null {
+): (NextStepFullSuiteValidationRoute & { status: 'BLOCKED'; nextGate: 'task-test-selection' | 'materialize-full-suite-repair-task' | 'full-suite-validation' | 'materialize-review-follow-up-tasks' }) | null {
     if (!failure) return null;
+    if (failure.followUpCommand && !failure.narrowCommand) {
+        return { status: 'BLOCKED', nextGate: 'materialize-review-follow-up-tasks',
+            title: 'Materialize the recorded broad failure follow-up.',
+            reason: 'The task selection retains its required tests. Preserve the failed command and authenticated artifact in a distinct grouped child follow-up; test attribution is optional.',
+            commands: [buildCommand('Materialize recorded failure follow-up', failure.followUpCommand)] };
+    }
     if (failure.restoredRepairValidationCommand) {
         return {
             status: 'BLOCKED', nextGate: 'full-suite-validation',
             title: 'Revalidate the restored parent after the linked repair completed.',
             reason: `The authenticated repair handoff completed and parent WIP was restored. Original failing tests: ${failure.refs.join(', ')}. `
-                + 'Run the original full-suite command on the restored parent before continuing. '
+                + 'Run the original test command on the restored parent before continuing. '
                 + 'AUDIT_AND_BLOCK still blocks DONE until passing validation resolves the original failure; completed repair tasks alone are not passing evidence.',
             commands: [buildCommand('Validate the original command after parent WIP restore', failure.restoredRepairValidationCommand)]
         };
@@ -125,29 +164,34 @@ export function resolveOutOfScopeFullSuiteRoute(
     return {
         status: 'BLOCKED', nextGate: failure.narrowCommand ? 'task-test-selection' : 'materialize-full-suite-repair-task',
         title: 'Narrow test selection to this task’s tests and regressions.',
-        reason: `Failing tests outside the current task's preflight scope: ${failure.refs.join(', ') || 'see the full-suite output artifact'}. `
-            + 'The failing tests are outside this task’s scope. Narrow your selection to your task’s tests and relevant regressions. The failures are recorded in the grouped follow-up task with their command and authenticated full-suite artifact. In-scope failing tests and current changed tests must remain selected. '
-            + 'Declare one meaningful linked repair task in TASK.md for the failing out-of-scope tests, with independent Repair scope paths; '
+        reason: `Failed command: ${redactSecretText(failure.failedCommand || 'see the task test artifact')}. Attributed tests (optional): ${failure.refs.join(', ') || 'not attributed'}. `
+            + (failure.referenceCommand ? `Configured project command (reference to narrow from): ${redactSecretText(failure.referenceCommand)}. ` : '')
+            + 'Narrow your selection to your task’s tests and relevant regressions. The entire failed run is recorded in the grouped follow-up task with its command and authenticated task test artifact; no per-test attribution or rerun of the broad command is required. Carried regression targets and current changed tests must remain selected. '
+            + TASK_TEST_SELECTION_GUIDANCE
+            + 'After the narrowed selection is accepted, materialize the recorded failure follow-up. '
+            + 'For an alternative repair handoff: Declare one meaningful linked repair task in TASK.md for the task-owned failure, with independent Repair scope paths; '
             + 'declare more only when the repairs are independent. Garda-instructed repair rows are approved work: create them without asking the operator. '
             + 'Then run the printed materialization command to preserve parent WIP and execute the repair task(s). '
             + 'Alternatively, obtain explicit operator approval to widen this task\'s scope and update its acceptance criteria/plan, '
             + 'then run the scope-upgrade command with the approved repair paths. Refresh preflight, compile, select tests and validate again. '
             + `Operator-approved scope-upgrade command: ${failure.widenScopeCommand}`,
         commands: [...(failure.narrowCommand ? [buildCommand('Narrow this task’s test selection and record outside failures', failure.narrowCommand)] : []),
-            buildCommand('Materialize the linked out-of-scope full-suite repair', failure.repairCommand),
+            ...(failure.followUpCommand ? [buildCommand('Materialize recorded failure follow-up after selection', failure.followUpCommand)] : []),
+            buildCommand('Materialize the linked out-of-scope task test repair', failure.repairCommand),
             buildCommand('Widen scope after explicit operator approval', failure.widenScopeCommand)]
     };
 }
 
 export function resolveTestSelectionRoute(options: Pick<NextStepFullSuiteValidationRoutingOptions,
-    'testSelectionViolations' | 'testSelectionCommand' | 'testSelectionRequiresConfirmation'>):
+    'testSelectionViolations' | 'testSelectionCommand' | 'testSelectionRequiresConfirmation' | 'testSelectionReferenceCommand'>):
     (NextStepFullSuiteValidationRoute & { status: 'BLOCKED'; nextGate: 'task-test-selection' }) | null {
     if (!options.testSelectionViolations?.length) return null;
     return { status: 'BLOCKED', nextGate: 'task-test-selection',
         title: 'Select tests for the implemented task before running validation.',
         reason: options.testSelectionViolations.join(' ') + ' Select your own task\'s tests with this command; '
             + 'do not manually change the project-wide test command. The selection is bound to this task and its current evidence. '
-            + 'The command and changed test files are prefilled. Supply the reason and change the command or add regression targets if needed. '
+            + 'Changed test files and carried regression targets are prefilled. Replace the command placeholder with your task-only test command and supply the reason. '
+            + (options.testSelectionReferenceCommand ? `Configured project command (reference to narrow from): ${redactSecretText(options.testSelectionReferenceCommand)}. ` : '')
             + (options.testSelectionRequiresConfirmation
                 ? 'Obtain genuine operator confirmation and use its fresh timestamp before running the command. ' : '')
             + TASK_TEST_SELECTION_GUIDANCE,
@@ -155,12 +199,11 @@ export function resolveTestSelectionRoute(options: Pick<NextStepFullSuiteValidat
 }
 
 export function buildTaskTestSelectionCommand(
-    cliPrefix: string, taskId: string, changedTests: readonly string[], requireConfirmation: boolean,
-    configuredCommand = '<project test command that runs the selected tests>'
+    cliPrefix: string, taskId: string, changedTests: readonly string[], requireConfirmation: boolean
 ): string {
     const parts = [
         `${cliPrefix} workflow set`,
-        `--full-suite-command ${quoteCommandValue(configuredCommand)}`,
+        `--task-test-command ${quoteCommandValue('<command that runs only this task\'s tests and required regressions>')}`,
         `--task-id ${quoteCommandValue(taskId)}`,
         `--reason ${quoteCommandValue(`${taskId} verifies <task behavior and regression relationships>`)}`,
         ...changedTests.map(file => `--focused-required-test-path ${quoteCommandValue(file)}`)
@@ -168,6 +211,15 @@ export function buildTaskTestSelectionCommand(
     if (requireConfirmation) parts.push('--operator-confirmed yes --operator-confirmed-at-utc "<ISO-8601 timestamp of operator approval>"');
     parts.push('--target-root "."');
     return parts.join(' ');
+}
+
+export function resolveTaskTestFailureRoute(command: string, repairCommand: string, selectionCommand?: string): NextStepFullSuiteValidationRoute & { status: 'BLOCKED'; nextGate: 'implementation' } {
+    return { status: 'BLOCKED', nextGate: 'implementation',
+        title: 'Fix the selected task tests before completion.',
+        reason: 'The selected task tests failed. Fix this task, refresh preflight and compile when implementation changes, then rerun its selected command. Required changed tests and carried regression targets cannot be dropped. A bounded repair handoff may use one meaningful linked child with declared Repair scope paths.',
+        commands: [buildCommand('Validate selected tests after fixing this task', command),
+            ...(selectionCommand ? [buildCommand('Reselect task tests retaining all required targets', selectionCommand)] : []),
+            buildCommand('Materialize a declared task repair child', repairCommand)] };
 }
 
 export function shouldRunFullSuiteAfterCompileBeforeReviews(
@@ -197,7 +249,7 @@ function resolveAfterCompileBeforeReviewsRoute(
     if (options.timeoutBlockerExhausted && !timeoutBlockerResolvedByRepairTask) {
         return buildTimeoutBlockerRepairRoute(
             options,
-            'Materialize a linked full-suite timeout repair task handoff before reviewer launch.',
+            'Materialize a linked task test timeout repair task handoff before reviewer launch.',
             'Do not launch independent reviewers until the timeout blocker is resolved or an audited repair handoff is materialized.'
         );
     }
@@ -207,37 +259,40 @@ function resolveAfterCompileBeforeReviewsRoute(
         if (options.timedOutRetryAvailable) {
             return buildRetryRoute(
                 options,
-                'Retry full-suite validation with updated timeout forecast.',
-                'Rerun the configured full-suite command before launching independent reviewers.'
+                'Retry task test validation with updated timeout forecast.',
+                'Rerun the selected task test command before launching independent reviewers.'
             );
         }
         if (options.transientRetryEvidenceAvailable) {
             return buildManualTransientRetryRoute(
                 options,
-                'Retry full-suite validation after focused transient evidence.',
-                'Rerun the configured full-suite command before launching independent reviewers.'
+                'Retry task test validation after focused transient evidence.',
+                'Rerun the selected task test command before launching independent reviewers.'
             );
         }
         if (options.targetedDiagnosticRetryAvailable) {
             return buildTargetedDiagnosticRetryRoute(
                 options,
-                'Retry full-suite validation after targeted diagnostics.',
-                'Rerun the configured full-suite command before launching independent reviewers.'
+                'Retry task test validation after targeted diagnostics.',
+                'Rerun the selected task test command before launching independent reviewers.'
             );
         }
         return {
             status: 'BLOCKED',
             nextGate: 'implementation',
-            title: 'Fix full-suite failures before reviewer launch.',
+            title: 'Fix task test failures before reviewer launch.',
             reason:
-                `Full-suite validation is configured for placement '${options.placement}' and already failed for the current compiled scope. ` +
-                `Do not launch independent reviewers until the configured full-suite command passes; ` +
-                `fix the failures, rerun compile-gate if implementation changed, then execute the printed full-suite-validation command.`,
+                `Task test validation is configured for placement '${options.placement}' and already failed for the current compiled scope. ` +
+                `Do not launch independent reviewers until the selected task test command passes; ` +
+                `fix the failures in the selected task tests, rerun compile-gate if implementation changed, then execute the printed task-test-validation command. `
+                + 'A bounded repair handoff may use one meaningful linked child with declared Repair scope paths.',
             commands: [
                 buildCommand(
-                    'Rerun full-suite validation after fixing implementation',
+                    'Rerun task test validation after fixing implementation',
                     options.command
-                )
+                ),
+                ...(options.testSelectionReselectCommand ? [buildCommand('Reselect task tests retaining all required targets', options.testSelectionReselectCommand)] : []),
+                ...(options.taskRepairCommand ? [buildCommand('Materialize a declared task repair child', options.taskRepairCommand)] : [])
             ]
         };
     }
@@ -245,8 +300,8 @@ function resolveAfterCompileBeforeReviewsRoute(
     if (!options.gatePassed) {
         const interruptedRoute = buildInterruptedRunRecoveryRoute(
             options,
-            'Recover interrupted full-suite validation run.',
-            'Recover the interrupted full-suite run before launching independent reviewers.'
+            'Recover interrupted task test validation run.',
+            'Recover the interrupted task test run before launching independent reviewers.'
         );
         if (interruptedRoute) {
             return interruptedRoute;
@@ -254,15 +309,15 @@ function resolveAfterCompileBeforeReviewsRoute(
         return {
             status: 'BLOCKED',
             nextGate: 'full-suite-validation',
-            title: 'Run full-suite validation after compile before reviews.',
+            title: 'Run task test validation after compile before reviews.',
             reason:
-                `Effective workflow config enables full-suite validation at ${options.configPath} with placement '${options.placement}'. ` +
+                `Effective workflow config enables task test validation at ${options.configPath} with placement '${options.placement}'. ` +
                 `Run it after compile-gate and before launching independent reviewers so suite failures fail fast on the same compiled scope. ` +
                 `The final closeout can reuse this artifact only if no relevant task scope changes occur afterward. ` +
-                `${TASK_TEST_SELECTION_GUIDANCE}Command: ${options.commandText}. ${options.timeoutForecastLine || ''}`.trim(),
+                `Selected task test command: ${options.commandText}. ${options.timeoutForecastLine || ''}`.trim(),
             commands: [
                 buildCommand(
-                    'Run full-suite validation',
+                    'Run task test validation',
                     options.command
                 )
             ]
@@ -279,7 +334,7 @@ function resolveBeforeTestReviewRoute(
     if (options.timeoutBlockerExhausted && !timeoutBlockerResolvedByRepairTask) {
         return buildTimeoutBlockerRepairRoute(
             options,
-            'Materialize a linked full-suite timeout repair task handoff before launching test review.',
+            'Materialize a linked task test timeout repair task handoff before launching test review.',
             'Do not launch the mandatory test reviewer until the timeout blocker is resolved or an audited repair handoff is materialized.'
         );
     }
@@ -288,37 +343,40 @@ function resolveBeforeTestReviewRoute(
         if (options.timedOutRetryAvailable) {
             return buildRetryRoute(
                 options,
-                'Retry full-suite validation with updated timeout forecast.',
+                'Retry task test validation with updated timeout forecast.',
                 'Rerun it before launching the mandatory test reviewer.'
             );
         }
         if (options.transientRetryEvidenceAvailable) {
             return buildManualTransientRetryRoute(
                 options,
-                'Retry full-suite validation after focused transient evidence.',
+                'Retry task test validation after focused transient evidence.',
                 'Rerun it before launching the mandatory test reviewer.'
             );
         }
         if (options.targetedDiagnosticRetryAvailable) {
             return buildTargetedDiagnosticRetryRoute(
                 options,
-                'Retry full-suite validation after targeted diagnostics.',
+                'Retry task test validation after targeted diagnostics.',
                 'Rerun it before launching the mandatory test reviewer.'
             );
         }
         return {
             status: 'BLOCKED',
             nextGate: 'implementation',
-            title: 'Fix full-suite failures before launching test review.',
+            title: 'Fix task test failures before launching test review.',
             reason:
-                `Full-suite validation is enabled and already failed for the current compiled scope. ` +
-                `Do not launch the mandatory test reviewer until the configured full-suite command passes; ` +
-                `fix the failures, rerun compile-gate if implementation changed, then execute the printed full-suite-validation command.`,
+                `Task test validation is enabled and already failed for the current compiled scope. ` +
+                `Do not launch the mandatory test reviewer until the selected task test command passes; ` +
+                `fix the failures in the selected task tests, rerun compile-gate if implementation changed, then execute the printed task-test-validation command. `
+                + 'A bounded repair handoff may use one meaningful linked child with declared Repair scope paths.',
             commands: [
                 buildCommand(
-                    'Rerun full-suite validation after fixing implementation',
+                    'Rerun task test validation after fixing implementation',
                     options.command
-                )
+                ),
+                ...(options.testSelectionReselectCommand ? [buildCommand('Reselect task tests retaining all required targets', options.testSelectionReselectCommand)] : []),
+                ...(options.taskRepairCommand ? [buildCommand('Materialize a declared task repair child', options.taskRepairCommand)] : [])
             ]
         };
     }
@@ -326,8 +384,8 @@ function resolveBeforeTestReviewRoute(
     if (!options.gatePassed) {
         const interruptedRoute = buildInterruptedRunRecoveryRoute(
             options,
-            'Recover interrupted full-suite validation run.',
-            'Recover the interrupted full-suite run before launching the mandatory test reviewer.'
+            'Recover interrupted task test validation run.',
+            'Recover the interrupted task test run before launching the mandatory test reviewer.'
         );
         if (interruptedRoute) {
             return interruptedRoute;
@@ -335,15 +393,15 @@ function resolveBeforeTestReviewRoute(
         return {
             status: 'BLOCKED',
             nextGate: 'full-suite-validation',
-            title: 'Run full-suite validation before test review.',
+            title: 'Run task test validation before test review.',
             reason:
-                `Effective workflow config enables full-suite validation at ${options.configPath} with placement '${options.placement}'. ` +
+                `Effective workflow config enables task test validation at ${options.configPath} with placement '${options.placement}'. ` +
                 `Run it before launching the mandatory test reviewer so suite failures fail fast on the same compiled scope. ` +
                 `The final closeout can reuse this artifact only if no relevant task scope changes occur afterward. ` +
-                `${TASK_TEST_SELECTION_GUIDANCE}Command: ${options.commandText}. ${options.timeoutForecastLine || ''}`.trim(),
+                `Selected task test command: ${options.commandText}. ${options.timeoutForecastLine || ''}`.trim(),
             commands: [
                 buildCommand(
-                    'Run full-suite validation',
+                    'Run task test validation',
                     options.command
                 )
             ]
@@ -364,15 +422,15 @@ function buildInterruptedRunRecoveryRoute(
             return {
                 status: 'BLOCKED',
                 nextGate: 'full-suite-validation',
-                title: 'Inspect unresolved full-suite run marker state.',
+                title: 'Inspect unresolved task test run marker state.',
                 reason:
-                    `A full-suite run marker exists at ${options.unresolvedRunMarkerPath}, but it is stale, invalid, malformed, or not bound to the current preflight/compile cycle. ` +
-                    `Do not start a fresh full-suite run until the marker is inspected because a new run would overwrite the diagnostic marker. ` +
+                    `A task test run marker exists at ${options.unresolvedRunMarkerPath}, but it is stale, invalid, malformed, or not bound to the current preflight/compile cycle. ` +
+                    `Do not start a fresh task test run until the marker is inspected because a new run would overwrite the diagnostic marker. ` +
                     `Run the recovery command to preserve evidence and report the exact marker state before any cleanup. ${retryInstruction} ` +
                     `Retry command after recovery: ${redactDiagnosticText(options.commandText)}. ${options.timeoutForecastLine || ''}`.trim(),
                 commands: [
                     buildCommand(
-                        'Inspect unresolved full-suite run marker state',
+                        'Inspect unresolved task test run marker state',
                         options.runMarkerRecoveryCommand
                     )
                 ]
@@ -389,18 +447,18 @@ function buildInterruptedRunRecoveryRoute(
             status: 'BLOCKED',
             nextGate: 'full-suite-validation',
             title: gateStateUnknown
-                ? 'Inspect unverifiable full-suite validation process state.'
-                : 'Wait for active full-suite validation run.',
+                ? 'Inspect unverifiable task test validation process state.'
+                : 'Wait for active task test validation run.',
             reason:
-                `A full-suite validation run marker started at ${interruptedRun.startedAtUtc} and its owner process is ${gateStateUnknown ? 'not safely verifiable' : 'still active'} for the current compiled scope. ` +
+                `A task test validation run marker started at ${interruptedRun.startedAtUtc} and its owner process is ${gateStateUnknown ? 'not safely verifiable' : 'still active'} for the current compiled scope. ` +
                 `The run marker is ${interruptedRun.markerPath}; gate pid ${interruptedRun.gatePid} is ${gateStateUnknown ? 'unverifiable' : 'still alive'}.${markerStateDetail} ` +
-                `Do not start a second full-suite run or clear this marker. ${gateStateUnknown ? 'Run recovery to preserve the exact process-check blocker.' : 'Wait for the active run to write terminal evidence, or inspect only task-owned processes if the run appears stuck.'} ` +
+                `Do not start a second task test run or clear this marker. ${gateStateUnknown ? 'Run recovery to preserve the exact process-check blocker.' : 'Wait for the active run to write terminal evidence, or inspect only task-owned processes if the run appears stuck.'} ` +
                 `Interrupted command: ${redactDiagnosticText(interruptedRun.command)}. Timeout configured for this run: ${interruptedRun.timeoutMs} ms. ${options.timeoutForecastLine || ''}`.trim(),
             commands: [
                 buildCommand(
                     gateStateUnknown
-                        ? 'Inspect unverifiable full-suite run marker state'
-                        : 'Rerun navigator after the active full-suite run completes',
+                        ? 'Inspect unverifiable task test run marker state'
+                        : 'Rerun navigator after the active task test run completes',
                     gateStateUnknown ? options.runMarkerRecoveryCommand : options.navigatorCommand
                 )
             ]
@@ -432,17 +490,17 @@ function buildInterruptedRunRecoveryRoute(
         ? options.runMarkerRecoveryCommand
         : options.runMarkerCleanupCommand;
     const actionLabel = hasLiveChildTree
-        ? 'Inspect interrupted full-suite run marker'
-        : 'Clear dead full-suite run marker after preserving recovery evidence';
+        ? 'Inspect interrupted task test run marker'
+        : 'Clear dead task test run marker after preserving recovery evidence';
 
     return {
         status: 'BLOCKED',
         nextGate: 'full-suite-validation',
         title,
         reason:
-            `A previous full-suite validation run started at ${interruptedRun.startedAtUtc}, but no terminal full-suite artifact was materialized for the current compiled scope. ` +
+            `A previous task test validation run started at ${interruptedRun.startedAtUtc}, but no terminal task test artifact was materialized for the current compiled scope. ` +
             `The run marker is ${interruptedRun.markerPath}; gate pid ${interruptedRun.gatePid} is no longer alive; ${childState}.${markerStateDetail}${childCommand}${descendantState} ` +
-            `Inspect and terminate only task-owned processes confirmed by the marker, descendant scan, command line, or working-directory evidence, then rerun full-suite-validation. ${retryInstruction} ` +
+            `Inspect and terminate only task-owned processes confirmed by the marker, descendant scan, command line, or working-directory evidence, then rerun task-test-validation. ${retryInstruction} ` +
             `Interrupted command: ${redactDiagnosticText(interruptedRun.command)}. Retry command: ${redactDiagnosticText(options.commandText)}. Timeout configured for the interrupted run: ${interruptedRun.timeoutMs} ms. ${options.timeoutForecastLine || ''}`.trim(),
         commands: [
             buildCommand(
@@ -488,12 +546,12 @@ function buildRetryRoute(
         nextGate: 'full-suite-validation',
         title,
         reason:
-            `Full-suite validation timed out for the current compiled scope, and duration history now recommends a longer timeout. ` +
+            `Task test validation timed out for the current compiled scope, and duration history now recommends a longer timeout. ` +
             `${retryInstruction} ` +
-            `${TASK_TEST_SELECTION_GUIDANCE}Command: ${options.commandText}. ${options.timeoutForecastLine || ''}`.trim(),
+            `Selected task test command: ${options.commandText}. ${options.timeoutForecastLine || ''}`.trim(),
         commands: [
             buildCommand(
-                'Retry full-suite validation',
+                'Retry task test validation',
                 options.command
             )
         ]
@@ -507,7 +565,7 @@ function buildTimeoutBlockerRepairRoute(
 ): NextStepFullSuiteValidationRoute {
     const proposal = options.timeoutRepairTaskProposal
         ? ` Diagnostic repair suggestion: ${options.timeoutRepairTaskProposal}.`
-        : ' No structured repair-task proposal was found in the full-suite artifact; inspect the artifact before continuing.';
+        : ' No structured repair-task proposal was found in the task test artifact; inspect the artifact before continuing.';
     const repairCommand = options.timeoutRepairTaskCommand || options.navigatorCommand;
     const repeatedBlocker = options.repeatedTimeoutBlockerAnalysis
         ? ` Repeated-blocker analysis: ${options.repeatedTimeoutBlockerAnalysis}. `
@@ -518,16 +576,16 @@ function buildTimeoutBlockerRepairRoute(
         status: 'BLOCKED',
         nextGate: 'full-suite-timeout-repair-task',
         title: options.repeatedTimeoutBlockerAnalysis
-            ? 'Analyze repeated full-suite blocker before any nested repair routing.'
+            ? 'Analyze repeated task test blocker before any nested repair routing.'
             : title,
         reason:
-            `Full-suite validation timed out for the current compiled scope after exhausting the configured retry policy. ` +
+            `Task test validation timed out for the current compiled scope after exhausting the configured retry policy. ` +
             `${blockerInstruction}${proposal}${repeatedBlocker} ` +
             `Before materialization, declare one meaningful linked repair task with independent Repair scope paths; ` +
             `declare more only when the repairs are independent. Create these Garda-instructed rows without asking the operator, then run the printed command. ` +
             `The suggested_task_id alone does not declare or link a repair row. After the repair handoff is materialized ` +
             `or the timeout/runtime issue is fixed, rerun the navigator before any review launch. ` +
-            `${TASK_TEST_SELECTION_GUIDANCE}Command: ${options.commandText}. ${options.timeoutForecastLine || ''}`.trim(),
+            `Selected task test command: ${options.commandText}. ${options.timeoutForecastLine || ''}`.trim(),
         commands: [
             buildCommand(
                 options.timeoutRepairTaskCommand
@@ -552,12 +610,12 @@ function buildManualTransientRetryRoute(
         nextGate: 'full-suite-validation',
         title,
         reason:
-            `Full-suite validation failed for the current compiled scope, but task-scoped focused validation evidence marks the failure as transient or already cleared.${evidenceReason} ` +
-            `${retryInstruction} Focused validation is recovery guidance only and does not replace mandatory full-suite evidence. ` +
-            `${TASK_TEST_SELECTION_GUIDANCE}Command: ${options.commandText}. ${options.timeoutForecastLine || ''}`.trim(),
+            `Task test validation failed for the current compiled scope, but task-scoped focused validation evidence marks the failure as transient or already cleared.${evidenceReason} ` +
+            `${retryInstruction} Focused validation is recovery guidance only and does not replace mandatory task test evidence. ` +
+            `Selected task test command: ${options.commandText}. ${options.timeoutForecastLine || ''}`.trim(),
         commands: [
             buildCommand(
-                'Retry full-suite validation',
+                'Retry task test validation',
                 options.command
             )
         ]
@@ -577,13 +635,13 @@ function buildTargetedDiagnosticRetryRoute(
         nextGate: 'full-suite-validation',
         title,
         reason:
-            `Full-suite validation failed for the current compiled scope, and task-scoped targeted diagnostic evidence passed afterward.${evidenceReason} ` +
-            `${retryInstruction} Targeted diagnostics are recovery guidance only and do not replace mandatory full-suite evidence; ` +
+            `Task test validation failed for the current compiled scope, and task-scoped targeted diagnostic evidence passed afterward.${evidenceReason} ` +
+            `${retryInstruction} Targeted diagnostics are recovery guidance only and do not replace mandatory task test evidence; ` +
             `use full-suite-retry-evidence.json only when the focused evidence is intentionally promoted as supported retry evidence. ` +
-            `${TASK_TEST_SELECTION_GUIDANCE}Command: ${options.commandText}. ${options.timeoutForecastLine || ''}`.trim(),
+            `Selected task test command: ${options.commandText}. ${options.timeoutForecastLine || ''}`.trim(),
         commands: [
             buildCommand(
-                'Retry full-suite validation',
+                'Retry task test validation',
                 options.command
             )
         ]

@@ -6,6 +6,19 @@ import * as path from 'node:path';
 import { createTaskTestCommandContainerChecker, taskTestCommandIncludesContainer } from '../../../../src/gates/full-suite/task-test-command-inclusion';
 import { startTaskTestExecutionProof, completeTaskTestExecutionProof, taskTestExecutionProofSatisfied } from '../../../../src/gates/full-suite/task-test-execution-proof';
 
+test('literal Node admission captures every command file including undeclared companion tests', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'garda-node-inclusion-'));
+    try {
+        for (const file of ['first.test.js', 'second.test.js']) fs.writeFileSync(path.join(root, file), 'require("node:test");');
+        const inputs = new Map<string, string>();
+        const includes = createTaskTestCommandContainerChecker('node --test first.test.js second.test.js', root,
+            true, (file, sha256) => inputs.set(file, sha256));
+        assert.equal(includes('first.test.js'), true);
+        assert.deepEqual([...inputs.keys()], ['first.test.js', 'second.test.js']);
+        for (const sha256 of inputs.values()) assert.match(sha256, /^[a-f0-9]{64}$/u);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 test('module inclusion requires a literal top-level reactor member and a test-running phase', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'garda-module-inclusion-'));
     const target = 'application/src/test/java/example/StatusTest.java';
@@ -74,14 +87,18 @@ test('Maven execution proof accepts a fresh executed class and refuses missing, 
         fs.mkdirSync(path.dirname(report), { recursive: true });
         fs.writeFileSync(report, '<testsuite><testcase classname="example.StatusTest" name="old"/></testsuite>');
         for (const outcome of ['stale', 'missing', 'skipped', 'foreign', 'runs'] as const) {
+            // Establish a real before observation after deletion: Windows file tunneling can
+            // otherwise preserve the deleted file's birth time and make the next write ambiguous.
+            if (!fs.existsSync(report)) fs.writeFileSync(report, '<testsuite><testcase classname="example.StatusTest" name="before"/></testsuite>');
             const start = startTaskTestExecutionProof(root, command, [target]);
-            await new Promise(resolve => setTimeout(resolve, 5));
+            await new Promise(resolve => setTimeout(resolve, 20));
             if (outcome === 'missing') fs.rmSync(report, { force: true });
             else if (outcome !== 'stale') fs.writeFileSync(report,
                 `<testsuite><testcase classname="${outcome === 'foreign' ? 'example.OtherTest' : 'example.StatusTest'}" name="${outcome}">${outcome === 'skipped' ? '<skipped/>' : ''}</testcase></testsuite>`);
             const proof = completeTaskTestExecutionProof(root, start);
-            assert.equal(proof.violations.length, outcome === 'runs' ? 0 : 1, outcome);
-            assert.equal(proof.reports.length, outcome === 'runs' ? 1 : 0, outcome);
+            assert.equal(proof.violations.length === 0, outcome === 'runs', outcome);
+            if (outcome === 'skipped') assert.match(proof.violations.join(' '), /skipped, failed or errored/u);
+            assert.equal(proof.reports.length, ['runs', 'skipped', 'foreign'].includes(outcome) ? 1 : 0, outcome);
             if (proof.reports.length) assert.match(proof.reports[0].start.anchor.identity.path, /(?:^|\/)runtime\/validation-output\/task-test-proof-/u);
             assert.equal(taskTestExecutionProofSatisfied(command, [target], proof.reports), outcome === 'runs', outcome);
             assert.equal(taskTestExecutionProofSatisfied(command, [target], undefined), false);
@@ -114,12 +131,12 @@ test('Maven root and arbitrarily nested modules bind fresh Surefire and Failsafe
                 fs.rmSync(report);
             }
             fs.writeFileSync(path.join(root, target), 'package wrong; class StatusTest {}');
-            assert.throws(() => startTaskTestExecutionProof(root, command, [target]), /Ambiguous Maven class layout.*supported runner/u);
+            assert.deepEqual(startTaskTestExecutionProof(root, command, [target]), [], 'An inconclusive adapter falls back to generic execution.');
         }
         const ambiguous = 'src/test/java/nested/src/test/java/example/StatusTest.java';
         fs.mkdirSync(path.dirname(path.join(root, ambiguous)), { recursive: true });
         fs.writeFileSync(path.join(root, ambiguous), 'package example; class StatusTest {}');
-        assert.throws(() => startTaskTestExecutionProof(root, command, [ambiguous]), /Cannot prove Maven execution.*supported test runner/u);
+        assert.deepEqual(startTaskTestExecutionProof(root, command, [ambiguous]), []);
         assert.equal(taskTestExecutionProofSatisfied(command, [ambiguous], []), false);
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
@@ -127,8 +144,8 @@ test('Maven root and arbitrarily nested modules bind fresh Surefire and Failsafe
 test('Maven container probes and POM reads stay constant for 100 targets in one invocation and refresh on the next', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'garda-maven-container-probes-'));
     const command = 'mvn -f pom.xml -pl backend/application verify';
-    const native = require('node:fs') as { lstatSync: typeof fs.lstatSync; realpathSync: typeof fs.realpathSync; readFileSync: typeof fs.readFileSync };
-    const lstat = native.lstatSync, realpath = native.realpathSync.native, read = native.readFileSync;
+    const native = require('node:fs') as { lstatSync: typeof fs.lstatSync; realpathSync: typeof fs.realpathSync; openSync: typeof fs.openSync };
+    const lstat = native.lstatSync, realpath = native.realpathSync.native, open = native.openSync;
     try {
         fs.mkdirSync(path.join(root, 'backend/application'), { recursive: true });
         fs.writeFileSync(path.join(root, 'pom.xml'), '<project><modules><module>backend/application</module></modules></project>');
@@ -139,7 +156,10 @@ test('Maven container probes and POM reads stay constant for 100 targets in one 
                 const counters = { lstat: 0, realpath: 0, pomReads: 0 };
                 native.lstatSync = ((...args: Parameters<typeof lstat>) => { counters.lstat++; return lstat(...args); }) as typeof lstat;
                 native.realpathSync.native = ((...args: Parameters<typeof realpath>) => { counters.realpath++; return realpath(...args); }) as typeof realpath;
-                native.readFileSync = ((...args: Parameters<typeof read>) => { counters.pomReads++; return read(...args); }) as typeof read;
+                native.openSync = ((...args: Parameters<typeof open>) => {
+                    if (String(args[0]).endsWith('pom.xml')) counters.pomReads++;
+                    return open(...args);
+                }) as typeof open;
                 try {
                     const includes = createTaskTestCommandContainerChecker(command, root, inspectConfiguration);
                     for (let index = 0; index < count; index++) {
@@ -147,7 +167,7 @@ test('Maven container probes and POM reads stay constant for 100 targets in one 
                     }
                     assert.equal(includes('backend/unrelated/src/test/java/example/StatusTest.java'), false);
                     return counters;
-                } finally { native.lstatSync = lstat; native.realpathSync.native = realpath; native.readFileSync = read; }
+                } finally { native.lstatSync = lstat; native.realpathSync.native = realpath; native.openSync = open; }
             };
             const one = measure(1), hundred = measure(100);
             assert.ok(one.lstat > 0 && one.realpath > 0 && one.pomReads > 0);
@@ -158,7 +178,7 @@ test('Maven container probes and POM reads stay constant for 100 targets in one 
         fs.rmSync(modulePom);
         assert.equal(createTaskTestCommandContainerChecker(command, root, false)('backend/application/src/test/java/example/StatusTest.java'), false);
     } finally {
-        native.lstatSync = lstat; native.realpathSync.native = realpath; native.readFileSync = read;
+        native.lstatSync = lstat; native.realpathSync.native = realpath; native.openSync = open;
         fs.rmSync(root, { recursive: true, force: true });
     }
 });

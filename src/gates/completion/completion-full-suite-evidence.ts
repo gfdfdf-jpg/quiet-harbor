@@ -1,11 +1,12 @@
 import * as path from 'node:path';
+import * as fs from 'node:fs';
 import { getFullSuiteTestSelectionViolations } from '../full-suite/full-suite-test-selection';
 import { loadFullSuiteValidationConfig } from '../../core/full-suite-validation-config';
 import { inspectFullSuiteReports } from '../full-suite/full-suite-report-evidence';
-import { taskTestExecutionProofSatisfied } from '../full-suite/task-test-execution-proof';
+import { taskTestProcessEvidenceViolations } from '../full-suite/task-test-execution-proof';
 import { loadTaskFullSuiteConfig } from '../full-suite/task-full-suite-config';
 
-import { normalizePath } from '../shared/helpers';
+import { normalizePath, stringSha256 } from '../shared/helpers';
 import {
     getCycleBindingSnapshotFromPayload,
     resolveTaskCycleBindingSnapshot,
@@ -59,7 +60,16 @@ export function collectFullSuiteValidationEvidence(input: {
         return evidence;
     }
 
-    const fullSuiteArtifact = readJsonArtifact(fullSuiteValidationPath, 'Full suite validation', input.errors) as FullSuiteValidationResult | null;
+    // Hash the same bytes this reader already needs; do not add another file/hash probe.
+    let artifactHash: string | null = null;
+    let fullSuiteArtifact: FullSuiteValidationResult | null = null;
+    if (!fs.existsSync(fullSuiteValidationPath) || !fs.statSync(fullSuiteValidationPath).isFile())
+        input.errors.push(`Full suite validation artifact not found: ${normalizePath(fullSuiteValidationPath)}`);
+    else try {
+        const bytes = fs.readFileSync(fullSuiteValidationPath, 'utf8');
+        fullSuiteArtifact = JSON.parse(bytes) as FullSuiteValidationResult;
+        artifactHash = stringSha256(bytes);
+    } catch { input.errors.push(`Full suite validation artifact is not valid JSON: ${normalizePath(fullSuiteValidationPath)}`); }
     const timelineEventTypes = new Set(input.orderedEvents.map(e => e.event_type));
     const hasFullSuiteTimelineEvent =
         timelineEventTypes.has('FULL_SUITE_VALIDATION_PASSED')
@@ -80,12 +90,13 @@ export function collectFullSuiteValidationEvidence(input: {
     const artifactStatus = String(fullSuiteArtifact.status || '').trim().toUpperCase();
     if (['PASSED', 'WARNED'].includes(artifactStatus)) {
         const selection = loadTaskFullSuiteConfig(input.repoRoot, input.taskId).selection;
-        if (!taskTestExecutionProofSatisfied(input.expectedCommand, selection.targets, fullSuiteArtifact.task_test_execution_proof)) {
-            const message = 'Maven target execution proof is missing or invalid. Rerun full-suite validation to capture fresh Surefire/Failsafe reports.';
-            input.errors.push(message); evidence.violations.push(message);
-        }
+        const processViolations = taskTestProcessEvidenceViolations(selection.plan, fullSuiteArtifact, selection.legacyPlan);
+        const native = [...input.orderedEvents].reverse().find(event => /^FULL_SUITE_VALIDATION_(?:PASSED|WARNED|FAILED|SKIPPED)$/u.test(event.event_type));
+        if (native?.actor !== 'gate' || native.details?.artifact_sha256 !== artifactHash
+            || native.details?.command !== fullSuiteArtifact.command) processViolations.push('Task test artifact integrity: hash or authenticated execution binding is missing or differs. Select current own tests and rerun full-suite-validation.');
+        input.errors.push(...processViolations); evidence.violations.push(...processViolations);
         const preflight = readJsonArtifact(input.expectedPreflightPath, 'Full suite current preflight', input.errors);
-        if (preflight && Array.isArray(preflight.changed_files)) {
+        if (!selection.plan && !selection.legacyPlan && preflight && Array.isArray(preflight.changed_files)) {
             const mismatches = getFullSuiteTestSelectionViolations(input.repoRoot, input.expectedCommand, preflight.changed_files.map(String));
             input.errors.push(...mismatches); evidence.violations.push(...mismatches);
         }
@@ -94,8 +105,10 @@ export function collectFullSuiteValidationEvidence(input: {
                 artifact: fullSuiteArtifact as unknown as Record<string, unknown>,
                 declarations: loadFullSuiteValidationConfig(input.repoRoot).report_files });
         } catch (error) {
+            if (!selection.plan && !selection.legacyPlan) {
             const message = `Full-suite report evidence rejected: ${String(error)}`;
             input.errors.push(message); evidence.violations.push(message);
+            }
         }
     }
     evidence.status = artifactStatus || null;

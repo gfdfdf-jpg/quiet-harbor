@@ -1,4 +1,4 @@
-import * as fs from 'node:fs';
+import { readInvocationTextFile } from '../core/invocation-file-observation';
 
 import { pathExists } from '../core/filesystem';
 import { bindContainedDestination, writeContainedFile } from '../core/contained-filesystem';
@@ -84,7 +84,7 @@ export function readSkillsHeadlinesIfPresent(bundleRoot: string): SkillsHeadline
     }
 
     try {
-        const fileText = fs.readFileSync(headlinesPath, 'utf8');
+        const fileText = readInvocationTextFile(headlinesPath);
         const normalizedPayload = asObjectRecord(JSON.parse(fileText));
         if (!isValidSkillsHeadlinesPayload(normalizedPayload)) {
             return null;

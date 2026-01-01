@@ -1,5 +1,5 @@
+import { readInvocationFileBytes, readInvocationFileContent } from '../../core/invocation-file-observation';
 import * as path from 'node:path';
-import * as fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import { pathExists } from '../../core/filesystem';
 import { formatJson } from '../../core/json';
@@ -312,9 +312,8 @@ export function computeFileSha256(filePath: string | null | undefined): string |
     if (!filePath || !pathExists(filePath)) {
         return null;
     }
-    const hash = createHash('sha256');
-    hash.update(fs.readFileSync(filePath));
-    return hash.digest('hex');
+    return readInvocationFileContent(filePath)?.sha256
+        ?? createHash('sha256').update(readInvocationFileBytes(filePath)).digest('hex');
 }
 
 function normalizeSelectedSkillFingerprintEntries(

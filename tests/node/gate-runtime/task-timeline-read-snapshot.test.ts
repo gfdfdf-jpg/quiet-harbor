@@ -4,7 +4,8 @@ import * as childProcess from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { windowsAclOutputHasOnlyTrustedExplicitGrants } from '../../../src/gate-runtime/timeline/windows-acl-authority';
+import { inspectTrustedWindowsWriteAuthority, windowsAclOutputHasOnlyTrustedExplicitGrants } from '../../../src/gate-runtime/timeline/windows-acl-authority';
+import { WINDOWS_ACL_NATIVE_TIMEOUT_MS, WINDOWS_ACL_OBSERVATION_BUDGET_MS, WindowsAclEvidenceUnavailableError } from '../../../src/gate-runtime/timeline/windows-acl-batch';
 import { observeIdentityAcquisitions } from './helpers/identity-acquisition-probe';
 
 import {
@@ -1135,7 +1136,7 @@ test('Windows ACL inspection retries a transient timeout without caching an inde
             options?: childProcess.SpawnSyncOptions
         ) => {
             assert.equal(command, path.join(fs.realpathSync.native('\\\\?\\GLOBALROOT\\SystemRoot'), 'System32', 'icacls.exe'));
-            assert.equal(options?.timeout, 1_000);
+            assert.ok(Number(options?.timeout) > 0 && Number(options?.timeout) <= WINDOWS_ACL_NATIVE_TIMEOUT_MS);
             const targetPath = path.resolve(String(args[0] || ''));
             const attempt = (attempts.get(targetPath) || 0) + 1;
             attempts.set(targetPath, attempt);
@@ -1169,7 +1170,7 @@ test('Windows ACL inspection retries a transient timeout without caching an inde
     }
 });
 
-test('Windows ACL inspection caches an indeterminate fail-closed decision', {
+test('Windows ACL inspection does not cache unavailable evidence', {
     skip: process.platform !== 'win32' ? 'Windows ACL metadata is unavailable on this platform.' : false
 }, () => {
     const orchestratorRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gao-timeline-acl-negative-cache-'));
@@ -1180,17 +1181,19 @@ test('Windows ACL inspection caches an indeterminate fail-closed decision', {
     fs.writeFileSync(timelinePath, '{}\n', 'utf8');
 
     const originalSpawnSync = mutableChildProcess.spawnSync;
-    let attempts = 0;
+    const attempts = new Map<string, number>();
+    let unavailable = true;
     try {
         mutableChildProcess.spawnSync = ((
             command: string,
-            _args: readonly string[] = [],
+            args: readonly string[] = [],
             options?: childProcess.SpawnSyncOptions
         ) => {
             assert.equal(command, path.join(fs.realpathSync.native('\\\\?\\GLOBALROOT\\SystemRoot'), 'System32', 'icacls.exe'));
-            assert.equal(options?.timeout, 1_000);
-            attempts += 1;
-            return {
+            assert.ok(Number(options?.timeout) > 0 && Number(options?.timeout) <= WINDOWS_ACL_NATIVE_TIMEOUT_MS);
+            const target = path.resolve(String(args[0]));
+            attempts.set(target, (attempts.get(target) || 0) + 1);
+            if (unavailable) return {
                 pid: 0,
                 status: null,
                 signal: 'SIGTERM',
@@ -1199,16 +1202,103 @@ test('Windows ACL inspection caches an indeterminate fail-closed decision', {
                 output: [null, '', ''],
                 error: Object.assign(new Error('spawnSync icacls.exe ETIMEDOUT'), { code: 'ETIMEDOUT' })
             } as childProcess.SpawnSyncReturns<string>;
+            const stdout = `${target} BUILTIN\\Administrators:(I)(F)\r\n`;
+            return { pid: 0, status: 0, signal: null, stdout, stderr: '', output: [null, stdout, ''] };
         }) as typeof childProcess.spawnSync;
 
         for (let read = 0; read < 2; read += 1) {
             assert.throws(
                 () => readTaskTimelineTextFile(timelinePath),
-                /must retain trusted owner\/DACL write authority/u
+                WindowsAclEvidenceUnavailableError
             );
         }
-        assert.equal(attempts, 2);
+        assert.equal(attempts.get(path.resolve(eventsRoot)), 4);
+        unavailable = false;
+        assert.equal(readTaskTimelineTextFile(timelinePath), '{}\n');
+        assert.equal(readTaskTimelineTextFile(timelinePath), '{}\n');
+        assert.equal(attempts.get(path.resolve(eventsRoot)), 5);
+        assert.equal(attempts.get(path.resolve(timelinePath)), 1);
     } finally {
+        mutableChildProcess.spawnSync = originalSpawnSync;
+    }
+});
+
+test('Windows ACL inspection caches a real untrusted DACL decision', {
+    skip: process.platform !== 'win32' ? 'Windows ACL metadata is unavailable on this platform.' : false
+}, () => {
+    const orchestratorRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gao-timeline-acl-untrusted-'));
+    tempRoots.push(orchestratorRoot);
+    const eventsRoot = path.join(orchestratorRoot, 'runtime', 'task-events');
+    const timelinePath = path.join(eventsRoot, 'T-ACL-UNTRUSTED.jsonl');
+    fs.mkdirSync(eventsRoot, { recursive: true });
+    fs.writeFileSync(timelinePath, '{}\n');
+    const icacls = path.join(fs.realpathSync.native('\\\\?\\GLOBALROOT\\SystemRoot'), 'System32', 'icacls.exe');
+    const grant = childProcess.spawnSync(icacls, [eventsRoot, '/grant', '*S-1-1-0:(W)'],
+        { encoding: 'utf8', windowsHide: true, timeout: 5_000 });
+    assert.equal(grant.status, 0, String(grant.error || grant.stderr));
+
+    const originalSpawnSync = mutableChildProcess.spawnSync;
+    let attempts = 0;
+    try {
+        mutableChildProcess.spawnSync = ((command: string, args: string[], options: childProcess.SpawnSyncOptions) => {
+            if (command === icacls && path.resolve(args[0]) === path.resolve(eventsRoot)) attempts += 1;
+            return originalSpawnSync(command, args, options);
+        }) as typeof childProcess.spawnSync;
+        for (let read = 0; read < 2; read += 1) {
+            assert.throws(() => readTaskTimelineTextFile(timelinePath), /must retain trusted owner\/DACL write authority/u);
+        }
+        assert.equal(attempts, 1);
+    } finally {
+        mutableChildProcess.spawnSync = originalSpawnSync;
+    }
+});
+
+test('Windows ACL inspection shares a bounded deadline across retries', {
+    skip: process.platform !== 'win32' ? 'Windows ACL metadata is unavailable on this platform.' : false
+}, () => {
+    const originalSpawnSync = mutableChildProcess.spawnSync, originalNow = Date.now;
+    let now = 100_000, calls = 0, elapsed = WINDOWS_ACL_OBSERVATION_BUDGET_MS - 500;
+    const timeouts: number[] = [];
+    try {
+        Date.now = () => now;
+        mutableChildProcess.spawnSync = ((command: string, args: string[], options: childProcess.SpawnSyncOptions) => {
+            assert.equal(path.basename(command).toLowerCase(), 'icacls.exe');
+            timeouts.push(Number(options.timeout));
+            calls += 1;
+            if (calls === 1) {
+                now += elapsed;
+                return { pid: 0, status: null, signal: 'SIGTERM', stdout: '', stderr: '', output: [null, '', ''],
+                    error: Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' }) };
+            }
+            const stdout = `${args[0]} BUILTIN\\Administrators:(I)(F)\r\n`;
+            return { pid: 0, status: 0, signal: null, stdout, stderr: '', output: [null, stdout, ''] };
+        }) as typeof childProcess.spawnSync;
+        assert.equal(inspectTrustedWindowsWriteAuthority('deadline-test'), true);
+        assert.deepEqual(timeouts, [WINDOWS_ACL_NATIVE_TIMEOUT_MS, 500]);
+
+        calls = 0;
+        timeouts.length = 0;
+        elapsed = WINDOWS_ACL_OBSERVATION_BUDGET_MS;
+        assert.throws(() => inspectTrustedWindowsWriteAuthority('deadline-test'), WindowsAclEvidenceUnavailableError);
+        assert.deepEqual(timeouts, [WINDOWS_ACL_NATIVE_TIMEOUT_MS]);
+
+        timeouts.length = 0;
+        mutableChildProcess.spawnSync = ((command: string, args: string[], options: childProcess.SpawnSyncOptions) => {
+            timeouts.push(Number(options.timeout));
+            if (path.basename(command).toLowerCase() === 'icacls.exe') {
+                now += WINDOWS_ACL_OBSERVATION_BUDGET_MS - 500;
+                const stdout = `${args[0]} UNKNOWN_ACCOUNT:(W)\r\n`;
+                return { pid: 0, status: 0, signal: null, stdout, stderr: '', output: [null, stdout, ''] };
+            }
+            assert.equal(path.basename(command).toLowerCase(), 'powershell.exe');
+            now += 500;
+            return { pid: 0, status: null, signal: 'SIGTERM', stdout: '', stderr: '', output: [null, '', ''],
+                error: Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' }) };
+        }) as typeof childProcess.spawnSync;
+        assert.throws(() => inspectTrustedWindowsWriteAuthority('deadline-test'), WindowsAclEvidenceUnavailableError);
+        assert.deepEqual(timeouts, [WINDOWS_ACL_NATIVE_TIMEOUT_MS, 500]);
+    } finally {
+        Date.now = originalNow;
         mutableChildProcess.spawnSync = originalSpawnSync;
     }
 });

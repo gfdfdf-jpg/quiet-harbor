@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { missingFocusedValidationTargets } from './missing-focused-validation-marker';
 
 import { sha256RedactedJsonPayload } from '../../core/redaction';
 import {
@@ -743,9 +744,7 @@ function getReviewFindingsValidationArtifactFindings(
 
 function isMissingFocusedValidationFinding(finding: NormalizedReviewFindingInventoryEntry): boolean {
     return finding.id === 'F-000'
-        && /\[garda:evidence-only:missing-focused-validation\]\s+/iu.test(
-            `${finding.title} ${finding.description}`
-        );
+        && [finding.title, finding.description].some(value => missingFocusedValidationTargets(value).length > 0);
 }
 
 export function reviewFindingsValidationArtifactContainsMissingFocusedValidation(
@@ -781,9 +780,6 @@ export function findReviewFindingsValidationMissingFocusedValidationTestPaths(
         ...artifact.validation_result.normalized_inventory.findings_by_severity.low
     ];
     return [...new Set(findings
-        .map((finding) => `${finding.title} ${finding.description}`.match(
-            /\[garda:evidence-only:missing-focused-validation\]\s+test=(tests\/[^\s;]+\.(?:test|spec)\.(?:c|m)?[jt]sx?);\s*action=run-and-record-focused-test/iu
-        )?.[1] || '')
-        .filter(Boolean))]
+        .flatMap(finding => [finding.title, finding.description].flatMap(missingFocusedValidationTargets)))]
         .sort();
 }

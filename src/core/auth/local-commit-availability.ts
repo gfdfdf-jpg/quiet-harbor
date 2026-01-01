@@ -1,3 +1,4 @@
+import { readInvocationTextFile } from '../invocation-file-observation';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
@@ -348,7 +349,7 @@ export function resolveLocalCommitAvailability(repoRoot: string): LocalCommitAva
     try {
         assertWorkflowTransactionReadable(path.dirname(path.dirname(path.dirname(configPath))));
         bindContainedDestination(repoRoot, configPath);
-        const text = fs.readFileSync(configPath, 'utf8');
+        const text = readInvocationTextFile(configPath);
         const config = validateWorkflowConfig(JSON.parse(text));
         result.configuredEnabled = isPlainRecord(config.local_commit) && config.local_commit.enabled === true;
         if (!result.configuredEnabled) result.disabledReason = 'workflow-config.local_commit.enabled is false or omitted';

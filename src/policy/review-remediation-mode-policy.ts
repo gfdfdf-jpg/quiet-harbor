@@ -1,4 +1,4 @@
-import * as fs from 'node:fs';
+import { readInvocationTextFile } from '../core/invocation-file-observation';
 import * as path from 'node:path';
 import { sha256RedactedJsonPayload } from '../core/redaction';
 import { isPlainRecord } from '../core/records';
@@ -182,7 +182,7 @@ const REVIEW_POLICY_LIVE_CONFIG_PATH_PATTERN =
 function isGardaSourceRepository(repoRoot: string | undefined): boolean {
     if (!repoRoot) return false;
     try {
-        const metadata: unknown = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
+        const metadata: unknown = JSON.parse(readInvocationTextFile(path.join(repoRoot, 'package.json')));
         return isPlainRecord(metadata) && metadata.name === 'garda-agent-orchestrator';
     } catch {
         return false;

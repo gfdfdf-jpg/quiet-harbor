@@ -230,6 +230,25 @@ function assertMaterializationControlPlaneRolledBack(repoRoot: string, originalT
 }
 
 describe('full-suite repair task materialization', () => {
+    it('materializes a single task-owned failure repair child without refs or an audit verdict', () => {
+        const { repoRoot, preflightPath, fullSuitePath } = makeRepo();
+        const artifact = readJson(fullSuitePath);
+        Object.assign(artifact, { status: 'FAILED', timed_out: false });
+        delete artifact.timeout_policy;
+        writeJson(fullSuitePath, artifact);
+        const taskPath = path.join(repoRoot, 'TASK.md');
+        fs.writeFileSync(taskPath, fs.readFileSync(taskPath, 'utf8').split('\n')
+            .filter(line => !line.startsWith(`| ${SECOND_CHILD_TASK_ID} |`))
+            .map(line => line.replace(`, \`${SECOND_CHILD_TASK_ID}\``, '')).join('\n'));
+        fs.writeFileSync(path.join(repoRoot, 'src/app.ts'), 'export const value = 2;\n');
+        const result = materializeFullSuiteRepairTask({ repoRoot, taskId: TASK_ID, preflightPath,
+            fullSuiteArtifactPath: fullSuitePath });
+        assert.equal(result.status, 'MATERIALIZED', result.violations.join('\n'));
+        assert.deepEqual(result.child_task_ids, [CHILD_TASK_ID]);
+        assert.ok(result.wip_manifest_path);
+        assert.equal(runGit(repoRoot, ['diff', 'HEAD']).trim(), '');
+    });
+
     it('materializes blocking out-of-scope failures through the existing scoped repair handoff', () => {
         const { repoRoot, preflightPath, fullSuitePath } = makeRepo();
         const artifact = readJson(fullSuitePath);
@@ -312,10 +331,11 @@ describe('full-suite repair task materialization', () => {
         assert.match(fs.readFileSync(path.join(repoRoot, 'README.md'), 'utf8'), /Bounded timeout repair/);
     });
 
-    it('rejects a repair proposal from a full-suite artifact that did not time out', () => {
+    it('rejects a repair proposal from successful validation', () => {
         const { repoRoot, preflightPath, fullSuitePath } = makeRepo();
         const fullSuiteArtifact = readJson(fullSuitePath);
         fullSuiteArtifact.timed_out = false;
+        fullSuiteArtifact.status = 'PASSED';
         writeJson(fullSuitePath, fullSuiteArtifact);
         const taskPath = path.join(repoRoot, 'TASK.md');
         fs.writeFileSync(path.join(repoRoot, 'src', 'app.ts'), 'export const value = 2;\n', 'utf8');
@@ -330,7 +350,7 @@ describe('full-suite repair task materialization', () => {
 
         assert.equal(materialized.status, 'BLOCKED');
         assert.equal(materialized.wip_manifest_path, null);
-        assert.match(materialized.violations.join('\n'), /timed_out=true/);
+        assert.match(materialized.violations.join('\n'), /failed non-timeout run.*exhausted blocking timeout/);
         assert.match(fs.readFileSync(taskPath, 'utf8'), new RegExp(`\\| ${TASK_ID} \\| IN_PROGRESS \\|`));
         assert.match(runGit(repoRoot, ['diff', '--cached', '--', 'src/app.ts']), /\+export const value = 2;/);
     });

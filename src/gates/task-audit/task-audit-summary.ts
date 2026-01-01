@@ -1,3 +1,4 @@
+import { readInvocationPathObservation, readInvocationTextFile } from '../../core/invocation-file-observation';
 import { isInvocationReadObservationActive } from '../../core/invocation-read-observation';
 import { readTaskTimelineNavigationQuery } from '../../gate-runtime/timeline/task-events-integrity';
 import { navigationRawEvents, navigationQueryForEvents, navigationLatestEvent, navigationEventSequence,
@@ -37,7 +38,7 @@ import {
 } from '../full-suite/full-suite-validation';
 import {
     PROJECT_MEMORY_IMPACT_ASSESSED_EVENT,
-    getProjectMemoryImpactLifecycleEvidence
+    createProjectMemoryImpactLifecycleReader
 } from '../project-memory-impact';
 import {
     loadReviewExecutionPolicyConfig,
@@ -45,7 +46,7 @@ import {
 } from '../../core/review-execution-policy';
 import { resolveCompiledReviewDependencyGraphFromPreflight } from '../../core/review-dependency-graph';
 import { normalizeReviewCycleGuardConfig } from '../../core/review-cycle-guard';
-import { getTaskCycleStatusSnapshot, type TaskCycleStatusSnapshot } from '../../validators';
+import { getTaskCycleStatusSnapshot, readTaskCommitGuard, type TaskCycleStatusSnapshot } from '../../validators';
 import {
     buildUnavailableRequiredReviewTrustSummary,
     type EvidenceArtifact,
@@ -159,6 +160,11 @@ function buildNativeAggregateAudit(options: TaskAuditSummaryOptions, events: Rea
     try { proof = readNativeParentObligationProofs(repoRoot, taskId,
         childTaskId => buildTaskAuditSummaryForPurpose({ repoRoot, taskId: childTaskId }, inspectReviewHistory)); }
     catch (error: unknown) { blockers.push({ gate: 'decomposed-parent-obligations', reason: error instanceof Error ? error.message : String(error) }); }
+    // The proof reader authenticates the restore archive, child SOURCE, graph,
+    // queue and final snapshot rechecks. This selects ordinary implementation
+    // gates, not a successful aggregate audit. SOURCE closes this phase; the
+    // unchanged parent-audit authority then enforces aggregate acceptance.
+    if (proof?.implementationPending) return null;
     const canonicalParentMarker = Boolean(proof?.native.facts.decomposition || proof?.native.facts.completion);
     if (!parentMarker && !canonicalParentMarker && proof && !isTaskQueueDecomposedStatus(proof.native.facts.taskStatus)) return null;
     if (!proof && blockers.length === 0) return null;
@@ -259,7 +265,7 @@ function readReviewCycleExcludedReviewTypes(repoRoot: string): string[] {
     }
     let rawConfig: unknown;
     try {
-        rawConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        rawConfig = JSON.parse(readInvocationTextFile(configPath));
     } catch {
         return normalizeReviewCycleGuardConfig(undefined).excluded_review_types;
     }
@@ -514,17 +520,16 @@ function buildTaskAuditSummaryFromSnapshot(options: TaskAuditSummaryOptions, ins
     const fullSuiteValidationRequiredForLifecycle = fullSuiteValidationEnabled
         && !isFullSuiteNotRequiredForZeroDiffNoReviewableScope(preflightForLifecycle || {});
     const compileGateRequiredForLifecycle = !auditedNoOpLifecycle;
-    const projectMemoryImpactEvidence = getProjectMemoryImpactLifecycleEvidence({
-        repoRoot,
-        taskId: safeTaskId,
-        preflightPath: path.join(reviewsRoot, `${safeTaskId}-preflight.json`)
+    const projectMemoryImpactArtifact = createProjectMemoryImpactLifecycleReader({
+        repoRoot, taskId: safeTaskId, preflightPath: path.join(reviewsRoot, `${safeTaskId}-preflight.json`)
     });
+    const readProjectMemoryImpactEvidence = reportValue('project-memory-impact', projectMemoryImpactArtifact.read);
     const hasCurrentProjectMemoryImpactEvent = hasCurrentCycleProjectMemoryImpactEvent(lifecycleEvents, currentCycle, repoRoot);
     const lifecycleQuery = navigationQueryForEvents(lifecycleEvents);
     const hasCompletionPassEvent = lifecycleQuery?.ordered
         ? !!navigationLatestEvent(lifecycleQuery, 'COMPLETION_GATE_PASSED', true)
         : lifecycleEvents.some((event) => (countNextStepWork('visit:task-audit-summary:482'), String(event.event_type || '').trim().toUpperCase() === 'COMPLETION_GATE_PASSED'));
-    const projectMemoryImpactRequired = projectMemoryImpactEvidence.required
+    const projectMemoryImpactRequired = projectMemoryImpactArtifact.required
         && (!hasCompletionPassEvent || hasCurrentProjectMemoryImpactEvent);
     const getWorkspaceStatusSnapshot = reportValue('task-cycle-status', () => getTaskCycleStatusSnapshot(
         repoRoot,
@@ -671,7 +676,7 @@ function buildTaskAuditSummaryFromSnapshot(options: TaskAuditSummaryOptions, ins
             reviewsRoot,
             safeTaskId,
             taskEventFile,
-            projectMemoryImpactEvidence,
+            lazyReports ? projectMemoryImpactArtifact : readProjectMemoryImpactEvidence(),
             preflight
         ), {
             fullSuiteRequired: fullSuiteValidationRequiredForLifecycle,
@@ -784,13 +789,26 @@ function buildTaskAuditSummaryFromSnapshot(options: TaskAuditSummaryOptions, ins
             reason: reviewSnapshot.reviewCoverageSummary.visible_summary_line
         });
     }
-    if (projectMemoryImpactRequired && projectMemoryImpactEvidence.evidence_status !== 'CURRENT') {
-        blockers.push({
-            gate: 'project-memory-impact',
-            reason:
-                `Project memory impact evidence is ${projectMemoryImpactEvidence.evidence_status}. ` +
-                `${projectMemoryImpactEvidence.visible_summary_line}`
-        });
+    if (projectMemoryImpactRequired) {
+        // No current PASS and an observably absent artifact already prove missing evidence.
+        // Only navigation may avoid the irrelevant document assessment in this case; explicit
+        // audits, existing/uncertain artifacts and completion retain the complete assessment.
+        const memoryGate = gates.find(gate => gate.gate === 'project-memory-impact');
+        const observed = lazyReports && !hasCompletionPassEvent && memoryGate?.status === 'MISSING'
+            ? readInvocationPathObservation(path.resolve(repoRoot, projectMemoryImpactArtifact.artifact_path)) : null;
+        const confirmedMissing = observed && 'error' in observed.stat
+            && (observed.stat.error as NodeJS.ErrnoException)?.code === 'ENOENT';
+        if (confirmedMissing) {
+            blockers.push({ gate: 'project-memory-impact', reason:
+                'Project memory impact evidence is MISSING. Project memory impact artifact is missing: '
+                + projectMemoryImpactArtifact.artifact_path + '.' });
+        } else {
+            const evidence = readProjectMemoryImpactEvidence();
+            if (evidence.evidence_status !== 'CURRENT') blockers.push({
+                gate: 'project-memory-impact', reason:
+                    `Project memory impact evidence is ${evidence.evidence_status}. ${evidence.visible_summary_line}`
+            });
+        }
     }
     const completionReviewOrderBlocker = buildCompletionReviewOrderBlocker(
         requiredReviews,
@@ -916,7 +934,7 @@ function buildTaskAuditSummaryFromSnapshot(options: TaskAuditSummaryOptions, ins
     }
 
     const getCommitPresentation = reportValue('commit-presentation', () => {
-    const commitGuardEnabled = getWorkspaceStatusSnapshot().enforceNoAutoCommit === true;
+    const commitGuardEnabled = (lazyReports ? readTaskCommitGuard(repoRoot) : getWorkspaceStatusSnapshot().enforceNoAutoCommit) === true;
     const committableChangedFiles = resolveCommittableChangedFiles(repoRoot, workspaceSnapshotRequest);
     const rawCommitCandidateChangedFiles = committableChangedFiles == null
         ? changedFiles.filter((changedFile) => (countNextStepWork('visit:task-audit-summary:864'), !isLocalControlPlaneCommitPath(changedFile)))
@@ -986,7 +1004,7 @@ function buildTaskAuditSummaryFromSnapshot(options: TaskAuditSummaryOptions, ins
         'review result status',
         'docs updated'
     ];
-    if (projectMemoryImpactRequired || projectMemoryImpactEvidence.evidence_status !== 'NOT_REQUIRED') {
+    if (projectMemoryImpactArtifact.required) {
         implementationSummaryRequirements.push('project memory status');
     }
     const finalReportContract: FinalReportContract = {
@@ -1043,7 +1061,7 @@ function buildTaskAuditSummaryFromSnapshot(options: TaskAuditSummaryOptions, ins
         fullSuiteValidation,
         fullSuiteValidationRequiredForLifecycle,
         reviewExecutionPolicyMode,
-        projectMemoryImpactEvidence,
+        projectMemoryImpactEvidence: readProjectMemoryImpactEvidence(),
         orchestratorDefectCapture,
         tokenEconomy: getTokenEconomy(),
         taskCycleDiagnostics: getTaskCycleDiagnostics(),
