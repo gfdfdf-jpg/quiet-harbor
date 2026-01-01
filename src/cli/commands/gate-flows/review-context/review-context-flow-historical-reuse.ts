@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import type { ReviewRemediationReviewContractValidationAuthority } from '../../../../gates/review-remediation/review-remediation-review-contract';
 import * as path from 'node:path';
 import { findLostReviewGateEvidence } from '../../../../gates/review/review-artifact-recovery';
 
@@ -246,6 +247,7 @@ function collectHistoricalReviewReuseCandidates(options: {
 }
 
 export async function tryReuseReviewEvidence(options: {
+    reviewExecutionValidationAuthority?: ReviewRemediationReviewContractValidationAuthority | null;
     repoRoot: string;
     taskId: string;
     reviewType: string;
@@ -442,6 +444,7 @@ export async function tryReuseReviewEvidence(options: {
             gateHelpers.joinOrchestratorPath(options.repoRoot, ''),
             options.taskId,
             () => materializeReusedReviewEvidence({
+                reviewExecutionValidationAuthority: options.reviewExecutionValidationAuthority,
                 repoRoot: options.repoRoot,
                 taskId: options.taskId,
                 reviewType: options.reviewType,

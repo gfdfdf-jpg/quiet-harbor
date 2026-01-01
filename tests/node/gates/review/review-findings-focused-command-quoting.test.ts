@@ -276,8 +276,7 @@ for (const command of [
     `node --import tsx -- --test ${TARGET}`,
     `node --check --require src/preload.js src/example.js`,
     `pytest --import tsx ${TARGET}`,
-    `node --test --unknown-option ${TARGET}`,
-    `node --test ${TARGET} tests/node/other.test.mjs`
+    `node --test --unknown-option ${TARGET}`
 ]) {
     test(`focused command retains safety rejection: ${command}`, () => {
         const result = validateReviewFindingsReport(focusedReport(command), VALIDATION_OPTIONS);

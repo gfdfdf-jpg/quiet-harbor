@@ -25,7 +25,7 @@ Return exactly one findings-only JSON object using the generated output template
 ## Required Inputs
 - Task goal and the changed behavior the tests must protect.
 - Authenticated changed-file scope, declared file roles and diff supplied by orchestration.
-- Supplied selected-case, focused, full-suite and report-file evidence for the current cycle.
+- Supplied selected-case, focused, task test and report-file evidence for the current cycle.
 
 Use the supplied rule snapshot and scope metadata. Do not independently load task-lifecycle rules, task state or commands. If supplied inputs are missing or unreadable, describe the concrete limitation in the generated form rather than inventing scope or evidence.
 

@@ -163,6 +163,7 @@ export function observeDerivationInput<T>(
 }
 
 export function replayInvocationMemoTrace(trace: ObservationTrace): void {
+    if (!frames.getStore()?.some(frame => !frame.closed)) return;
     for (const reason of trace.nonCacheableReasons) {
         countNextStepWork('visit:derivation_trace_reason');
         markDerivationNonCacheable(reason);

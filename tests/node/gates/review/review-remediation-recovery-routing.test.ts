@@ -27,6 +27,7 @@ import {
     type ReviewRemediationReusableReceipt
 } from '../../../../src/gates/review-remediation/review-remediation-recovery-routing';
 import type { ReviewRemediationDeltaClassification } from '../../../../src/gates/review-remediation/review-remediation-delta';
+import { REVIEW_REMEDIATION_DELTA_MAX_TEXT_BYTES } from '../../../../src/gates/review-remediation/review-remediation-delta-contract';
 import { buildReviewRemediationReadableDiffEvidence } from '../../../../src/gates/review-remediation/review-remediation-readable-diff';
 import {
     buildReviewRemediationValidationEvidence,
@@ -422,6 +423,22 @@ function routeOptions(
 }
 
 describe('review remediation selective recovery routing', () => {
+    it('explains first test FULL by missing earlier coverage although frozen policy permits DELTA', () => {
+        const profilePolicySnapshot = makeSnapshot();
+        const delta = makeDelta('structural_test', 'code');
+        assert.ok(delta.mode_policy_assessment?.delta_eligible_review_types.includes('test'));
+        const decision = resolveFixtureAuthoritativeDecision({ taskId: TASK_ID, currentReviewType: 'code',
+            classification: { source: 'delta', delta, profilePolicySnapshot,
+                baselineProfilePolicySnapshotSha256: sha256RedactedJsonPayload(profilePolicySnapshot) },
+            requiredReviews: { code: true, refactor: true, test: true }, reviewExecutionPolicyMode: 'strict_sequential'
+        }, { reviewedReviewTypes: ['code'] });
+        assert.equal(decision.status, 'READY', JSON.stringify(decision));
+        const lane = decision.lane_decisions.find(entry => entry.review_type === 'test');
+        assert.equal(lane?.mode, 'FULL');
+        assert.equal(lane?.reason_code, 'first_review_requires_full');
+        assert.match(lane?.reason || '', /no earlier review/u);
+        assert.doesNotMatch(lane?.reason || '', /policy does not permit/u);
+    });
     it('allows fresh current-pass evidence through a reuse block without allowing reused evidence', () => {
         const blockedReason = 'invalidated remediation lane requires a fresh review';
 
@@ -445,7 +462,10 @@ describe('review remediation selective recovery routing', () => {
             const profilePolicySnapshot = makeSnapshot();
             const delta = buildLeafTestDeltaClassification({ repoRoot: fixture.root, taskId: TASK_ID, reviewType: 'test',
                 changedFile: 'assets/opaque.xyz', preflightPath: fixture.preflightPath, preflightSha256: fixture.preflightSha256,
-                profilePolicySnapshot, modePolicy: buildDefaultReviewRemediationModePolicy() });
+                profilePolicySnapshot, modePolicy: buildDefaultReviewRemediationModePolicy(),
+                // An unfamiliar extension alone is generic production source now; only a fix whose
+                // line delta cannot be read stays ambiguous and forces every lane FULL.
+                currentContent: 'x'.repeat(REVIEW_REMEDIATION_DELTA_MAX_TEXT_BYTES + 1) });
             assert.equal(delta.category, 'ambiguous');
             const classification = { source: 'delta' as const, delta, profilePolicySnapshot,
                 baselineProfilePolicySnapshotSha256: sha256RedactedJsonPayload(profilePolicySnapshot) };

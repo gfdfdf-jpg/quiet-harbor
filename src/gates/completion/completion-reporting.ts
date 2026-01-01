@@ -25,6 +25,7 @@ export function buildCoherentCycleRestartCommand(
         /** A write after REVIEW_GATE_PASSED: the new review cycle runs only after the user approves it. */
         requiresReviewRestartApproval?: boolean;
         changedFiles?: readonly string[];
+        /** The classified intent to keep; omitted when the command carries the protected re-entry confirmation. */
         taskIntent?: string | null;
     } = {}
 ): string {
@@ -37,7 +38,9 @@ export function buildCoherentCycleRestartCommand(
         `--task-id ${quotePowerShellCliValue(taskId)}`,
         `--preflight-path ${quotePowerShellCliValue(preflightPath)}`
     ];
-    const taskIntent = String(options.taskIntent || '').trim();
+    // With --operator-confirmed, --task-intent states an operator-confirmed criteria change. That confirmation is here
+    // only for protected re-entry, so the intent is left to the restart, which keeps the classified wording itself.
+    const taskIntent = options.requiresOperatorConfirmation === true ? '' : String(options.taskIntent || '').trim();
     if (taskIntent) {
         parts.push(`--task-intent ${quotePowerShellCliValue(taskIntent)}`);
     }

@@ -104,8 +104,10 @@ function observeExecution(options: {
         observation.result_status = result.status; observation.result_sha256 = result.result_sha256;
         observation.execution = attempt.exit_code === 0 && !attempt.timed_out && !attempt.cancelled && !attempt.truncated
             && !attempt.termination_signal && attempt.violations.length === 0
-            && ['PASSED', 'UNRESOLVED'].includes(result.status) ? 'OBSERVED' : 'REJECTED';
-        if (observation.execution === 'OBSERVED' && result.status === 'UNRESOLVED') {
+            && !result.expected_failure ? 'OBSERVED' : 'REJECTED';
+        if (observation.execution === 'OBSERVED' && result.status !== 'PASSED') {
+            // Retain adapter observations in result_sha256; they cannot negate process evidence.
+            observation.result_status = 'UNRESOLVED';
             const sequence = latest.integrity?.task_sequence;
             if (!Number.isSafeInteger(sequence) || Number(sequence) < 1) throw new Error('Recipe case evidence lacks native event sequence.');
             caseExecution = { record_path: result.attempt_path, record_sha256: result.attempt_sha256,
@@ -126,7 +128,14 @@ function observeExecution(options: {
 function inspectDeclaredPhases(options: QualityValidationPhaseInspectionOptions,
     authority: NonNullable<ReturnType<typeof currentProjectValidationAuthority>>, batch: ValidationEvidenceBatch) {
     const { repoRoot, taskId, preflight } = options;
-    const snapshots = authority.approved.contract.recipes.map(recipe =>
+    const changed = new Set(Array.isArray(preflight.changed_files) ? preflight.changed_files : []);
+    const references = new Set(assessTrustBoundaryMatrix(options.matrix).matrix.flatMap(boundary =>
+        boundary.negative_paths.flatMap(negative => negative.evidence_files.map(reference => reference.split('#')[0]))));
+    const docsOnly = ['docs-only', 'empty'].includes(String(preflight.scope_category));
+    const recipes = authority.approved.contract.recipes.filter(recipe =>
+        recipe.targets.some(target => references.has(target.source))
+        || !docsOnly && recipe.inputs.some(input => changed.has(input.path)));
+    const snapshots = recipes.map(recipe =>
         readValidationRecipeSnapshot(repoRoot, taskId, recipe.id, options.inspection, batch));
     if (snapshots.some(snapshot => snapshot.preflight_sha256 !== options.preflightSha256))
         throw new Error('Validation quality preflight changed');
@@ -177,7 +186,7 @@ function deriveDeclaredPhases(options: QualityValidationPhaseInspectionOptions, 
         if (matrixAssessment.violations.length) matrixAssessment.structural_status = 'INVALID';
     }
     const execution: ExecutionObservation = executions.some(recipe => recipe.execution === 'REJECTED') ? 'REJECTED'
-        : executions.length > 0 && executions.every(recipe => recipe.execution === 'OBSERVED') ? 'OBSERVED' : 'PENDING';
+        : executions.every(recipe => recipe.execution === 'OBSERVED') ? 'OBSERVED' : 'PENDING';
     const payload = { schema_version: 1 as const, task_id: options.taskId, preflight_sha256: options.preflightSha256!,
         authority_sha256: authoritySha256, structural: matrixAssessment?.structural_status ?? 'BOUND' as const,
         execution, semantic: 'PENDING_INDEPENDENT_REVIEW' as const, matrix_sha256: matrixAssessment?.matrix_sha256 ?? null,

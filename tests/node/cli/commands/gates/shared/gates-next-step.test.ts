@@ -131,7 +131,7 @@ describe('cli/commands/gates next-step', () => {
             assert.ok(result.stdout.includes('Navigator:'));
             assert.ok(result.stdout.includes('Loop: run the Navigator first, rerun it after every suggested command, and follow only the single Commands entry it prints.'));
             assert.ok(result.stdout.includes('NextGate: enter-task-mode'));
-            assert.ok(result.stdout.includes('FullSuite:'));
+            assert.ok(result.stdout.includes('TaskTestValidation:'));
             assert.ok(result.stdout.includes('Commands:'));
         } finally {
             fs.rmSync(repoRoot, { recursive: true, force: true });

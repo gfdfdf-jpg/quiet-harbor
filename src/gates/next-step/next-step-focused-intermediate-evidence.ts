@@ -3,7 +3,6 @@ import * as fs from 'node:fs';
 import { readReviewArtifactTextFile } from '../../gate-runtime/review-artifacts';
 import { normalizePath } from '../shared/helpers';
 import {
-    isFocusedReviewTestPath,
     isPassedIntermediateCommandEvent,
     readTaskOwnedFocusedIntermediateEvidence
 } from '../review/focused-intermediate-evidence';
@@ -13,6 +12,7 @@ import {
     getReviewFindingsValidationArtifactPath,
     validateReviewFindingsValidationArtifact
 } from '../review/review-findings-validation-artifact';
+import { isContainedFocusedTarget } from '../review/missing-focused-validation-marker';
 
 export { isPassedIntermediateCommandEvent };
 
@@ -26,6 +26,12 @@ export function readFocusedTestRequiredByReview(options: {
     reviewType: string;
     reviewArtifactPath: string;
 }): string | null {
+    return readFocusedTestsRequiredByReview(options)[0] ?? null;
+}
+
+export function readFocusedTestsRequiredByReview(options: {
+    taskId: string; reviewType: string; reviewArtifactPath: string;
+}): string[] {
     const validationArtifactPath = getReviewFindingsValidationArtifactPath(options.reviewArtifactPath);
     if (fs.existsSync(validationArtifactPath)) {
         const validationArtifact = validateReviewFindingsValidationArtifact({
@@ -37,21 +43,21 @@ export function readFocusedTestRequiredByReview(options: {
         if (validationArtifact.valid) {
             const findingTestPaths = findReviewFindingsValidationMissingFocusedValidationTestPaths(validationArtifact.artifact)
                 .map((filePath) => normalizePath(filePath))
-                .filter((filePath) => filePath && isFocusedReviewTestPath(filePath));
-            return findingTestPaths.length === 1 ? findingTestPaths[0] : null;
+                .filter(isContainedFocusedTarget);
+            return [...new Set(findingTestPaths)];
         }
     }
     if (!fs.existsSync(options.reviewArtifactPath)) {
-        return null;
+        return [];
     }
     try {
         const reviewContent = readReviewArtifactTextFile(options.reviewArtifactPath);
         const findingTestPaths = findReviewFocusedFindingTestPaths(reviewContent)
             .map((filePath) => normalizePath(filePath))
-            .filter((filePath) => filePath && isFocusedReviewTestPath(filePath));
-        return findingTestPaths.length === 1 ? findingTestPaths[0] : null;
+            .filter(isContainedFocusedTarget);
+        return [...new Set(findingTestPaths)];
     } catch {
-        return null;
+        return [];
     }
 }
 
@@ -75,7 +81,7 @@ export function readPostReviewFocusedIntermediateEvidence(options: {
     expectedCoverageContractSha256?: string | null;
 }): FocusedIntermediateReviewEvidence {
     const reviewResultTimestamp = parseUtcTimestamp(options.reviewResultRecordedAtUtc);
-    const requiredFocusedTest = readFocusedTestRequiredByReview({
+    const requiredFocusedTests = readFocusedTestsRequiredByReview({
         taskId: options.taskId,
         reviewType: options.reviewType,
         reviewArtifactPath: options.reviewArtifactPath
@@ -83,7 +89,7 @@ export function readPostReviewFocusedIntermediateEvidence(options: {
     if (
         reviewResultTimestamp == null
         || options.reviewerProvenanceTaskSequence == null
-        || !requiredFocusedTest
+        || !requiredFocusedTests.length
     ) {
         return { available: false, reason: null };
     }
@@ -93,22 +99,22 @@ export function readPostReviewFocusedIntermediateEvidence(options: {
         eventsRoot: options.eventsRoot,
         taskId: options.taskId,
         changedFiles: options.changedFiles,
-        requiredTestPath: requiredFocusedTest,
+        additionalTargetPaths: requiredFocusedTests,
         minimumTimestampExclusive: reviewResultTimestamp,
         minimumTaskSequenceExclusive: options.reviewerProvenanceTaskSequence,
         expectedPreflightPath: options.expectedPreflightPath,
         expectedPreflightSha256: options.expectedPreflightSha256,
         expectedCoverageContractSha256: options.expectedCoverageContractSha256,
-        maxEntries: 1
+        maxEntries: Math.max(8, requiredFocusedTests.length)
     });
-    const evidence = selection.entries[0];
-    if (!evidence) {
+    const evidence = requiredFocusedTests.map(target => selection.entries.find(entry => entry.focused_test_paths.includes(target)));
+    if (evidence.some(entry => !entry)) {
         return { available: false, reason: null };
     }
     return {
         available: true,
         reason:
-            `Current task-owned focused validation evidence: ${evidence.artifact_path}; ` +
-            `command_source=${evidence.command_source}; focused_test=${requiredFocusedTest}.`
+            `Current task-owned focused validation evidence: ${[...new Set(evidence.map(entry => entry!.artifact_path))].join(', ')}; ` +
+            `focused_tests=${requiredFocusedTests.join(', ')}.`
     };
 }

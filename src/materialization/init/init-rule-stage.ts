@@ -122,10 +122,12 @@ function materializeRuleFiles(
         }
         let content = fs.readFileSync(source.path, 'utf8');
         let warning: string | null = null;
+        let notice: string | undefined;
         if (mixed && source.origin !== 'template') {
             const refreshed = refreshMixedRule(fs.readFileSync(source.path), fs.readFileSync(path.join(templateRuleRoot, ruleFile), 'utf8'), ruleFile);
             content = refreshed.content;
             warning = refreshed.warning;
+            notice = refreshed.notice;
         }
         if ((!content || !content.trim()) && !warning) {
             throw new Error(`Rule source is empty: ${source.path}`);
@@ -152,6 +154,7 @@ function materializeRuleFiles(
             source: path.relative(targetRoot, source.path).replace(/\\/g, '/'),
             origin: source.origin,
             ...refreshEntry,
+            ...(notice ? { warning: notice } : {}),
             destination: path.relative(targetRoot, destPath).replace(/\\/g, '/')
         });
     }

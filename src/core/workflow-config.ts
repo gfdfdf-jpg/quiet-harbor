@@ -1,3 +1,4 @@
+import { normalizeTaskValidationConfigNames } from './task-validation-names';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
@@ -708,6 +709,8 @@ export function mergeWorkflowConfigWithTemplate(
     existingConfig: Record<string, unknown> | null,
     options: WorkflowConfigMergeOptions = {}
 ): Record<string, unknown> {
+    templateConfig = normalizeTaskValidationConfigNames(templateConfig) as WorkflowConfigData;
+    existingConfig = existingConfig && normalizeTaskValidationConfigNames(existingConfig);
     const existingConfigForMerge = migrateLegacyOptionalQualityChecksGeneratedDefault(
         migrateLegacyReviewCycleGuardGeneratedDefault(
             migrateLegacyScopeBudgetGuardShape(

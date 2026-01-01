@@ -20,7 +20,7 @@ export async function main(argv: string[] = process.argv.slice(2), cwd: string =
         process.exitCode = await delegateToLocalCli(delegatedCli, argv);
         return;
     }
-    const { runCliMainWithHandling } = loadCliMainModule(packageRoot);
+    const { runCliMainWithHandling } = loadCliMainModule(packageRoot, argv);
     await runCliMainWithHandling(argv, packageRoot);
 }
 

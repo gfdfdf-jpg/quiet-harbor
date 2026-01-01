@@ -93,6 +93,14 @@ export function readParentQueue(root: string) {
 }
 
 export function readParentCompletionContract(root: string, taskId: string): ParentCompletionContract | null {
+    return readParentCompletionContractSnapshot(root, taskId)?.contract ?? null;
+}
+
+/** Share only the timeline this same contract read has authenticated. All original
+ * contract, graph, native-cycle, plan and WIP checks still execute below. */
+export function readParentCompletionContractSnapshot(root: string, taskId: string): {
+    contract: ParentCompletionContract; events: readonly Record<string, unknown>[]
+} | null {
     const contract = readParentRecord<ParentCompletionContract>(root, taskId, 'contract');
     if (!contract) return null;
     parseParentCompletionPolicy(contract.policy);
@@ -113,7 +121,7 @@ export function readParentCompletionContract(root: string, taskId: string): Pare
     if (contract.plan_binding) readParentAuditProofRecord(root, contract.plan_binding.path, contract.plan_binding.sha256);
     const captures = events.filter(event => event.event_type === 'SPLIT_REQUIRED_WIP_CAPTURED').map(event => parentEventHash(event));
     if (contract.wip_capture_sha256.some(hash => !captures.includes(hash))) throw new Error('Frozen WIP capture history changed.');
-    return contract;
+    return { contract, events };
 }
 
 export function registerParentAtDecomposition(root: string, taskId: string): ParentCompletionContract | null {

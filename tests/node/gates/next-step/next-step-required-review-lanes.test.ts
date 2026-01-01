@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { test } from 'node:test';
+import { FIXTURE_TASK_TEST_COMMAND } from '../../task-test-selection-fixtures';
 
 import type { ReviewDependencyGraphDeclaration } from '../../../../src/core/review-dependency-graph';
 import type { FullSuiteValidationPlacement } from '../../../../src/core/workflow-config';
@@ -45,6 +46,7 @@ function seedRequiredLanes(requiredIds: string[], options: {
     const workflow = JSON.parse(fs.readFileSync(workflowPath, 'utf8'));
     workflow.review_execution_policy = { mode: 'parallel_all' };
     Object.assign(workflow.full_suite_validation, options.fullSuite || { enabled: false });
+    workflow.full_suite_validation.command = FIXTURE_TASK_TEST_COMMAND;
     writeJson(workflowPath, workflow);
 
     seedStartedTask(repoRoot, TASK_ID);

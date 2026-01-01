@@ -1,6 +1,8 @@
+import { nativeOwnerClockOffset } from './walk-clock';
 import { spawn, type ChildProcess } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { taskValidationGateName } from '../../../../src/core/task-validation-names';
 
 const WAIT_MS = 120_000;
 
@@ -23,10 +25,12 @@ export class NativeWalkOwner {
     private readonly fullSuite: boolean;
 
     constructor(root: string, argv: string[], inspect = false) {
-        this.fullSuite = argv[0] === 'full-suite-validation';
+        // Navigation names the public `task-test-validation` alias. Its task test child is a detached POSIX process
+        // group, so only the owner's marker-driven kill reaches it; signalling the owner's own group leaves it alive.
+        this.fullSuite = taskValidationGateName(argv[0]) === 'full-suite-validation';
         const { NODE_TEST_CONTEXT: _context, ...env } = process.env;
         // Match the existing fixture clock; no evidence timestamps are rewritten after publication.
-        const offset = Date.now() - (performance.timeOrigin + performance.now());
+        const offset = nativeOwnerClockOffset();
         this.child = spawn(process.execPath, [...inspect ? ['--inspect-brk=127.0.0.1:0'] : [],
             __filename, JSON.stringify(argv), String(offset)], {
             cwd: root, windowsHide: true, detached: process.platform !== 'win32', env,

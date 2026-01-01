@@ -76,6 +76,10 @@ export const CLI_PATH_INPUT_POLICIES: Readonly<Record<string, CliPathInputPolicy
         classification: 'workspace-expression',
         rationale: 'Bounded JSON report declarations; strict relative paths and byte limits are validated by the report contract and contained capture.'
     },
+    '--task-test-report-files': {
+        classification: 'workspace-expression',
+        rationale: 'Alias of --full-suite-report-files; the same contained report contract validates every declaration.'
+    },
     '--handshake-path': workspaceContained('Reads task-owned handshake evidence.'),
     '--impact-analysis-path': workspaceContained('Reads task-owned remediation impact evidence.'),
     '--include-path': workspaceContained('Names a repository manifest member.'),

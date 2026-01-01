@@ -8,6 +8,7 @@ import { getWindowsSystemDirectory } from '../../../src/core/windows-native-envi
 import { assertInvocationDependenciesCurrent, withInvocationReadObservation } from '../../../src/core/invocation-read-observation';
 import { withNextStepMeasurement, type NextStepMeasurement } from '../../../src/core/next-step-measurement';
 import { inspectTrustedWindowsWriteAuthority } from '../../../src/gate-runtime/timeline/windows-acl-authority';
+import { WindowsAclEvidenceUnavailableError } from '../../../src/gate-runtime/timeline/windows-acl-batch';
 import { readTaskTimelineTextFile } from '../../../src/gate-runtime/timeline/task-events';
 
 const windowsOnly = { skip: process.platform !== 'win32' ? 'Native Windows ACL checks require Windows.' : false };
@@ -33,6 +34,36 @@ function fixture(t: TestContext): { eventsRoot: string; file: string } {
     }
     return { eventsRoot, file };
 }
+
+test('cold native principal lookup is also the first witness; warm paths and final checks stay fresh', windowsOnly, t => {
+    const { file } = fixture(t);
+    const measure = (revalidations = 0) => {
+        let measurement: NextStepMeasurement | undefined;
+        withNextStepMeasurement(() => withInvocationReadObservation(() => {
+            assert.equal(inspectTrustedWindowsWriteAuthority(file), true);
+            for (let index = 0; index < revalidations; index++) assertInvocationDependenciesCurrent();
+        }), value => { measurement = value; });
+        const calls = Object.entries(measurement!.work)
+            .filter(([key]) => key.startsWith('process:') && key.includes(':powershell.exe:'))
+            .reduce((total, [, count]) => total + count, 0);
+        const sidCalls = Object.entries(measurement!.work)
+            .filter(([key]) => key.startsWith('acl_sid_probe:'))
+            .reduce((total, [, count]) => total + count, 0);
+        return { calls, sidCalls, work: measurement!.work };
+    };
+    const cold = measure();
+    assert.equal(cold.calls, 2 + cold.sidCalls, 'one newly resolved initial witness plus one fresh final witness; localized SID fallbacks are separate');
+    assert.equal(cold.work['acl_principal_cold_lookup_reused:initial'], 1);
+    assert.equal(cold.work['acl_principal_probe:initial'], 1);
+    assert.equal(cold.work['acl_principal_probe:final'], 1);
+    const warm = measure();
+    assert.equal(warm.calls, 2 + warm.sidCalls, 'cached names never replace initial or final native witnesses');
+    assert.equal(warm.work['acl_principal_cold_lookup_reused:initial'], undefined);
+    const repeated = measure(2);
+    assert.equal(repeated.calls, 4 + repeated.sidCalls, 'each explicit revalidation and invocation exit still acquire native principal evidence');
+    assert.equal(repeated.work['acl_principal_probe:initial'], 1);
+    assert.equal(repeated.work['acl_principal_probe:final'], 3);
+});
 
 test('native ACL observations probe file and directory once initially and once finally despite warm legacy cache', windowsOnly, t => {
     const { eventsRoot, file } = fixture(t);
@@ -132,39 +163,46 @@ test('SID fallback compares full descriptor evidence when raw output and the tru
 });
 
 
-test('active ACL observation preserves unchanged indeterminate rejection but rejects later valid evidence', windowsOnly, t => {
+test('active ACL observation keeps unavailable evidence rejected and checks later valid evidence', windowsOnly, t => {
     const { file } = fixture(t);
     const native = require('node:child_process') as typeof childProcess;
     const original = native.spawnSync;
+    let attempts = 0, unavailable = true, changed = false;
     try {
-        for (const becomesValid of [false, true]) {
-            let attempts = 0;
-            native.spawnSync = ((command: string, args: readonly string[] = [], options?: childProcess.SpawnSyncOptions) => {
-                if (path.basename(command).toLowerCase() !== 'icacls.exe' || args.length !== 1) return original(command, args, options);
-                attempts += 1;
-                if (becomesValid && attempts > 2) {
-                    const stdout = Buffer.from(String(args[0]) + ' BUILTIN\\Administrators:(I)(F)\r\n');
-                    return { pid: 0, status: 0, signal: null, stdout, stderr: Buffer.alloc(0), output: [null, stdout, Buffer.alloc(0)] };
-                }
-                return { pid: 0, status: null, signal: 'SIGTERM', stdout: Buffer.alloc(0), stderr: Buffer.alloc(0),
-                    output: [null, Buffer.alloc(0), Buffer.alloc(0)],
-                    error: Object.assign(new Error('spawnSync icacls.exe ETIMEDOUT'), { code: 'ETIMEDOUT' }) };
-            }) as typeof childProcess.spawnSync;
-            const action = () => withInvocationReadObservation(() => {
-                assert.equal(inspectTrustedWindowsWriteAuthority(file), false);
-                assert.equal(inspectTrustedWindowsWriteAuthority(file), false);
+        native.spawnSync = ((command: string, args: readonly string[] = [], options?: childProcess.SpawnSyncOptions) => {
+            if (path.basename(command).toLowerCase() !== 'icacls.exe' || args.length !== 1) return original(command, args, options);
+            attempts += 1;
+            if (!unavailable) {
+                const stdout = Buffer.from(String(args[0]) + ` BUILTIN\\Administrators:(I)(${changed ? 'R' : 'F'})\r\n`);
+                return { pid: 0, status: 0, signal: null, stdout, stderr: Buffer.alloc(0), output: [null, stdout, Buffer.alloc(0)] };
+            }
+            return { pid: 0, status: null, signal: 'SIGTERM', stdout: Buffer.alloc(0), stderr: Buffer.alloc(0),
+                output: [null, Buffer.alloc(0), Buffer.alloc(0)],
+                error: Object.assign(new Error('spawnSync icacls.exe ETIMEDOUT'), { code: 'ETIMEDOUT' }) };
+        }) as typeof childProcess.spawnSync;
+        for (let invocation = 0; invocation < 2; invocation += 1) {
+            assert.throws(() => withInvocationReadObservation(() => {
+                assert.throws(() => inspectTrustedWindowsWriteAuthority(file), WindowsAclEvidenceUnavailableError);
+                assert.throws(() => inspectTrustedWindowsWriteAuthority(file), WindowsAclEvidenceUnavailableError);
                 return 'BLOCKED';
-            });
-            if (becomesValid) assert.throws(action, /Invocation Windows ACL observation changed/);
-            else assert.equal(action(), 'BLOCKED');
-            assert.equal(attempts, becomesValid ? 3 : 4);
+            }), WindowsAclEvidenceUnavailableError);
+            assert.equal(attempts, (invocation + 1) * 2);
         }
+        unavailable = false;
+        assert.throws(() => withInvocationReadObservation(() => {
+            assert.equal(inspectTrustedWindowsWriteAuthority(file), true);
+            changed = true;
+        }), /Invocation Windows ACL observation changed/);
+        assert.equal(attempts, 6);
+        changed = false;
+        assert.equal(withInvocationReadObservation(() => inspectTrustedWindowsWriteAuthority(file)), true);
+        assert.equal(attempts, 8);
     } finally { native.spawnSync = original; }
 });
 
 
-test('A1 rejects a mid-call principal change with fresh native principal probes', windowsOnly, t => {
-    const { file } = fixture(t);
+test('A1 rejects mid-call principal changes at final validation and between separate paths', windowsOnly, t => {
+    const { file, eventsRoot } = fixture(t);
     assert.equal(inspectTrustedWindowsWriteAuthority(file), true);
     const native = require('node:child_process') as typeof childProcess;
     const original = native.spawnSync;
@@ -184,10 +222,14 @@ test('A1 rejects a mid-call principal change with fresh native principal probes'
             const stdout = JSON.stringify(names);
             return { ...result, stdout, output: [null, stdout, String(result.stderr || '')] };
         }) as typeof childProcess.spawnSync;
-        assert.throws(() => withInvocationReadObservation(() => {
-            assert.equal(inspectTrustedWindowsWriteAuthority(file), true);
-            changed = true;
-        }), /Invocation Windows ACL observation changed/);
-        assert.ok(probes >= 2, 'Initial and final checks must observe native principals');
+        for (const readAnotherPath of [false, true]) {
+            changed = false;
+            assert.throws(() => withInvocationReadObservation(() => {
+                assert.equal(inspectTrustedWindowsWriteAuthority(file), true);
+                changed = true;
+                if (readAnotherPath) inspectTrustedWindowsWriteAuthority(eventsRoot);
+            }), /Invocation Windows ACL observation changed/);
+        }
+        assert.ok(probes >= 4, 'Final checks and new path reads must observe native principals');
     } finally { native.spawnSync = original; }
 });

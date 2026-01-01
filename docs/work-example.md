@@ -52,8 +52,8 @@ node bin/garda.js next-step T-201
 13. Implement code and tests          -> working tree changes exist
 14. Rerun next-step                   -> compile-gate
 15. Run compile gate                  -> COMPILE_GATE_PASSED
-16. Rerun next-step                   -> full-suite-validation if enabled
-17. Run full suite when required      -> FULL_SUITE_VALIDATION_PASSED
+16. Rerun next-step                   -> task-test-validation if enabled
+17. Run task tests when required      -> FULL_SUITE_VALIDATION_PASSED
 18. Rerun next-step                   -> build-review-context for launchable lanes
 19. Build review context              -> reviewer prompt/context artifacts
 20. Launch fresh delegated reviewer   -> clean-context reviewer session
@@ -95,7 +95,7 @@ limit.
     - classify-change if the workspace diff changed,
     - POST_PREFLIGHT load/bind,
     - compile-gate,
-    - full-suite-validation when placement requires it,
+    - task-test-validation when placement requires it,
     - build-review-context for the failed or invalidated review lane.
  9. Agent launches a new clean-context API reviewer for the new context.
 10. Agent records the new API reviewer output.

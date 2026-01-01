@@ -1,5 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { readInvocationPathObservation } from './invocation-file-observation';
+import { createInvocationReadMemoKey, memoizeInvocationRead } from './invocation-read-observation';
 import {
     ALL_BUNDLE_NAMES,
     resolveBundleNameForTarget
@@ -49,28 +51,37 @@ export function resolveProjectRoot(startDir: string): string {
     return path.resolve(startDir);
 }
 
-/**
- * Join orchestrator-relative path: if repoRoot already ends with the bundle name
- * use it directly; otherwise prefer a deployed bundle when present and fall back
- * to the workspace root when the bundle has not been materialized yet.
- */
-export function joinOrchestratorPath(repoRoot: string, relativePath: string): string {
-    const repoRootResolved = path.resolve(repoRoot);
-    const effectiveName = resolveBundleNameForTarget(repoRootResolved);
-    const deployedRoot = path.resolve(repoRootResolved, effectiveName);
-    const looksLikeBundleRoot = (candidatePath: string): boolean => (
-        fs.existsSync(path.join(candidatePath, 'MANIFEST.md'))
-        && fs.existsSync(path.join(candidatePath, 'VERSION'))
-    );
+const ORCHESTRATOR_LOCATIONS = createInvocationReadMemoKey<Readonly<{ orchestratorRoot: string; effectiveName: string }>>('orchestrator-location');
+const ORCHESTRATOR_PATH_PRESENCE = createInvocationReadMemoKey<boolean>('orchestrator-path-presence');
 
-    let orchestratorRoot = repoRootResolved;
-    if (looksLikeBundleRoot(deployedRoot)) {
-        orchestratorRoot = deployedRoot;
-    } else if (looksLikeBundleRoot(repoRootResolved)) {
-        orchestratorRoot = repoRootResolved;
-    } else if (fs.existsSync(deployedRoot)) {
-        orchestratorRoot = deployedRoot;
-    }
+function resolveOrchestratorLocation(repoRootResolved: string): Readonly<{ orchestratorRoot: string; effectiveName: string }> {
+    return memoizeInvocationRead(ORCHESTRATOR_LOCATIONS, repoRootResolved, () => {
+        const effectiveName = resolveBundleNameForTarget(repoRootResolved);
+        const deployedRoot = path.resolve(repoRootResolved, effectiveName);
+        const exists = (candidatePath: string): boolean => memoizeInvocationRead(ORCHESTRATOR_PATH_PRESENCE, candidatePath, () => {
+            readInvocationPathObservation(candidatePath);
+            return fs.existsSync(candidatePath);
+        }).value;
+        const looksLikeBundleRoot = (candidatePath: string): boolean => (
+            exists(path.join(candidatePath, 'MANIFEST.md'))
+            && exists(path.join(candidatePath, 'VERSION'))
+        );
+
+        let orchestratorRoot = repoRootResolved;
+        if (looksLikeBundleRoot(deployedRoot)) {
+            orchestratorRoot = deployedRoot;
+        } else if (looksLikeBundleRoot(repoRootResolved)) {
+            orchestratorRoot = repoRootResolved;
+        } else if (exists(deployedRoot)) {
+            orchestratorRoot = deployedRoot;
+        }
+        return Object.freeze({ orchestratorRoot, effectiveName });
+    }).value;
+}
+
+/** Join relative to the invocation's checked bundle location, or the workspace before materialization. */
+export function joinOrchestratorPath(repoRoot: string, relativePath: string): string {
+    const { orchestratorRoot, effectiveName } = resolveOrchestratorLocation(path.resolve(repoRoot));
 
     let normalizedRelativePath = String(relativePath || '').replace(/\\/g, '/').replace(/^\.\//, '');
     const bundlePrefixes = [...new Set([effectiveName, ...ALL_BUNDLE_NAMES].map((bundleName) => bundleName.toLowerCase()))];

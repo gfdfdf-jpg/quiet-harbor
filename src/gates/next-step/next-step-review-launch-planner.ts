@@ -116,7 +116,7 @@ export function toNextStepBlockedReviewLanes(launchPlan: ReviewLaunchPlan): Next
         review_type: lane.review_type,
         blocked_by: lane.blocked_by,
         reason: lane.blocked_by.includes('full-suite-validation')
-            ? 'Waiting for current full-suite validation evidence before launching test review.'
+            ? 'Waiting for current task test validation evidence before launching test review.'
             : lane.blocked_by.length > 0
             ? `Waiting for current-cycle ${lane.blocked_by.join(', ')} review artifacts and receipts to pass.`
             : 'Waiting for review launch dependencies to clear.'

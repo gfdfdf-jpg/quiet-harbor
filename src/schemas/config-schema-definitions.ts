@@ -479,7 +479,7 @@ export const workflowConfigSchema: Record<string, unknown> = Object.freeze({
     $schema: 'http://json-schema.org/draft-07/schema#',
     $id: 'garda-agent-orchestrator/workflow-config.schema.json',
     title: 'Workflow Configuration',
-    description: 'Optional workflow settings including compile-gate command selection, post-task full-suite validation, project-memory maintenance, and guarded task reset.',
+    description: 'Optional workflow settings including compile-gate command selection, task test validation, project-memory maintenance, and guarded task reset.',
     type: 'object',
     properties: {
         compile_gate: {
@@ -491,9 +491,10 @@ export const workflowConfigSchema: Record<string, unknown> = Object.freeze({
             required: ['command'],
             additionalProperties: false
         },
+        task_test_validation: { $ref: '#/properties/full_suite_validation', description: 'Task test validation. full_suite_validation remains a compatible alias; use one section.' },
         full_suite_validation: {
             type: 'object',
-            description: 'Full-suite validation (complete test run after task review).',
+            description: 'Task test validation (selected task tests and required regressions). Legacy configuration key retained for compatibility.',
             properties: {
                 enabled:                    { type: 'boolean', description: 'Enable full-suite validation.' },
                 command:                    { type: 'string', minLength: 1, description: 'Command to run for full-suite validation.' },

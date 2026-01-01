@@ -514,7 +514,7 @@ test('workflow command resolves parity against --target-root instead of the call
         const combined = (result.stdout || '') + (result.stderr || '');
         assert.equal(result.status, 0, 'workflow show should succeed when the target root itself is not stale');
         assert.ok(!combined.includes('Source Parity Violation: The deployed bundle is stale'));
-        assert.ok(combined.includes('Mandatory full-suite: false'));
+        assert.ok(combined.includes('Mandatory task test validation: false'));
         assert.ok(combined.includes('Review execution policy: strict_sequential'));
     } finally {
         fs.rmSync(callerDir, { recursive: true, force: true });
@@ -817,7 +817,7 @@ test('workflow set routes through the CLI dispatcher for --target-root and prese
         assert.equal(parsed.status, 'CHANGED');
         assert.equal(parsed.full_suite_validation.enabled, true);
         assert.equal(parsed.review_execution_policy.mode, 'strict_sequential');
-        assert.equal(parsed.visible_summary_line, 'Mandatory full-suite: true placement=after_compile_before_reviews mode=standard');
+        assert.equal(parsed.visible_summary_line, 'Mandatory task test validation: true placement=after_compile_before_reviews mode=standard');
         assert.equal(parsed.review_execution_policy_summary_line, 'Review execution policy: strict_sequential');
 
         const configPath = path.join(targetDir, 'garda-agent-orchestrator', 'live', 'config', 'workflow-config.json');

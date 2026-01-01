@@ -3,10 +3,41 @@ import type { WalkResult, WalkStep } from './navigator-walk';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { readRouteInventory, routeCoverage, type RouteCoverage, type UncoveredRoute } from './walk-routes';
-import { analyzeWalkMetrics, type CounterBaseline, type RouteMetrics, type WalkAnomaly } from './walk-metrics';
+import { analyzeWalkMetrics, type RouteMetrics, type WalkAnomaly } from './walk-metrics';
 import { renderReviewEconomy, summarizeReviewEconomy, type EconomySummary } from './walk-economy';
+import { stackReviewDifferences, stackReviewResults, stackReviewRotation } from './walk-stack-review-scenarios';
+import { platformCounterBaseline } from './walk-platform-baselines';
+import { reviewStackCount } from './walk-plan';
 
 const EVENT_BUCKET_SIZE = 50;
+
+/** Observed paths only. A capture refusal must never be presented as live-summary calibration. */
+export function loadedCodePathReport(results: readonly WalkResult[]) {
+    return results.flatMap(coverage => [coverage, ...coverage.nativeBudget ? [coverage.nativeBudget] : []].map(result => {
+        const steps = result.steps.filter(step => !step.reusedPrefix);
+        const count = (key: string) => steps.filter(step => (step.measurement?.work[key] ?? 0) > 0).length;
+        const unavailable = count('loaded_code_receipts_unavailable');
+        const capture = steps.filter(step => (step.measurement?.work['code.capture'] ?? 0) > 0);
+        const values = (read: (step: WalkStep) => number) => ({ total: capture.reduce((sum, step) => sum + read(step), 0),
+            median: median(capture.map(read)), max: Math.max(0, ...capture.map(read)) });
+        return { scenario: result.scenarioId, path: result !== coverage || result.steps.some(step => step.diagnostic) ? 'native' : 'coverage',
+            outcome: result.outcome, steps: steps.length, elapsedMs: result.elapsedMs, pairedElapsedMs: coverage.pairedElapsedMs, receiptsUnavailable: unavailable,
+            summaryCaptureRejected: count('closed-review-summary:rejected:capture'), summaryAccepted: count('closed-review-summary:accepted'),
+            codeCaptureSteps: capture.length, codeCaptureCalls: capture.reduce((sum, step) => sum + (step.measurement?.work['code.capture'] ?? 0), 0),
+            codeCaptureMs: values(step => step.measurement?.phases_ms['code.capture'] ?? 0),
+            loadedCodeFiles: values(step => step.measurement?.work['visit:loaded_code_initial_file'] ?? 0),
+            runtimeFileHashes: values(step => Object.entries(step.measurement?.work ?? {})
+                .filter(([key]) => key.startsWith('file_hash:') && /[\\/]dist[\\/].*\.js$/u.test(key))
+                .reduce((sum, [, count]) => sum + count, 0)),
+            limitation: unavailable ? 'Native history fallback: no early-loader receipts. Route instrumentation transforms executable bytes; '
+                + 'preloading the issuer alone cannot certify this process. Needs a fresh uninstrumented native-loader process and separate route coverage.' : null };
+    }));
+}
+
+/** A paired trace never uses instrumented fallback counters to judge the live path. */
+export function budgetWalkResults(results: readonly WalkResult[]): WalkResult[] {
+    return results.map(result => result.nativeBudget ?? result);
+}
 
 interface GrowthBucket {
     scenario: string;
@@ -22,6 +53,7 @@ interface GrowthBucket {
 export interface WalkReport {
     scenarios: Array<{ id: string; counterState?: string; outcome: string; steps: number; taskEvents: number; reviews: string[]; terminalRoute: string; detail: string; replay: string }>;
     measurement: string;
+    loadedCodePath?: ReturnType<typeof loadedCodePathReport>;
     journals: Array<{ path: string; scenario: string; taskEvents: number }>;
     growth: GrowthBucket[];
     findings: StandFinding[];
@@ -32,6 +64,9 @@ export interface WalkReport {
     disturbed: { results: number; steps: number; metrics: RouteMetrics[]; overBudget: DisturbedCounterSummary[] };
     /** Reviews of disturbed DONE variants against the rule-derived bound; these are judged. */
     economy: EconomySummary;
+    stackReviewLogic: ReturnType<typeof stackReviewResults>;
+    reviewRotation: ReturnType<typeof stackReviewRotation>;
+    stackReviewDifferences: ReturnType<typeof stackReviewDifferences>;
     projectSize: Array<{ scenario: string; trackedFiles: number; routes: RouteMetrics[] }>;
     sweep: Array<{ scenario: string; seed: number; baseline: string; step: number; disturbances: string[]; applied: string[] }>;
     executedSteps: number;
@@ -93,10 +128,11 @@ export function summarizeDisturbedAnomalies(anomalies: readonly WalkAnomaly[]): 
 
 export function buildWalkReport(results: readonly WalkResult[], findings: StandFinding[]): WalkReport {
     const root = path.resolve('.');
-    const baseline = JSON.parse(fs.readFileSync(path.join(root, 'tests/node/synthetic/walk-counter-baseline.json'), 'utf8')) as CounterBaseline;
-    const quiet = process.env.GARDA_SYNTHETIC_WALK_QUIET === '1';
-    const disturbedResults = results.filter(result => result.sweep || result.disturbances?.length);
-    const metrics = analyzeWalkMetrics(results.filter(result => !result.sweep && !result.disturbances?.length), baseline, quiet);
+    const baseline = platformCounterBaseline(root);
+    const quiet = process.env.GITHUB_ACTIONS !== 'true' && process.env.GARDA_SYNTHETIC_WALK_QUIET === '1';
+    const budgetResults = budgetWalkResults(results);
+    const disturbedResults = budgetResults.filter(result => result.sweep || result.disturbances?.length);
+    const metrics = analyzeWalkMetrics(budgetResults.filter(result => !result.sweep && !result.disturbances?.length), baseline, quiet);
     const disturbedMetrics = analyzeWalkMetrics(disturbedResults, baseline, quiet);
     const actualSteps = results.flatMap(result => result.steps.filter(step => !step.reusedPrefix));
     const observations = results.flatMap(result => result.steps.filter(step => !step.reusedPrefix).flatMap(step => {
@@ -114,13 +150,16 @@ export function buildWalkReport(results: readonly WalkResult[], findings: StandF
             reviews: result.reviews.map((review) => review.lane + ':' + review.mode),
             terminalRoute: result.steps.at(-1)?.effectResult?.route ?? result.steps.at(-1)?.route ?? '(setup)', detail: result.detail, replay
         }; }),
-        measurement: results.some((result) => result.steps.some((step) => step.diagnostic))
-            ? 'real process, runDiagnostics journal; phases are inclusive and must not be summed'
+        measurement: results.some(result => result.nativeBudget)
+            ? 'paired replays: in-process source-route coverage; installed native child budgets and command publication; phases are inclusive'
+            : results.some((result) => result.steps.some((step) => step.diagnostic))
+            ? 'native-only diagnostics; no source-point coverage; phases are inclusive and must not be summed'
             : 'in-process only; startup and shutdown are not measured',
-        journals: results.flatMap((result) => result.steps.flatMap((step) => step.diagnostic
+        loadedCodePath: loadedCodePathReport(results),
+        journals: budgetResults.flatMap((result) => result.steps.flatMap((step) => step.diagnostic
             ? [{ path: step.diagnostic.stdout_file.replace(/\.stdout\.txt$/u, '.json'),
                 scenario: result.scenarioId, taskEvents: step.taskEvents }] : [])),
-        growth: results.flatMap(growthFor), findings,
+        growth: budgetResults.flatMap(growthFor), findings,
         coverage: routeCoverage(readRouteInventory(root), observations,
             JSON.parse(fs.readFileSync(path.join(root, 'tests/node/synthetic/known-uncovered-routes.json'), 'utf8')) as UncoveredRoute[]),
         metrics: metrics.routes, anomalies: metrics.anomalies,
@@ -129,8 +168,12 @@ export function buildWalkReport(results: readonly WalkResult[], findings: StandF
             metrics: disturbedMetrics.routes,
             overBudget: summarizeDisturbedAnomalies(disturbedMetrics.anomalies.map(entry => ({ ...entry, severity: 'report' as const }))) },
         economy: summarizeReviewEconomy(results),
+        stackReviewLogic: stackReviewResults(results, findings),
+        reviewRotation: stackReviewRotation(Number(process.env.GARDA_SYNTHETIC_SEED ?? 0x6a726461),
+            reviewStackCount(process.env.GARDA_SYNTHETIC_REVIEW_STACKS)),
+        stackReviewDifferences: stackReviewDifferences(results),
         executedSteps: actualSteps.length,
-        projectSize: results.flatMap(result => result.trackedFiles === undefined ? [] : [{ scenario: result.scenarioId,
+        projectSize: budgetResults.flatMap(result => result.trackedFiles === undefined ? [] : [{ scenario: result.scenarioId,
             trackedFiles: result.trackedFiles, routes: analyzeWalkMetrics([result], baseline, false).routes }]),
         sweep: results.flatMap(result => result.sweep ? [{ scenario: result.scenarioId, ...result.sweep }] : []),
         checkpointControls: results.flatMap(result => result.checkpointControl ? [{ id: result.scenarioId, ...result.checkpointControl, outcome: result.outcome }] : []),
@@ -142,6 +185,8 @@ export function buildWalkReport(results: readonly WalkResult[], findings: StandF
 export function renderWalkReport(report: WalkReport): string {
     return [
         '# Synthetic navigator walk', '', report.measurement, '',
+        'Loaded-code / closed-summary paths (observed steps; unavailable receipts do not calibrate the live summary path):',
+        ...(report.loadedCodePath ?? []).map(row => JSON.stringify(row)), '',
         'Coverage: ' + report.coverage.gates.filter(entry => entry.steps).length + '/' + report.coverage.gates.length + ' gates; '
             + report.coverage.blocked.filter(entry => entry.steps).length + '/' + report.coverage.blocked.length + ' BLOCKED route points. '
             + report.coverage.unaccounted.length + ' unexplained gaps. ' + report.executedSteps + ' executed steps; '
@@ -149,7 +194,15 @@ export function renderWalkReport(report: WalkReport): string {
         '| Scenario | Counter state | Outcome | Steps | Task events | Reviews |',
         '|---|---|---|---:|---:|---|',
         ...report.scenarios.map((entry) => '| ' + [entry.id, entry.counterState ?? 'ordinary', entry.outcome, entry.steps, entry.taskEvents, entry.reviews.join(' ')].join(' | ') + ' |'),
-        '', '## Growth by task events and route', '',
+        '', '## Stack review logic', '',
+        'Seed: ' + report.reviewRotation.seed + '; N=' + report.reviewRotation.count + ' other stacks per deep family. Permanent cases: '
+            + JSON.stringify(report.reviewRotation.permanent) + '.', '',
+        ...report.reviewRotation.families.map(family => '- ' + family.family + ': ' + family.stacks.join(', ')), '',
+        '| Stack | Review logic | Cases |', '|---|---|---:|',
+        ...report.stackReviewLogic.map(stack => `| ${stack.stack} | ${stack.verdict} | ${stack.cases.length} |`), '',
+        'Cross-stack family differences (retain through baseline --kind review-cases with a reason): '
+            + JSON.stringify(report.stackReviewDifferences), '',
+        '## Growth by task events and route', '',
         'Raw process timings, output, state hashes and runtime identity remain in the recorder journals linked by navigator-walk.json. These buckets add the event counts the recorder does not know. Compare the same scenario and route; different routes and states are not interchangeable.', '',
         '| Scenario | Route/lane | Task events | Calls | Wall/core/outside core median, ms | Inclusive phases, average ms |',
         '|---|---|---|---:|---|---|',

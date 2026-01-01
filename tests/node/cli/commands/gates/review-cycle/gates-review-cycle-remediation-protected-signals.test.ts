@@ -1,3 +1,4 @@
+import { prepareOperatorTaskIntentUpdate, recordOperatorTaskIntentUpdate } from '../../../../../../src/gates/review-context/review-context-task-intent';
 import {
     appendTaskEvent,
     assert,
@@ -6,7 +7,9 @@ import {
     fs,
     getOrchestratorRoot,
     getReviewsRoot,
-    path
+    path,
+    runEnterTaskMode,
+    seedInitAnswers
 } from './gates-review-cycle-fixtures';
 import test from 'node:test';
 import {
@@ -162,6 +165,16 @@ function assertFull(result: ScenarioResult, reason: RegExp): void {
     assert.match(delta.full_review_reasons.join('\n'), reason);
 }
 
+function assertEveryLaneFull(result: ScenarioResult): void {
+    const decision = resolveAuthoritativeReviewRemediationDecision({ taskId: result.taskId,
+        currentReviewType: result.decision.currentReviewType, classification: result.decision.classification,
+        modePolicyValidationInputs: result.decision.modePolicyValidationInputs, requiredReviews: result.requiredReviews,
+        reviewExecutionPolicyMode: 'strict_sequential' });
+    assert.equal(decision.status, 'READY', JSON.stringify(decision));
+    assert.deepEqual(decision.invalidated_review_types.slice().sort(), Object.keys(result.requiredReviews).filter(lane => result.requiredReviews[lane]).sort());
+    assert.ok(decision.lane_decisions.every(lane => lane.invalidated && lane.mode === 'FULL' && !lane.reuse_eligible), JSON.stringify(decision));
+}
+
 function cleanup(result: ScenarioResult): void {
     fs.rmSync(result.repoRoot, { recursive: true, force: true });
 }
@@ -273,6 +286,8 @@ test('remediation that edits task criteria or review policy sources still requir
     try {
         assertFull(taskFile, /task criteria changed after the authenticated review baseline/u);
         assertFull(policySource, /review policy changed after the authenticated review baseline/u);
+        assertEveryLaneFull(taskFile);
+        assertEveryLaneFull(policySource);
     } finally {
         cleanup(taskFile);
         cleanup(policySource);
@@ -433,6 +448,8 @@ function writeCriteriaSources(repoRoot: string, taskId: string, criteria: string
 
 function criteriaScenario(taskId: string, options: {
     recordBinding: boolean;
+    attachPlan?: boolean;
+    currentIntent?: string;
     afterFailedReview?: (repoRoot: string) => void;
     taskCriteria?: { authenticated: string; current: string };
 }): ScenarioResult {
@@ -446,6 +463,16 @@ function criteriaScenario(taskId: string, options: {
             // Contexts from before the binding field are exercised without a linked card, as such tasks had none.
             writeCriteriaSources(repoRoot, taskId, options.recordBinding
                 ? ['### Acceptance criteria', '', '1. Rounds half up', '2. Keeps two decimals'] : null);
+            if (options.attachPlan) {
+                seedInitAnswers(repoRoot, 'Codex');
+                const planPath = path.join(getReviewsRoot(repoRoot), `${taskId}-task-plan.json`);
+                fs.mkdirSync(path.dirname(planPath), { recursive: true });
+                fs.writeFileSync(planPath, JSON.stringify({ schema_version: 1, task_id: taskId, status: 'approved',
+                    goal: CRITERIA_TASK_TITLE, scope_files: ['src/invoice.ts'], risk_level: 'low',
+                    acceptance_criteria: ['Rounds half up'], steps: [{ id: 'S1', title: 'Fix rounding' }] }));
+                const entered = runEnterTaskMode({ repoRoot, taskId, taskSummary: CRITERIA_TASK_SUMMARY, planPath });
+                assert.equal(entered.exitCode, 0, entered.outputLines.join('\n'));
+            }
             return options.recordBinding
                 ? { task_criteria_binding: computeTaskCriteriaBinding({ repoRoot, taskId, preflight: { task_intent: CRITERIA_TASK_TITLE } }) }
                 : { task_criteria: { task_intent: { source: 'preflight' } } };
@@ -453,7 +480,7 @@ function criteriaScenario(taskId: string, options: {
         afterFailedReview: options.afterFailedReview,
         // The restart reclassifies with the intent the failed review's preflight was classified with.
         taskCriteria: { ...(options.taskCriteria ?? { authenticated: CRITERIA_TASK_SUMMARY, current: CRITERIA_TASK_TITLE }),
-            currentTaskIntent: CRITERIA_TASK_TITLE }
+            currentTaskIntent: options.currentIntent ?? CRITERIA_TASK_TITLE }
     });
 }
 
@@ -475,9 +502,37 @@ test('after a failed review, changed numbered card criteria repeat every review 
     try {
         assertFull(result, /task_criteria_or_policy|task criteria/iu);
         assert.equal(result.decision.modePolicyValidationInputs?.taskCriteriaChanged, true);
+        assertEveryLaneFull(result);
     } finally {
         cleanup(result);
     }
+});
+
+test('a refined intent leaves durable criteria unchanged after a failed review', () => {
+    const result = criteriaScenario('T-criteria-refined', { recordBinding: true,
+        currentIntent: 'Fix invoice rounding: round half up and keep two decimals' });
+    try { assertDelta(result); assert.equal(result.decision.modePolicyValidationInputs?.taskCriteriaChanged, false); }
+    finally { cleanup(result); }
+});
+
+for (const source of ['row-scope', 'plan', 'operator-intent'] as const) test(`${source} change resets every required lane to FULL`, () => {
+    const taskId = `T-criteria-all-full-${source}`;
+    const result = criteriaScenario(taskId, { recordBinding: true, attachPlan: source === 'plan',
+        currentIntent: source === 'operator-intent' ? 'Fix invoice rounding with authorization checks' : undefined,
+        afterFailedReview: repoRoot => {
+            if (source === 'operator-intent') {
+                const update = prepareOperatorTaskIntentUpdate({ repoRoot, taskId, previousIntent: CRITERIA_TASK_TITLE,
+                    taskIntent: 'Fix invoice rounding with authorization checks', operatorConfirmed: 'yes' });
+                assert.ok(update);
+                recordOperatorTaskIntentUpdate(repoRoot, update);
+            }
+            const artifact = source === 'row-scope' ? path.join(repoRoot, 'TASK.md')
+                : source === 'plan' ? path.join(getReviewsRoot(repoRoot), `${taskId}-task-plan.json`) : null;
+            if (artifact) fs.writeFileSync(artifact, fs.readFileSync(artifact, 'utf8').replace('Fix the invoice rounding', 'Fix the invoice rounding and totals'));
+        }
+    });
+    try { assertFull(result, /task_criteria_or_policy|task criteria/iu); assertEveryLaneFull(result); }
+    finally { cleanup(result); }
 });
 
 test('after a failed review, card line endings and trailing whitespace keep DELTA', () => {

@@ -17,6 +17,7 @@ import { getCurrentWorkflowConfigFileHashes } from '../../../../src/gates/workfl
 import { buildDefaultWorkflowConfig } from '../../../../src/core/workflow-config';
 import { GARDA_NO_DELEGATE_ENV } from '../../../../src/core/review-delegation-policy';
 import { initializeGitRepo, writeCleanReviewArtifact } from '../../cli/commands/gate-test-helpers';
+import { appendTaskEvent } from '../../../../src/gate-runtime/task-events';
 
 const COMPLETION_WORKSPACE_REMOVE_MAX_RETRIES = 10;
 const COMPLETION_WORKSPACE_REMOVE_RETRY_DELAY_MS = 100;
@@ -238,7 +239,7 @@ describe('gates/completion — protected control-plane', () => {
                     { event_type: 'COMPILE_GATE_PASSED', timestamp_utc: '2026-04-02T17:00:02.000Z' },
                     { event_type: 'REVIEW_PHASE_STARTED', timestamp_utc: '2026-04-02T17:00:03.000Z' },
                     { event_type: 'REVIEW_GATE_PASSED', timestamp_utc: '2026-04-02T17:00:04.000Z' }
-                ].map((entry) => JSON.stringify(entry)).join('\n') + '\n',
+                ].map((entry) => JSON.stringify({ task_id: taskId, ...entry })).join('\n') + '\n',
                 'utf8'
             );
 
@@ -1121,14 +1122,8 @@ describe('gates/completion — protected control-plane', () => {
                 writeJson(workspace.rulePackPath, rulePack);
                 fs.writeFileSync(appPath, 'const after = 2;\nconsole.log(after);\n', 'utf8');
                 writeCleanReviewArtifact(workspace.repoRoot, 'T-1010', 'code', 'REVIEW PASSED');
-                fs.appendFileSync(
-                    workspace.timelinePath,
-                    `${JSON.stringify({
-                        event_type: 'REVIEW_GATE_PASSED',
-                        timestamp_utc: '2026-04-02T17:00:10.000Z'
-                    })}\n`,
-                    'utf8'
-                );
+                appendTaskEvent(path.join(workspace.repoRoot, 'garda-agent-orchestrator'), 'T-1010',
+                    'REVIEW_GATE_PASSED', 'PASS', 'Fixture review gate passed.', {});
 
                 process.env[GARDA_NO_DELEGATE_ENV] = '1';
                 const result = runCompletionGate({

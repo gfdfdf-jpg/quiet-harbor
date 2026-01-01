@@ -435,9 +435,9 @@ export function resolveFailedReviewRemediationRoute(
             title: `Refresh validation evidence for '${options.reviewType}' review.`,
             reason:
                 `Recorded '${options.reviewType}' review verdict is '${options.verdictToken}', ` +
-                `but the failure matches stale compile/full-suite validation evidence (${options.failureReason || 'stale validation evidence'}). ` +
+                `but the failure matches stale compile/task test validation evidence (${options.failureReason || 'stale validation evidence'}). ` +
                 'Preserve the failed review artifact and receipt as audit evidence; do not edit them by hand and do not make fake implementation changes. ' +
-                'Rerun compile-gate for the current preflight; next-step will then require any configured full-suite validation before rebuilding and relaunching the failed review lane.',
+                'Rerun compile-gate for the current preflight; next-step will then require any configured task test validation before rebuilding and relaunching the failed review lane.',
             commands: [options.commands.compileGate]
         };
     }

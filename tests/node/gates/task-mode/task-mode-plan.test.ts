@@ -1,3 +1,4 @@
+import { initializeGitRepo } from '../../cli/commands/gate-test-helpers';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
@@ -152,6 +153,7 @@ function runEnterTaskModeWithDefaultRouting(options: Parameters<typeof runEnterT
         fs.writeFileSync(routedFilePath, '# routed workflow fixture\n', 'utf8');
     }
 
+    if (!fs.existsSync(path.join(repoRoot, '.git'))) initializeGitRepo(repoRoot);
     return runEnterTaskModeCommand({
         startBanner: 'Garda captures my mind',
         provider: 'Codex',

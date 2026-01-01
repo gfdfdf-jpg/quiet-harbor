@@ -6,18 +6,30 @@ import type { WalkScenario } from './navigator-walk';
 import { handleSet } from '../../../../src/cli/commands/workflow/workflow-command-set';
 import { splitCommandLine } from '../../../../src/core/command-line';
 import { resolveTaskQueueTransactionLockPath } from '../../../../src/core/task-queue/task-queue-repository';
+import { legacyTaskFixture } from './walk-legacy-task-contract';
 
 const REVIEWS = 'garda-agent-orchestrator/runtime/reviews';
 const CLEAN = {
     edits: [{ path: 'src/app.ts', append: '// evidence edge\n' }, { path: 'tests/app.test.ts', append: '// evidence edge\n' }],
     expectedReviews: { code: 1, test: 1 }, expectedModes: ['code:FULL', 'test:FULL']
 };
+const RECIPE_BASE = legacyTaskFixture('node --test --test-reporter=tap tests/app.test.ts');
+const RECIPE_FIXTURE = { ...RECIPE_BASE,
+    files: { ...RECIPE_BASE.files, 'tests/app.test.ts': 'import test from "node:test"; import assert from "node:assert/strict";\n'
+        + 'import { renderStatus } from "../src/app.ts";\ntest("status", () => assert.equal(renderStatus(), "ready"));\n' },
+    caseCommand: 'node --test --test-reporter=tap tests/app.test.ts',
+    cases: [{ source: 'tests/app.test.ts', case_id: 'status', selector: 'status' }],
+    trustBoundaryMatrix: [{ boundary_id: 'TB-RECIPE-STATUS', boundary: 'Status source to the rendered result',
+        authority_source: 'src/app.ts', mutable_inputs: ['status source'], integrity_evidence: ['source sha256'],
+        canonical_reconstruction: 'Read the task source and execute its status regression.', toctou_replay: 'Reject changed status behavior.',
+        negative_paths: [{ kind: 'replaced', scenario: 'status', expected_behavior: 'Preserve the ready status.',
+            evidence_files: ['tests/app.test.ts#status'] }] }] };
 
 function configureDeclaredRecipe(root: string): void {
-    const declaration = { schema_version: 1, recipes: [{ id: 'stand-auth', purpose: 'test', executable: process.execPath,
-        argv: ['--test', '--test-reporter=tap', 'tests/auth.test.cjs'], cwd: '.', environment: {},
-        inputs: [{ path: 'tests/auth.test.cjs', role: 'test' }],
-        targets: [{ id: 'auth', source: 'tests/auth.test.cjs', selector: 'rejects replaced session evidence' }],
+    const declaration = { schema_version: 1, recipes: [{ id: 'stand-status', purpose: 'test', executable: process.execPath,
+        argv: ['--test', '--test-reporter=tap', 'tests/app.test.ts'], cwd: '.', environment: {},
+        inputs: [{ path: 'tests/app.test.ts', role: 'test' }],
+        targets: [{ id: 'status', source: 'tests/app.test.ts', selector: 'status' }],
         // The declared opaque path requires the modeled reviewer to resolve the actual selected case.
         required_capabilities: [], result_format: 'opaque', timeout_ms: 5000, max_attempts: 1,
         max_output_bytes: 32768, max_input_bytes: 65536 }] };
@@ -37,8 +49,12 @@ function obstructQueuePublication(root: string): void {
 export const EVIDENCE_EDGE_WALK_SCENARIOS: readonly WalkScenario[] = [
     {
         id: 'coverage-docs-only-validation-conflict', profile: 'docs-only',
-        counterState: 'declared-recipe-docs-only',
-        edits: [{ path: 'docs/guide.md', append: 'Clarify the documented contract.\n' }],
+        counterState: 'declared-recipe-task-local-docs-only',
+        // This handoff is a real conflict: the docs-only profile cannot review its own changed executable case.
+        edits: [{ path: 'docs/guide.md', append: 'Clarify the documented contract.\n' },
+            { path: 'tests/app.test.ts', append: '// Verify the documented status contract.\n' }],
+        fixture: RECIPE_FIXTURE, selectionTargets: ['tests/app.test.ts'],
+        testSelectionCommand: RECIPE_BASE.taskTestCommand,
         expectedReviews: {}, expectedModes: [], expectedBlockedGate: 'project-validation-evidence',
         expectedGuidance: /Task\/validation contract conflict:.*docs-only.*Ask the operator to resolve the task scope or validation contract/u,
         configure: configureDeclaredRecipe,
@@ -46,20 +62,22 @@ export const EVIDENCE_EDGE_WALK_SCENARIOS: readonly WalkScenario[] = [
             if (!steps.length) handleSet({ targetRoot: root, projectValidationContract: 'recipes.json',
                 operatorConfirmed: 'yes', operatorConfirmedAtUtc: new Date().toISOString(), json: true });
             if (steps.some(step => step.gate === 'required-reviews-check' || step.gate === 'run-intermediate-command'))
-                throw new Error('Task/validation conflict must refuse before executing the recipe or closing reviews.');
+                throw new Error('The explicit task/profile conflict must refuse before recipe execution or review closeout.');
         }
     },
     {
         ...CLEAN, id: 'coverage-declared-recipe', configure: configureDeclaredRecipe,
-        counterState: 'declared-recipe-reviewed',
-        expectedGates: ['run-intermediate-command'], expectedFailingGates: ['run-intermediate-command'],
+        fixture: RECIPE_FIXTURE,
+        selectionTargets: ['tests/app.test.ts'],
+        counterState: 'declared-recipe-task-local-reviewed',
+        expectedGates: ['run-intermediate-command'],
         prepare: async (root, steps) => {
             if (!steps.length) handleSet({ targetRoot: root, projectValidationContract: 'recipes.json',
                 operatorConfirmed: 'yes', operatorConfirmedAtUtc: new Date().toISOString(), json: true });
             const last = steps.at(-1);
-            if (last?.gate === 'run-intermediate-command' && last.exitCode !== 0
-                && !/PROJECT_VALIDATION_UNRESOLVED[\s\S]*ExitCode: 0/u.test(last.output || ''))
-                throw new Error('Only successful execution awaiting independent semantics is an expected recipe refusal.');
+            if (last?.gate === 'run-intermediate-command' && last.command?.includes('--recipe-id')
+                && (last.exitCode !== 0 || !/PROJECT_VALIDATION_PROCESS_PASSED[\s\S]*ResultStatus: UNRESOLVED[\s\S]*ExitCode: 0/u.test(last.output || '')))
+                throw new Error('Opaque recipe execution must pass while independent case semantics remain unresolved.');
         }
     },
     {

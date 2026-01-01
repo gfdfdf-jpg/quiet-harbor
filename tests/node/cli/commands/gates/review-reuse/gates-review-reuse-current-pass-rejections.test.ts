@@ -43,6 +43,7 @@ import {
 } from '../../../../../../src/gates/review/review-findings-artifact-verdict';
 import { resolveReviewContextExecutionEvidenceBindings } from '../../../../../../src/gates/review/review-evidence-contract';
 import { getReviewContextTaskCriteriaViolation } from '../../../../../../src/gates/review-context/review-context-task-criteria-binding';
+import { readTimelineEventsSummary } from '../../../../../../src/cli/commands/gate-flows/review-context/review-context-command-binding';
 import { REVIEW_FINDINGS_SCHEMA_VERSION } from '../../../../../../src/gates/review/review-findings-schema';
 import type { ReviewRemediationReviewContract } from '../../../../../../src/gates/review-remediation/review-remediation-review-contract';
 
@@ -399,7 +400,8 @@ describe('cli/commands/gates - current-cycle review reuse rejections', () => {
                 outputPath: reviewContextPath,
                 repoRoot
             }),
-            /timeline contains legacy\/unverified event after integrity chain start/iu
+            // Criteria authentication now rejects the corrupt history before review reuse inspects it.
+            /Operator task intent history cannot be authenticated/iu
         );
 
         fs.rmSync(repoRoot, { recursive: true, force: true });
@@ -903,13 +905,27 @@ describe('cli/commands/gates - current-cycle review reuse rejections', () => {
         assert.equal(updatedInvocationEvent, true);
         fs.writeFileSync(timelinePath, `${tamperedTimeline.join('\n')}\n`, 'utf8');
 
-        const secondCurrentPass = tryAcceptCurrentPassReviewEvidence({
+        const currentPassOptions = {
             repoRoot,
             taskId,
             reviewType: 'code',
             preflightPath,
             preflightPayload: JSON.parse(fs.readFileSync(preflightPath, 'utf8')) as Record<string, unknown>,
             reviewContextPath
+        };
+        const corruptHistoryPass = tryAcceptCurrentPassReviewEvidence(currentPassOptions);
+        assert.equal(corruptHistoryPass.accepted, false);
+        assert.match(corruptHistoryPass.reason, /Operator task intent history cannot be authenticated/iu);
+        assert.doesNotMatch(corruptHistoryPass.reason.replaceAll(taskId, '<task>'),
+            /timing|threshold|elapsed|duration|seconds|too_short|impossible_ordering|missing_timing/iu);
+
+        // Isolate the hidden-timing consumer from the separate native history-integrity guard.
+        // Supply its caller-owned timing projection while criteria still read the intact native history.
+        const timingSummary = readTimelineEventsSummary(timelinePath);
+        fs.writeFileSync(timelinePath, `${timelineLines.join('\n')}\n`, 'utf8');
+        const secondCurrentPass = tryAcceptCurrentPassReviewEvidence({
+            ...currentPassOptions,
+            timelineEventsSummary: timingSummary
         });
 
         assert.equal(secondCurrentPass.accepted, false, JSON.stringify(secondCurrentPass, null, 2));

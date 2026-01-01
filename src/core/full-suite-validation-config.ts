@@ -4,6 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { assertWorkflowTransactionReadable } from './workflow-transaction-state';
 import { parseValidationReportFiles, type ValidationReportFile } from './validation-report-contract';
+import { normalizeTaskValidationConfigNames } from './task-validation-names';
 
 import { ensurePlainObject, normalizeBooleanLike, normalizeInteger } from '../schemas/shared';
 import {
@@ -70,7 +71,8 @@ function resolveWorkflowConfigPathUncached(repoRoot: string): string {
 export function loadFullSuiteValidationConfig(repoRoot: string): FullSuiteValidationConfig {
     const configPath = resolveWorkflowConfigPath(repoRoot);
     assertWorkflowTransactionReadable(path.dirname(path.dirname(path.dirname(configPath))));
-    const config = readWorkflowConfig(configPath);
+    const raw = readWorkflowConfig(configPath);
+    const config = raw && normalizeTaskValidationConfigNames(raw);
     if (config?.full_suite_validation === undefined) {
         return { ...DEFAULT_FULL_SUITE_VALIDATION_CONFIG };
     }

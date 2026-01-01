@@ -49,7 +49,7 @@ Prioritize supply-chain integrity, runtime compatibility, and operational blast 
 
 ## Validation Boundary
 - Missing prior focused execution evidence alone is not a finding or residual risk. Inspect supplied results and repository contracts without implying an unrun check passed.
-- When the generated handoff permits a safe focused check, use exactly one relevant authenticated repository target. Otherwise report reserved F-000 only with the exact evidence-only marker and target required by the generated handoff, when its narrow conditions actually apply.
+- Follow the generated focused-self-validation contract for relevant authenticated repository targets, their commands and unavailable-attempt markers. That contract owns the target mapping and evidence rules.
 - Report concrete risks such as incompatible range widening, provenance/integrity defects, manifest/lockfile drift, or broken runtime/migration assumptions with exact package names and before/after versions. Missing execution alone does not establish those defects.
 
 ## Standalone Advice

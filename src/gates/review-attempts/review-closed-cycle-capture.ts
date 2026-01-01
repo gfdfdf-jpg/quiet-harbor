@@ -18,7 +18,7 @@ import { captureTaskTimelineReadSnapshotSha256, withTaskTimelineFileReadSnapshot
 import type { CapturedClosedReviewEvent, ClosedReviewVerifiedCapture } from '../../gate-runtime/timeline/task-closed-review-query';
 import { withReviewArtifactReadBarrier } from '../../gate-runtime/review-artifacts';
 import { invalidateIndex } from '../../gate-runtime/reviews-index';
-import { resolveWorkflowConfigPath } from '../full-suite/full-suite-validation';
+import { resolveWorkflowConfigPath } from '../../core/full-suite-validation-config';
 import { readNormalizedReviewCycleGuardConfig } from '../next-step/next-step-review-cycle-guard-config';
 import { readCurrentReviewCyclePreflightFingerprints } from '../next-step/next-step-review-cycle-scope';
 import type { ReviewCycleGuardReadEvaluationResult } from '../next-step/next-step-review-cycle-guard-types';

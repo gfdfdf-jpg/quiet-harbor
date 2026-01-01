@@ -2,17 +2,20 @@ import * as path from 'node:path';
 import { countNextStepWork } from '../../core/next-step-measurement';
 import { readTaskQueueEntries } from '../../core/task-queue-read';
 import { isPlainRecord } from '../../core/records';
+import { createTaskTestScopeMatcher } from '../../core/file-role-bindings';
+import { resolveReviewReuseClassificationConfig } from '../review-reuse/review-reuse';
 import { readValidationFile, validationDigest } from '../../core/project-validation-identity';
-import { assertCurrentIntermediateSelection, isIntermediateSelection, latestMatchingIntermediateAttempt } from '../../core/intermediate-selected-cases';
+import { assertCurrentIntermediateSelection, intermediateInvocationIdentity, isIntermediateSelection, latestMatchingIntermediateAttempt } from '../../core/intermediate-selected-cases';
 import { readValidationEventSnapshot, type ValidationEvidenceInspection } from '../project-validation/attempt-evidence';
 import { readBoundIntermediateCommandEvidence } from '../review/focused-intermediate-evidence';
 import { readPolicyValidationCarry } from '../review/policy-validation-carry';
-import { requiredExpectedRedFiles } from './expected-red-scope';
-import { NativeCaseExecutionUnavailableError, readNativeCaseObligations, retainedNativeCaseOutput, type NativeCaseExecution } from '../review/native-case-semantics';
+import { requiredExpectedRedFiles, isExpectedRedTestScope } from './expected-red-scope';
+import { NativeCaseExecutionUnavailableError, readNativeCaseObligations, type NativeCaseExecution } from '../review/native-case-semantics';
 import type { QualityValidationObligation } from '../quality-checklist/quality-checklist-validation-phases';
-import { readReportedTestCases, getCurrentIntermediateTestTargets } from '../../cli/commands/gate-flows/command-run/intermediate-command-scope';
+import { getCurrentIntermediateTestTargets } from '../../cli/commands/gate-flows/command-run/intermediate-command-scope';
 import { hasTestFirstExpectedRedDeclaration } from './test-first-declaration';
 import { readRecipeExpectedRedObligations, readRetainedRecipeExpectedRedRejection } from './expected-red-recipe-evidence';
+import { loadTaskFullSuiteConfig } from '../full-suite/task-full-suite-config';
 
 export interface ExpectedRedExecutionEvidence {
     schema_version: 1;
@@ -40,7 +43,7 @@ function projectExpectedRedExecutions(options: ExpectedRedEvidenceOptions, curre
     const retained = readValidationFile(options.repoRoot, relative);
     const preflight: unknown = JSON.parse(retained.bytes.toString('utf8'));
     if (retained.identity.sha256 !== options.preflightSha256 || !isPlainRecord(preflight)
-        || preflight.task_id !== options.taskId || currentOnly && preflight.scope_category !== 'test-only') return null;
+        || preflight.task_id !== options.taskId || currentOnly && !isExpectedRedTestScope(preflight, options.repoRoot, options.taskId)) return null;
     const snapshot = readValidationEventSnapshot(options.repoRoot, options.taskId, options.inspection);
     if (snapshot.preflight_sha256 !== options.preflightSha256
         || path.resolve(snapshot.preflight_path) !== path.resolve(options.repoRoot, options.preflightPath)) return null;
@@ -58,6 +61,9 @@ function projectExpectedRedExecutions(options: ExpectedRedEvidenceOptions, curre
         || event.event_type === 'INTERMEDIATE_COMMAND_STARTED'
             && (event.details?.expected_failure === true || redIds.has(event.details?.execution_id))));
     const relevantAttempts = currentOnly ? attempts : redAttempts;
+    const classification = resolveReviewReuseClassificationConfig(preflight, options.repoRoot);
+    const isTaskTest = createTaskTestScopeMatcher(classification.test_trigger_regexes, classification.file_roles,
+        Array.isArray(preflight.declared_test_paths) ? preflight.declared_test_paths.filter((file): file is string => typeof file === 'string') : []);
     const obligations = new Map<string, QualityValidationObligation>();
     for (const event of [...attempts].reverse()) {
         countNextStepWork('visit:expected_red_event');
@@ -94,10 +100,10 @@ function projectExpectedRedExecutions(options: ExpectedRedEvidenceOptions, curre
             ...(entry.report_evidence ? { report_evidence: entry.report_evidence } : {}) };
         let cases = selection.cases;
         if (!cases.length) {
-            const sources = getCurrentIntermediateTestTargets(options.repoRoot, entry.command, snapshot.changed_files, selection);
-            const reported = readReportedTestCases(retainedNativeCaseOutput(options.repoRoot, execution).text);
-            if (sources.length !== 1 || !reported?.length) continue;
-            cases = reported.map(item => (countNextStepWork('visit:expected_red_case'), ({ source: sources[0], case_id: item.id, selector: item.id })));
+            const sources = entry.focused_test_paths.length ? entry.focused_test_paths
+                : getCurrentIntermediateTestTargets(options.repoRoot, entry.command, snapshot.changed_files.filter(isTaskTest), selection);
+            cases = sources.map(source => (countNextStepWork('visit:expected_red_case'),
+                ({ source, case_id: source, selector: source })));
         }
         for (const claim of cases) {
             countNextStepWork('visit:expected_red_case');
@@ -116,8 +122,17 @@ function projectExpectedRedExecutions(options: ExpectedRedEvidenceOptions, curre
                 result_status: 'UNRESOLVED', result_sha256: null, case_execution: execution });
         }
     }
-    const requiredSources = new Set(requiredExpectedRedFiles(preflight, options.repoRoot));
-    if (!obligations.size || currentOnly && snapshot.changed_files.some(file => requiredSources.has(file)
+    const selection = loadTaskFullSuiteConfig(options.repoRoot, options.taskId).selection;
+    const observedSources = new Set([...obligations.values()].map(item => item.source_identity.path));
+    // An observed target's selected-case binding authenticates its support bytes; changed tests still require their own results below.
+    const coveredSupport = new Set(selection.status === 'current' ? selection.plan?.support
+        .filter(item => item.targets.some(target => observedSources.has(target)))
+        .map(item => item.path) : []);
+    const requiredSources = new Set(requiredExpectedRedFiles(preflight, options.repoRoot, classification)
+        .filter(file => typeof file !== 'string' || isTaskTest(file) || !coveredSupport.has(file)).filter(file =>
+        currentOnly || preflight.scope_category === 'test-only' || typeof file === 'string'
+            && isTaskTest(file)));
+    if (!obligations.size || snapshot.changed_files.some(file => requiredSources.has(file)
         && ![...obligations.values()].some(item => (countNextStepWork('visit:expected_red_obligation'), item.source_identity.path === file))))
         return null;
     if (readValidationEventSnapshot(options.repoRoot, options.taskId, options.inspection).timeline_sha256 !== snapshot.timeline_sha256)
@@ -142,7 +157,13 @@ function projectExpectedRedReviewObligations(options: ExpectedRedEvidenceOptions
         throw new Error('Expected-RED evidence for the unchanged selected test sources is missing.');
     }
     const native = readValidationEventSnapshot(options.repoRoot, options.taskId, options.inspection);
+    const requiredCommandByCase = new Map(red.obligations.flatMap(item => {
+        const event = native.events.find(event => event.integrity?.task_sequence === item.case_execution!.event_task_sequence);
+        const identity = intermediateInvocationIdentity(event?.details?.command);
+        return identity ? [[JSON.stringify([item.source_identity.path, item.target_id]), identity] as const] : [];
+    }));
     const green = readNativeCaseObligations({ ...options, preflightSha256: native.preflight_sha256,
+        requiredCommandByCase,
         preserveSemanticBinding: true,
         scopeContentSha256: native.scope_content_sha256, sources: red.obligations.map(item => (countNextStepWork('visit:expected_red_obligation'), ({
             source_identity: item.source_identity, case_id: item.target_id, selector: item.selector, syntax_status: 'UNRESOLVED' }))) });
@@ -152,6 +173,11 @@ function projectExpectedRedReviewObligations(options: ExpectedRedEvidenceOptions
             && validationDigest(item.source_identity) === validationDigest(failed.source_identity)));
         if (!passed?.case_execution || passed.case_execution.event_task_sequence <= failed.case_execution!.event_task_sequence)
             throw new Error('Expected-RED requires a later current GREEN for every unchanged selected case.');
+        const redEvent = native.events.find(event => event.integrity?.task_sequence === failed.case_execution!.event_task_sequence);
+        const greenEvent = native.events.find(event => event.integrity?.task_sequence === passed.case_execution!.event_task_sequence);
+        const redCommand = intermediateInvocationIdentity(redEvent?.details?.command);
+        if (!redCommand || intermediateInvocationIdentity(greenEvent?.details?.command) !== redCommand)
+            throw new Error('Expected-RED requires the same declared command for current GREEN on the unchanged targets.');
     }
     if (readValidationEventSnapshot(options.repoRoot, options.taskId, options.inspection).timeline_sha256 !== native.timeline_sha256)
         throw new Error('Expected-RED/GREEN timeline changed during review projection.');
@@ -194,7 +220,7 @@ export function readExpectedRedReviewObligations(options: ExpectedRedEvidenceOpt
         const recipeRejection = readRetainedRecipeExpectedRedRejection(options);
         if (recipeRejection) throw expectedRedError(recipeRejection);
         if (error instanceof NativeCaseExecutionUnavailableError || /GREEN|successful execution/iu.test(String(error)))
-            throw new ExpectedRedEvidenceError(`${String(error)} Run and record current passing focused tests for the unchanged selected cases, then retry review.`, true);
+            throw new ExpectedRedEvidenceError(`${String(error)} Run and record current passing focused tests (GREEN) for the unchanged selected cases, then retry review.`, true);
         throw expectedRedError(error);
     }
 }

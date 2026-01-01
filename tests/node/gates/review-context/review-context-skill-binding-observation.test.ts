@@ -60,7 +60,7 @@ test('memoizes checked bounded bytes at one and five consumers and preserves mut
                     binding.reference_binding!.required_references[0].reference_sha256 = 'caller-only';
                 }
             });
-            assert.deepEqual(reads, [2, 2], 'One strict descriptor read and one shared Q2 content capture per bounded input');
+            assert.deepEqual(reads, [1, 1], 'Strict readers and ordinary consumers share one payload capture per bounded input');
             const hashes = Object.entries(measurement.work).filter(([name]) => name.startsWith('file_hash:'));
             assert.equal(hashes.length, 3);
             assert.ok(hashes.every(([, count]) => count === 1));
@@ -125,6 +125,19 @@ test('registers selected entrypoint, metadata and required-reference byte change
             assert.deepEqual(fixture.resolve(), first);
         }), /Invocation.*changed/iu, input);
     }
+});
+
+test('selected skill inputs are refreshed between invocations', t => {
+    const fixture = createSkill(t, ['required.md']);
+    const first = withInvocationReadObservation(() => fixture.resolve());
+    fs.writeFileSync(path.join(fixture.referenceRoot, 'required.md'), 'Changed required lens.\n');
+    const next = withInvocationReadObservation(() => fixture.resolve());
+    assert.notEqual(next.reference_binding!.required_references[0].reference_sha256,
+        first.reference_binding!.required_references[0].reference_sha256);
+    fs.appendFileSync(fixture.entrypoint, 'Changed entrypoint.\n');
+    assert.notEqual(withInvocationReadObservation(() => fixture.resolve()).skill_sha256, first.skill_sha256);
+    fs.writeFileSync(fixture.metadataPath, JSON.stringify({ references: [] }));
+    assert.equal(withInvocationReadObservation(() => fixture.resolve()).reference_binding, undefined);
 });
 
 test('rejects same-byte required-reference replacement and reference-root junction substitution', t => {

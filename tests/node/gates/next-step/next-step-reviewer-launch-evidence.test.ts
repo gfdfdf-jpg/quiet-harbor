@@ -439,6 +439,21 @@ describe('next-step reviewer launch evidence helpers', () => {
         assert.equal(artifactEvidence.launchInputArtifactSha256, null);
     });
 
+    for (const replacement of ['missing', 'directory'] as const) it(`rejects a ${replacement} pinned reviewer input`, () => {
+        const repoRoot = makeTempRepo();
+        const contextPath = path.join(reviewsRoot(repoRoot), `${TASK_ID}-${REVIEW_TYPE}-review-context.json`);
+        writeJson(contextPath, { task_id: TASK_ID, review_type: REVIEW_TYPE });
+        seedPreparedLaunchArtifact(repoRoot, contextPath);
+        const input = reviewScratchPath(repoRoot, TASK_ID, REVIEW_TYPE, 'reviewer-launch-input.json');
+        fs.unlinkSync(input);
+        if (replacement === 'directory') fs.mkdirSync(input);
+        const evidence = getCurrentReviewerLaunchArtifactEvidenceForInvocation(
+            repoRoot, eventsRoot(repoRoot), TASK_ID, makeReviewState(contextPath));
+        assert.equal(evidence.state, 'orphaned');
+        assert.equal(evidence.orphanedReason, 'launch_input_changed_before_launch_completed');
+        assert.equal(evidence.launchInputArtifactSha256, null);
+    });
+
     it('rejects prepared launch control metadata that swaps both reviewer input path and hash', () => {
         const repoRoot = makeTempRepo();
         const contextPath = path.join(reviewsRoot(repoRoot), `${TASK_ID}-${REVIEW_TYPE}-review-context.json`);

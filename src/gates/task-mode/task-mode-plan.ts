@@ -20,7 +20,7 @@ function buildApprovedPlanMetadata(content: string, planPath: string, taskId: st
     if (validated.plan_sha256 && validated.plan_sha256 !== digest) {
         throw new Error(`Plan plan_sha256 mismatch: embedded '${validated.plan_sha256}' vs computed '${digest}'.`);
     }
-    return { plan_path: normalizePath(planPath), plan_sha256: digest, plan_summary: validated.goal };
+    return { plan_path: normalizePath(planPath), plan_sha256: digest, plan_summary: validated.goal, scope_files: validated.scope_files };
 }
 
 /** Called inside the shared save/entry lock, after existing entry evidence is validated. */

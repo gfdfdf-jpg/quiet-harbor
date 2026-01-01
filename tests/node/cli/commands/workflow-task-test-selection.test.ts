@@ -7,11 +7,13 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { handleWorkflow } from '../../../../src/cli/commands/workflow-command';
 import { withInvocationReadObservation } from '../../../../src/core/invocation-read-observation';
+import { clearWorkspacePlannedFiles, captureWorkspacePlannedFiles } from '../../../../src/core/workspace-planned-files';
+import { readNativeRealpath } from '../../../../src/core/paths';
 import { withInvocationGitReadObservation } from '../../../../src/core/invocation-git-observation';
 import { withNextStepMeasurement } from '../../../../src/core/next-step-measurement';
 import { buildDefaultWorkflowConfig, normalizeOptionalQualityChecksConfig } from '../../../../src/core/workflow-config';
 import { resolveWorkflowRoots } from '../../../../src/cli/commands/workflow/workflow-command-state';
-import { assertTaskTestSelectionCurrent, resolveTaskTestSelectionAuthority } from '../../../../src/cli/commands/workflow/workflow-command-task-test-selection';
+import { assertTaskTestSelectionCurrent, readDeclaredTaskTestSelection, resolveTaskTestSelectionAuthority } from '../../../../src/cli/commands/workflow/workflow-command-task-test-selection';
 import { writeWorkflowConfigAuditRecord } from '../../../../src/cli/commands/workflow/workflow-command-mutation';
 import { appendMandatoryTaskEvent, readTaskTimelineJsonlEntries } from '../../../../src/gate-runtime/task-events';
 import { getTaskModeEvidence } from '../../../../src/gates/task-mode';
@@ -24,6 +26,7 @@ import { runCompileGateCommand, runFullSuiteValidationCommand } from '../../../.
 import { getFullSuiteTestSelectionViolations } from '../../../../src/gates/full-suite/full-suite-test-selection';
 import { buildTaskTestSelectionCommand } from '../../../../src/gates/next-step/next-step-full-suite-routing';
 import { parseCommandChain } from '../../../../src/core/command-line';
+import { validationDigest } from '../../../../src/core/project-validation-identity';
 import { loadTaskFullSuiteConfig } from '../../../../src/gates/full-suite/task-full-suite-config';
 import { taskTestExecutionProofSatisfied } from '../../../../src/gates/full-suite/task-test-execution-proof';
 import { resolveNextStep } from '../../../../src/gates/next-step/next-step';
@@ -33,6 +36,9 @@ import { collectFullSuiteValidationEvidence } from '../../../../src/gates/comple
 import { collectOrderedTimelineEvents } from '../../../../src/gates/completion/completion-evidence';
 import { buildReportTaskDetail } from '../../../../src/reports/report-data/task-detail';
 import { parseCanonicalActiveTaskQueue, replaceTaskMdTableCell } from '../../../../src/core/task-md-table';
+import { isExpectedRedTestScope } from '../../../../src/gates/test-first/expected-red-scope';
+import { checkRequiredReviews, validatePreflightForReview } from '../../../../src/gates/required-reviews/required-reviews-check';
+import { runCompletionGate } from '../../../../src/gates/completion';
 
 const TASK_ID = 'T-TEST-SELECTION-1';
 const TARGET = 'tests/widget.test.js';
@@ -49,7 +55,7 @@ function capture<T>(run: () => T): T {
     try { return run(); } finally { console.log = log; }
 }
 
-function fixture(options: { prompt?: boolean; legacy?: boolean; enabled?: boolean; heldOwner?: boolean; noPlanned?: boolean; disableQuality?: boolean; unrelatedFailure?: boolean; afterCompile?: boolean; broadConfigured?: boolean } = {}) {
+function fixture(options: { prompt?: boolean; legacy?: boolean; enabled?: boolean; heldOwner?: boolean; noPlanned?: boolean; disableQuality?: boolean; unrelatedFailure?: boolean; afterCompile?: boolean; broadConfigured?: boolean; suppressTestReview?: boolean } = {}) {
     const root = createTempRepo();
     const bundle = path.join(root, 'garda-agent-orchestrator');
     const configPath = path.join(bundle, 'live/config/workflow-config.json');
@@ -71,6 +77,12 @@ function fixture(options: { prompt?: boolean; legacy?: boolean; enabled?: boolea
     fs.writeFileSync(path.join(root, 'AGENTS.md'), '# routed workflow fixture\n');
     seedInitAnswers(root);
     writeBalancedProfilesConfig(root);
+    if (options.suppressTestReview) {
+        const profilesPath = path.join(bundle, 'live/config/profiles.json');
+        const profiles = JSON.parse(fs.readFileSync(profilesPath, 'utf8'));
+        profiles.built_in_profiles.balanced.review_policy.test = false;
+        fs.writeFileSync(profilesPath, JSON.stringify(profiles));
+    }
     const config = buildDefaultWorkflowConfig();
     config.optional_quality_checks = normalizeOptionalQualityChecksConfig(config.optional_quality_checks);
     if (options.disableQuality) config.optional_quality_checks.enabled = false;
@@ -146,6 +158,108 @@ function select(root: string, options?: Parameters<typeof selector>[1]) {
     return capture(() => handleWorkflow(selector(root, options), PACKAGE_JSON));
 }
 
+test('a cold selection reader hydrates native planned visibility before retaining its workspace generation', () => {
+    const f = fixture();
+    try {
+        select(f.root);
+        const before = [TARGET, 'TASK.md'].map(file => fs.readFileSync(path.join(f.root, file)));
+        clearWorkspacePlannedFiles(f.root, TASK_ID);
+        withInvocationReadObservation(() => {
+            assert.equal(loadTaskFullSuiteConfig(f.root, TASK_ID).selection.status, 'current');
+            const selected = captureWorkspacePlannedFiles(f.root);
+            const mode = getTaskModeEvidence(f.root, TASK_ID);
+            assert.equal(mode.evidence_status, 'PASS');
+            assert.equal(selected.entry_sha256, mode.evidence_hash);
+            assert.deepEqual(selected.paths, [SOURCE, TARGET]);
+        });
+        assert.deepEqual([TARGET, 'TASK.md'].map(file => fs.readFileSync(path.join(f.root, file))), before);
+        fs.appendFileSync(path.join(f.root, TARGET), '// changed after selection\n');
+        clearWorkspacePlannedFiles(f.root, TASK_ID);
+        assert.equal(withInvocationReadObservation(() => loadTaskFullSuiteConfig(f.root, TASK_ID).selection.status), 'stale');
+    } finally { f.cleanup(); }
+});
+
+test('product targets are refused as tests while unknown-stack test targets remain selectable', () => {
+    const f = fixture();
+    try {
+        for (const product of [SOURCE, 'src/engine.qz']) {
+            fs.appendFileSync(path.join(f.root, product), '// changed product\n');
+            classifyCurrent(f);
+            assert.throws(() => select(f.root, { command: `quartz-run ${product} ${TARGET}`, targets: [product, TARGET],
+                reason: `${TASK_ID} verifies ${product} behavior` }), /product code.*test target.*focused-required-test-path/isu);
+        }
+        fs.mkdirSync(path.join(f.root, 'qa'), { recursive: true });
+        const target = 'qa/engine.qt';
+        fs.writeFileSync(path.join(f.root, target), 'assert engine behavior\n');
+        classifyCurrent(f);
+        const accepted = select(f.root, { command: `quartz-run ${target} ${TARGET}`, targets: [target, TARGET],
+            reason: `${TASK_ID} verifies ${SOURCE} behavior` });
+        assert.ok(accepted && accepted.action === 'set');
+    } finally { f.cleanup(); }
+});
+
+test('expected RED cannot hide a changed product file behind a target or fixture mapping', () => {
+    const f = fixture();
+    try {
+        fs.appendFileSync(path.join(f.root, SOURCE), '// product implementation changed\n');
+        const preflightPath = classifyCurrent(f);
+        const selection = select(f.root, { extra: ['--task-test-plan', JSON.stringify({
+            support: [{ path: SOURCE, role: 'fixture', targets: [TARGET] }] })] });
+        assert.ok(selection && selection.action === 'set');
+        const preflight = JSON.parse(fs.readFileSync(preflightPath, 'utf8'));
+        assert.equal(isExpectedRedTestScope(preflight, f.root, TASK_ID, [SOURCE, TARGET]), false);
+        assert.equal(isExpectedRedTestScope({ ...preflight, scope_category: 'test-only', declared_test_paths: [SOURCE, TARGET] },
+            f.root, TASK_ID), false);
+    } finally { f.cleanup(); }
+});
+
+for (const mapping of ['symbolic', 'support'] as const) {
+    test(`${mapping} mapping requires test review at classification, review gate and completion`, () => {
+        const f = fixture({ noPlanned: true, suppressTestReview: true });
+        try {
+            fs.appendFileSync(path.join(f.root, SOURCE), '// changed product behavior\n');
+            if (mapping === 'support') fs.appendFileSync(path.join(f.root, SECOND_TARGET), '// changed runnable test claimed as fixture\n');
+            const preflightPath = classifyCurrent(f);
+            const plan = mapping === 'symbolic'
+                ? { targets: [{ path: TARGET, entrypoint: 'check', reason: 'Runs unchanged widget regression.' }] }
+                : { support: [{ path: SECOND_TARGET, role: 'fixture', targets: [TARGET] }] };
+            const selected = select(f.root, { command: mapping === 'symbolic' ? 'make check' : `node --test ${TARGET}`,
+                reason: `${TASK_ID} ${TARGET} verifies ${SOURCE} behavior`, extra: ['--task-test-plan', JSON.stringify(plan)] });
+            assert.ok(selected && selected.action === 'set');
+            if (mapping === 'support') assert.deepEqual(loadTaskFullSuiteConfig(f.root, TASK_ID).selection.plan?.support.map(item => item.path), [SECOND_TARGET]);
+            // Old preflights (or policies suppressing the lane) cannot bypass either consumer.
+            const preflight = JSON.parse(fs.readFileSync(preflightPath, 'utf8'));
+            assert.equal(preflight.required_reviews.test, false);
+            const validated = validatePreflightForReview(preflightPath, TASK_ID);
+            const review = checkRequiredReviews({ repoRoot: f.root, validatedPreflight: { ...validated,
+                required_reviews: { ...validated.required_reviews, test: false } }, preflightPayload: preflight });
+            assert.match(review.violations.join('\n'), /semantic.*test review.*restart-coherent-cycle/isu);
+            const completion = runCompletionGate({ repoRoot: f.root, taskId: TASK_ID, preflightPath });
+            assert.match(completion.violations.join('\n'), /semantic.*test review.*restart-coherent-cycle/isu);
+            // A native refresh incorporates the requirement into the frozen review snapshot.
+            classifyCurrent(f);
+            const refreshed = JSON.parse(fs.readFileSync(preflightPath, 'utf8'));
+            assert.equal(refreshed.required_reviews.test, true);
+            assert.equal(refreshed.effective_review_snapshot.required_reviews.test, true);
+        } finally { f.cleanup(); }
+    });
+}
+
+test('native compile gate refuses a narrower task command than configured mandatory compilation', async () => {
+    const f = fixture({ noPlanned: true });
+    try {
+        const preflightPath = prepareChangedTestPreflight(f);
+        assert.equal(capture(() => loadPostPreflightRulePack(f.root, TASK_ID, preflightPath)).exitCode, 0);
+        const refused = await runCompileGateCommand({ repoRoot: f.root, taskId: TASK_ID, preflightPath,
+            compileCommand: `node --check ${SOURCE}`, emitMetrics: false });
+        assert.notEqual(refused.exitCode, 0);
+        assert.match(refused.outputLines.join('\n'), /configured mandatory compile command.*--compile-command/isu);
+        const accepted = await runCompileGateCommand({ repoRoot: f.root, taskId: TASK_ID, preflightPath,
+            compileCommand: f.config.compile_gate.command, emitMetrics: false });
+        assert.equal(accepted.exitCode, 0, accepted.outputLines.join('\n'));
+    } finally { f.cleanup(); }
+});
+
 test('without planned files a current changed test is selected and native validation proceeds', async () => {
     const f = fixture({ noPlanned: true });
     try {
@@ -199,13 +313,12 @@ test('a module command is task-scoped, runs in the gate, and expires when change
             assert.ok(!selectionRoute.commands[0].command.includes(f.config.full_suite_validation.command));
             assert.ok(selectionRoute.reason.includes(f.config.full_suite_validation.command));
             assert.ok(selectionRoute.commands[0].command.includes(target));
-            const command = 'backend/mvnw.cmd -f backend/pom.xml -pl application -am verify';
+            const command = 'backend/mvnw.cmd -f backend/pom.xml -pl application -am -Dtest=PartnerIsolationPostgresIntegrationTest verify';
             const reason = `${TASK_ID} verifies partner isolation behavior`;
             for (const invalid of [
                 'backend/mvnw.cmd -f backend/pom.xml -pl other -am verify',
-                `${command} -DskipTests`, `${command} -Dmaven.test.skip=true`,
-                `${command} -Dsurefire.skip=true`, `${command} -Dfailsafe.skip=true`,
-                `${command} -Dtest=OtherTest`, 'backend/mvnw.cmd -f backend/pom.xml -pl application -am package'
+                command.replace('PartnerIsolationPostgresIntegrationTest', 'OtherTest'),
+                'backend/mvnw.cmd -f backend/pom.xml -pl application -am package'
             ]) assert.throws(() => select(f.root, { command: invalid, targets: [target], reason }), /rejected/i, invalid);
             const selection = select(f.root, { command, targets: [target], reason });
             assert.ok(selection && selection.action === 'set');
@@ -216,12 +329,12 @@ test('a module command is task-scoped, runs in the gate, and expires when change
             const compile = await runCompileGateCommand({ repoRoot: f.root, taskId: TASK_ID, preflightPath, emitMetrics: false });
             assert.equal(compile.exitCode, 0, compile.outputLines.join('\n'));
             const missingProof = await runFullSuiteValidationCommand({ repoRoot: f.root, taskId: TASK_ID, preflightPath });
-            assert.notEqual(missingProof.exitCode, 0, 'A green Maven exit without target execution must fail');
-            assert.match(missingProof.outputText, /No fresh Surefire\/Failsafe execution report/u);
+            assert.equal(missingProof.exitCode, 0, 'Generic process PASS does not require an adapter report');
+            assert.match(missingProof.outputText, /Maven adapter finding/u);
             fs.writeFileSync(path.join(f.bundle, 'runtime/maven-proof-enabled'), 'enabled');
             const suite = await runFullSuiteValidationCommand({ repoRoot: f.root, taskId: TASK_ID, preflightPath });
             assert.equal(suite.exitCode, 0, suite.outputText);
-            assert.match(fs.readFileSync(path.join(f.bundle, 'runtime/maven-invocation.txt'), 'utf8'), /-pl application -am verify/u);
+            assert.match(fs.readFileSync(path.join(f.bundle, 'runtime/maven-invocation.txt'), 'utf8'), /-pl application -am -Dtest=PartnerIsolationPostgresIntegrationTest verify/u);
             const artifact = JSON.parse(fs.readFileSync(path.join(f.bundle, 'runtime/reviews', `${TASK_ID}-full-suite-validation.json`), 'utf8'));
             assert.equal(artifact.command, command);
             assert.equal(artifact.command_provenance.source, 'task_scoped_test_selection');
@@ -276,15 +389,17 @@ test('explicitly keeping the configured command needs one selection and survives
         fs.appendFileSync(path.join(f.root, SOURCE), '// Task source-only change.\n');
         classifyCurrent(f);
         const before = fs.readFileSync(f.configPath);
-        const result = select(f.root, { command: f.config.full_suite_validation.command, targets: [],
-            reason: `${TASK_ID} verifies the widget behavior against the configured regression suite` });
+        assert.throws(() => select(f.root, { command: f.config.full_suite_validation.command, targets: [],
+            reason: `${TASK_ID} verifies the widget behavior against the configured regression suite` }), /at least one/u);
+        const result = select(f.root, { command: f.config.full_suite_validation.command, targets: [SECOND_TARGET],
+            reason: `${TASK_ID} ${SECOND_TARGET} verifies ${SOURCE} against the configured regression suite` });
         assert.ok(result && result.action === 'set');
         assert.equal(loadTaskFullSuiteConfig(f.root, TASK_ID).selection.status, 'current');
         classifyCurrent(f);
         assert.equal(loadTaskFullSuiteConfig(f.root, TASK_ID).selection.status, 'current');
         assert.deepEqual(fs.readFileSync(f.configPath), before);
         assert.throws(() => select(f.root, { command: 'node --test --test-skip-pattern=widget tests/another.test.js',
-            targets: [], reason: `${TASK_ID} verifies widget regressions` }), /skip/i);
+            targets: [], reason: `${TASK_ID} verifies widget regressions` }), /at least one/i);
         const preflightPath = path.join(f.bundle, 'runtime/reviews', `${TASK_ID}-preflight.json`);
         assert.equal(capture(() => loadPostPreflightRulePack(f.root, TASK_ID, preflightPath)).exitCode, 0);
         const compile = await runCompileGateCommand({ repoRoot: f.root, taskId: TASK_ID, preflightPath, emitMetrics: false });
@@ -309,6 +424,36 @@ async function nativeSuite(input: Parameters<typeof runFullSuiteValidationComman
     try { return await runFullSuiteValidationCommand(input); }
     finally { if (context !== undefined) process.env.NODE_TEST_CONTEXT = context; }
 }
+
+test('authenticated legacy selection projects facts and fresh execution records the common process contract without rewriting history', async () => {
+    const f = fixture({ disableQuality: true, noPlanned: true, afterCompile: true });
+    try {
+        prepareChangedTestPreflight(f);
+        select(f.root);
+        const event = readTaskTimelineJsonlEntries(f.timeline).filter(entry => entry.record?.event_type === 'TASK_TEST_SELECTION_RECORDED').at(-1)!;
+        const authority = structuredClone((event.record!.details as Record<string, unknown>).task_test_selection_authority) as Record<string, unknown>;
+        delete authority.validation_plan;
+        appendMandatoryTaskEvent(f.bundle, TASK_ID, 'TASK_TEST_SELECTION_RECORDED', 'PASS', 'Historical selection fixture.',
+            { task_test_selection_authority: authority }, { actor: 'task-selection-command' });
+        const oldBytes = fs.readFileSync(f.timeline, 'utf8');
+        const selected = loadTaskFullSuiteConfig(f.root, TASK_ID).selection;
+        assert.equal(selected.status, 'current'); assert.equal(selected.plan, undefined); assert.ok(selected.legacyPlan);
+        const preflightPath = path.join(f.bundle, 'runtime/reviews', `${TASK_ID}-preflight.json`);
+        assert.equal(capture(() => loadPostPreflightRulePack(f.root, TASK_ID, preflightPath)).exitCode, 0);
+        const compile = await runCompileGateCommand({ repoRoot: f.root, taskId: TASK_ID, preflightPath, emitMetrics: false });
+        assert.equal(compile.exitCode, 0, compile.outputLines.join('\n'));
+        const run = await nativeSuite({ repoRoot: f.root, taskId: TASK_ID, preflightPath });
+        assert.equal(run.exitCode, 0, run.outputText);
+        const artifact = JSON.parse(fs.readFileSync(path.join(f.bundle, `runtime/reviews/${TASK_ID}-full-suite-validation.json`), 'utf8'));
+        assert.equal(artifact.task_test_process_evidence.selection_sha256, validationDigest(selected.legacyPlan));
+        assert.equal(artifact.task_test_process_evidence.invocations.length, 1);
+        assert.ok(fs.readFileSync(f.timeline, 'utf8').startsWith(oldBytes));
+        const review = buildFullSuiteValidationEvidence({ repoRoot: f.root, taskId: TASK_ID, reviewType: 'test', preflightPath,
+            preflightSha256: fileSha256(preflightPath) });
+        assert.equal(review?.cycle_binding_valid, true, JSON.stringify(review));
+        assert.equal(review?.validation_plan_origin, 'authenticated_legacy_projection');
+    } finally { f.cleanup(); }
+});
 
 for (const failure of ['selected method', 'earlier reactor module'] as const) {
     test(`Maven ${failure} failure retains remediation without successful proof, then accepts the fixed rerun`,
@@ -340,7 +485,7 @@ if (!fixed && ${failure === 'earlier reactor module'}) {
                 assert.equal(runGit(f.root, ['commit', '-qm', 'Seed disposable Maven reactor']).status, 0);
                 fs.writeFileSync(path.join(f.root, target), 'package example; class StatusTest {} // failing status\n');
                 let preflightPath = classifyCurrent(f);
-                const command = 'backend/mvnw.cmd -f backend/pom.xml -pl application -am verify';
+                const command = 'backend/mvnw.cmd -f backend/pom.xml -pl application -am -Dtest=StatusTest verify';
                 const choose = () => select(f.root, { command, targets: [target], reason: `${TASK_ID} verifies the changed StatusTest behavior` });
                 choose();
                 const compile = async () => {
@@ -375,7 +520,7 @@ if (!fixed && ${failure === 'earlier reactor module'}) {
                 assert.notEqual(next.next_gate, 'full-suite-validation', next.reason);
                 assert.notEqual(next.next_gate, 'implementation', next.reason);
                 assert.notEqual(next.next_gate, 'task-test-selection', next.reason);
-                delete accepted.task_test_execution_proof;
+                delete accepted.task_test_process_evidence;
                 fs.writeFileSync(suitePath, JSON.stringify(accepted));
                 const withoutProof = resolveNextStep({ repoRoot: f.root, taskId: TASK_ID });
                 assert.equal(withoutProof.next_gate, 'full-suite-validation', withoutProof.reason);
@@ -527,7 +672,46 @@ for (const format of ['old-format', 'old event with artifact refs', 'Maven noise
             assert.equal(followUp.taskId, TASK_ID + '-1');
             assert.ok(followUp.notes.includes(`Failed command: ${command}`));
             assert.ok(followUp.notes.includes(`Artifact: ${record.artifact_path}`));
-            if (!attributed) assert.match(followUp.notes, /Tests: not attributed/u);
+            if (!attributed || format === 'legacy noisy refs') assert.match(followUp.notes, /Tests: not attributed/u);
+            if (format === 'legacy noisy refs') {
+                assert.doesNotMatch(followUp.notes, /Failing tests:|14:19:54|java\.lang\.RuntimeException|org\.apache\.maven\.plugins/u);
+                const taskPath = path.join(f.root, 'TASK.md');
+                const generated = fs.readFileSync(taskPath, 'utf8');
+                const display = 'Tests: not attributed; Original diagnostic references are retained in the authenticated failure artifact';
+                const legacyField = 'Failing tests: ' + record.failing_tests.join(', ');
+                assert.ok(generated.includes(display));
+                const legacyTask = generated.replace(display, legacyField).replace('authenticated selection records retain commands, failing tests and full-suite artifacts).',
+                    'authenticated selection records retain commands, failing tests and full-suite artifacts). Operator note: preserve café — 123.').replace(/\n/gu, '\r\n')
+                    + '\n<!-- OP-035: preserve mixed line endings -->\n';
+                fs.writeFileSync(taskPath, legacyTask);
+                const retainedRecord = JSON.stringify(record);
+                const retainedFailureEvent = readTaskTimelineJsonlEntries(f.timeline).find(entry => entry.record?.event_type === 'FULL_SUITE_VALIDATION_FAILED')!.rawLine;
+                assert.equal(materializeRecordedOutOfScopeFollowUps(f.root, TASK_ID).exitCode, 0);
+                assert.equal(fs.readFileSync(taskPath, 'utf8'), legacyTask.replace(legacyField, display));
+                const repaired = parseCanonicalActiveTaskQueue(fs.readFileSync(taskPath, 'utf8')).rows;
+                const same = repaired.find(row => row.taskId === followUp.taskId)!;
+                assert.equal(repaired.filter(row => row.notes.includes('out_of_scope_follow_up=grouped')).length, 1);
+                assert.equal(same.status, followUp.status);
+                assert.equal(same.title, followUp.title);
+                assert.match(same.notes, /Tests: not attributed/u);
+                assert.match(same.notes, /Operator note: preserve café — 123\./u);
+                const repairedBytes = fs.readFileSync(taskPath);
+                assert.equal(materializeRecordedOutOfScopeFollowUps(f.root, TASK_ID).exitCode, 0);
+                assert.deepEqual(fs.readFileSync(taskPath), repairedBytes);
+                // A user-edited legacy segment is left byte-identical with a warning.
+                const edited = repairedBytes.toString('utf8').replace(display,
+                    legacyField + '; operator qualification: investigate first');
+                fs.writeFileSync(taskPath, edited);
+                const conservative = materializeRecordedOutOfScopeFollowUps(f.root, TASK_ID);
+                assert.equal(conservative.exitCode, 0);
+                assert.match(conservative.outputLines.join('\n'), /WARNING:.*kept unchanged/u);
+                assert.equal(fs.readFileSync(taskPath, 'utf8'), edited);
+                fs.writeFileSync(taskPath, repairedBytes);
+                assert.doesNotMatch(same.notes, /Failing tests:|14:19:54|java\.lang\.RuntimeException/u);
+                assert.equal(JSON.stringify(readRecordedOutOfScopeFailures(f.root, TASK_ID)[0]), retainedRecord);
+                assert.ok(readTaskTimelineJsonlEntries(f.timeline).some(entry => entry.rawLine === retainedFailureEvent));
+                assert.doesNotMatch(recordedOutOfScopeNotice(f.root, TASK_ID), /14:19:54|java\.lang\.RuntimeException/u);
+            }
             const narrowRoute = resolveNextStep({ repoRoot: f.root, taskId: TASK_ID });
             assert.equal(narrowRoute.next_gate, 'full-suite-validation', narrowRoute.reason);
             const run = await nativeSuite({ repoRoot: f.root, taskId: TASK_ID, preflightPath });
@@ -566,7 +750,7 @@ test('a narrowed failing run belongs to the task and cannot drop its required ta
         const route = resolveNextStep({ repoRoot: f.root, taskId: TASK_ID });
         assert.equal(route.next_gate, 'implementation', route.reason);
         assert.throws(() => select(f.root, { command: `node --test ${HELD_TARGET}`, targets: [HELD_TARGET],
-            reason: `${TASK_ID} ${HELD_TARGET} guards ${TARGET}` }), /in-scope failing test cannot be dropped/u);
+            reason: `${TASK_ID} ${HELD_TARGET} guards ${TARGET}` }), /earlier failed selection.*no exact argv association/u);
         assert.equal(readRecordedOutOfScopeFailures(f.root, TASK_ID).length, 1);
     } finally { f.cleanup(); }
 });
@@ -647,7 +831,7 @@ test('a selected regression failure is in task scope and cannot be dropped by na
         assert.deepEqual(loadTaskFullSuiteConfig(f.root, TASK_ID).selection.targets, [TARGET, SECOND_TARGET]);
         const repeat = await nativeSuite({ repoRoot: f.root, taskId: TASK_ID, preflightPath });
         assert.notEqual(repeat.exitCode, 0, repeat.outputText);
-        assert.throws(() => select(f.root), /every test target of the earlier failed selection must still run under the new command.*could not be shown to run.*command must execute the declared test target/su);
+        assert.throws(() => select(f.root), /every test target of the earlier failed selection must still run under the new command.*could not be shown to run.*no exact argv association/su);
         assert.deepEqual(readRecordedOutOfScopeFailures(f.root, TASK_ID), []);
     } finally { f.cleanup(); }
 });
@@ -675,7 +859,7 @@ test('a production scope or content change re-asks selection; an equivalent pref
 });
 
 for (const mutation of ['pom', 'duplicate-source', 'compiled-class'] as const) {
-    test(`focused Maven selection revalidates ${mutation} outside git_staged_only scope`, () => {
+    test(`generic Maven selection binds declared inputs without scanning ${mutation} outside git_staged_only scope`, () => {
         const f = fixture({ noPlanned: true });
         try {
             const target = 'src/test/java/example/StatusTest.java';
@@ -692,7 +876,8 @@ for (const mutation of ['pom', 'duplicate-source', 'compiled-class'] as const) {
                 includeUntracked: false, taskIntent: 'Update Status test behavior.', outputPath: preflightPath, emitMetrics: false }));
             assert.equal(JSON.parse(fs.readFileSync(preflightPath, 'utf8')).detection_source, 'git_staged_only');
             select(f.root, { command: 'mvn -o -Dtest=StatusTest test', targets: [target],
-                reason: `${TASK_ID} verifies current changed Status test behavior` });
+                reason: `${TASK_ID} verifies current changed Status test behavior`,
+                extra: ['--task-test-plan', JSON.stringify({ support: [{ path: 'pom.xml', role: 'config', targets: [target] }] })] });
             assert.equal(loadTaskFullSuiteConfig(f.root, TASK_ID).selection.status, 'current');
             if (mutation === 'pom') {
                 fs.writeFileSync(path.join(f.root, 'pom.xml'), '<project><build><testSourceDirectory>other-tests</testSourceDirectory></build></project>');
@@ -701,12 +886,12 @@ for (const mutation of ['pom', 'duplicate-source', 'compiled-class'] as const) {
                 fs.mkdirSync(path.dirname(path.join(f.root, extra)), { recursive: true });
                 fs.writeFileSync(path.join(f.root, extra), mutation === 'duplicate-source' ? 'package other; class StatusTest {}' : 'class bytes');
             }
-            assert.equal(loadTaskFullSuiteConfig(f.root, TASK_ID).selection.status, 'stale');
+            assert.equal(loadTaskFullSuiteConfig(f.root, TASK_ID).selection.status, mutation === 'pom' ? 'stale' : 'current');
         } finally { f.cleanup(); }
     });
 }
 
-test('selection binds each Maven POM once and rejects changes without rerunning command admission', () => {
+test('selection binds each declared config once and rejects changes without rerunning command admission', () => {
     const measurements: number[] = [];
     for (const count of [1, 100]) {
         const f = fixture({ noPlanned: true });
@@ -721,8 +906,10 @@ test('selection binds each Maven POM once and rejects changes without rerunning 
             assert.equal(runGit(f.root, ['commit', '-qm', 'Seed disposable Maven configuration']).status, 0);
             for (const target of targets) fs.writeFileSync(path.join(f.root, target), `package example; class ${path.basename(target, '.java')} {}`);
             classifyCurrent(f);
-            const command = 'mvn -f backend/pom.xml -pl application verify';
-            select(f.root, { command, targets, reason: `${TASK_ID} verifies current changed Status test behavior` });
+            const command = 'mvn -f backend/pom.xml -pl application -Dtest=' + targets.map(target => path.basename(target, '.java')).join(',') + ' verify';
+            select(f.root, { command, targets, reason: `${TASK_ID} verifies current changed Status test behavior`,
+                extra: ['--task-test-plan', JSON.stringify({ support: ['backend/pom.xml', module + '/pom.xml']
+                    .map(path => ({ path, role: 'config', targets })) })] });
             withNextStepMeasurement(() => withInvocationReadObservation(() => {
                 const selection = loadTaskFullSuiteConfig(f.root, TASK_ID).selection;
                 assert.equal(selection.status, 'current');
@@ -1077,16 +1264,16 @@ test('selector rejects empty authority, unrelated and linked targets, no-op inte
     const f = fixture();
     try {
         const before = fs.readFileSync(f.configPath);
-        for (const command of ['true', `echo ${TARGET}`, `node -e "console.log('${TARGET}')"`,
+        for (const command of ['true', `node -e "console.log('${TARGET}')"`,
             `node --test ${TARGET} && true`, `bash -c "node --test ${TARGET}"`,
-            `node --test /tmp/${TARGET}`, `node --test ../${TARGET}`, `node --test ${TARGET} --help`]) {
+            `node --test /tmp/${TARGET}`, `node --test ../${TARGET}`]) {
             assert.throws(() => select(f.root, { command }), /rejected/i, command);
         }
         assert.throws(() => select(f.root, { reason: 'because it is available' }), /--reason/i);
         assert.throws(() => select(f.root, { reason: `${TASK_ID} verifies <task behavior and regression relationships>` }), /--reason/i);
         assert.throws(() => select(f.root, { command: `node --test ${SECOND_TARGET}`, targets: [SECOND_TARGET] }), /explicit relationship/i);
         assert.throws(() => select(f.root, { targets: [TARGET, TARGET] }), /duplicate/i);
-        assert.throws(() => select(f.root, { targets: [SOURCE], command: `node --test ${SOURCE}` }), /classified as a repository test/i);
+        assert.throws(() => select(f.root, { targets: [SOURCE], command: `node --test ${SOURCE}` }), /product code.*test target/i);
         const link = path.join(f.root, 'tests/linked.test.js');
         fs.linkSync(path.join(f.root, TARGET), link);
         assert.throws(() => select(f.root), /without links/i);
@@ -1182,4 +1369,52 @@ test('selector rejects an invalid task timeline without modifying shared config'
 test('disabled test gate never receives autonomous selection', () => {
     const f = fixture({ enabled: false });
     try { assert.throws(() => select(f.root), /enabled test gate/i); } finally { f.cleanup(); }
+});
+
+
+test('selection authority reuses the invocation native root observation and retains its final check', () => {
+    const f = fixture();
+    const native = require('node:fs') as typeof fs;
+    const original = native.realpathSync.native;
+    let rootReads = 0;
+    try {
+        select(f.root);
+        const roots = resolveWorkflowRoots({ targetRoot: f.root });
+        native.realpathSync.native = ((...args: Parameters<typeof original>) => {
+            if (String(args[0]) === f.root) rootReads++;
+            return original(...args);
+        }) as typeof original;
+        withInvocationReadObservation(() => {
+            const root = readNativeRealpath(f.root);
+            assert.equal(rootReads, 1);
+            assert.equal(readDeclaredTaskTestSelection(roots, TASK_ID)?.workspace_root, root);
+            assert.equal(rootReads, 1, 'authority comparison must reuse the observed root');
+        });
+        assert.equal(rootReads, 2, 'the native root is checked again before invocation acceptance');
+    } finally { native.realpathSync.native = original; f.cleanup(); }
+});
+
+test('selection authority refuses native root drift and refreshes the root on the next invocation', () => {
+    const f = fixture();
+    const native = require('node:fs') as typeof fs;
+    const original = native.realpathSync.native;
+    let drift = false;
+    try {
+        select(f.root);
+        const roots = resolveWorkflowRoots({ targetRoot: f.root });
+        native.realpathSync.native = ((...args: Parameters<typeof original>) => {
+            const resolved = original(...args);
+            return drift && String(args[0]) === f.root ? path.join(String(resolved), 'changed-root') : resolved;
+        }) as typeof original;
+        assert.throws(() => withInvocationReadObservation(() => {
+            const root = readNativeRealpath(f.root);
+            assert.equal(readDeclaredTaskTestSelection(roots, TASK_ID)?.workspace_root, root);
+            drift = true;
+        }), /Invocation native realpath changed/u);
+        assert.equal(withInvocationReadObservation(() => readDeclaredTaskTestSelection(roots, TASK_ID)), undefined,
+            'a new invocation must not inherit the old canonical root');
+        assert.equal(readDeclaredTaskTestSelection(roots, TASK_ID), undefined, 'unobserved reads remain fresh');
+        drift = false;
+        assert.ok(withInvocationReadObservation(() => readDeclaredTaskTestSelection(roots, TASK_ID)));
+    } finally { native.realpathSync.native = original; f.cleanup(); }
 });

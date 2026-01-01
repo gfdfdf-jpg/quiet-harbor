@@ -1,3 +1,4 @@
+import { observeWorkspacePlannedFiles, clearWorkspacePlannedFiles, workspacePlannedFilesDigest } from '../../core/workspace-planned-files';
 import { countNextStepWork } from '../../core/next-step-measurement';
 import { readTaskTimelineValidationQuery } from '../../gate-runtime/timeline/task-events-integrity';
 import * as path from 'node:path';
@@ -17,6 +18,7 @@ import {
     withTaskTimelineReadSnapshot
 } from '../../gate-runtime/task-events';
 import { withTaskTimelineFileReadSnapshot } from '../../gate-runtime/timeline/task-timeline-read-snapshot';
+import { isWindowsAclEvidenceUnavailable } from '../../gate-runtime/timeline/windows-acl-batch';
 import { fileSha256, joinOrchestratorPath, normalizePath } from '../shared/helpers';
 import { normalizeDirtyWorkspaceBaseline } from '../workspace/dirty-worktree-protection';
 import { normalizeWorkflowConfigFileHashes } from '../workflow-config/workflow-config-work';
@@ -39,7 +41,8 @@ function getTaskTimelinePath(repoRoot: string, taskId: string): string {
 function isTrustedTaskModeArtifact(filePath: string): boolean {
     try {
         return taskTimelineAwareFileExists(filePath);
-    } catch {
+    } catch (error: unknown) {
+        if (isWindowsAclEvidenceUnavailable(error)) throw error;
         return false;
     }
 }
@@ -53,6 +56,7 @@ interface TaskModeTimelineMetadata {
     profile_policy_snapshot_hash: string | null;
     plan_binding: { guided: unknown; path: unknown; sha256: unknown } | null;
     cycle_key: string;
+    scope_binding: unknown;
 }
 
 
@@ -87,6 +91,7 @@ function projectTaskModeTimelineMetadata(parsed: Readonly<Record<string, unknown
                 return {
                     artifact_path: artifactPath ? normalizePath(artifactPath) : null,
                     cycle_key: JSON.stringify([index, parsed.integrity]),
+                    scope_binding: details?.planned_source_visibility_sha256,
                     declares_runtime_identity_metadata: declaresRuntimeIdentityMetadata,
                     declares_start_banner: declaresStartBanner,
                     start_banner: normalizeOrchestratorStartBanner(details?.start_banner),
@@ -125,13 +130,20 @@ function captureLatestTaskModeTimelineMetadata(repoRoot: string, taskId: string)
                 start_banner: null,
                 declares_profile_policy_snapshot: false,
                 profile_policy_snapshot_hash: null,
-                plan_binding: null
+                plan_binding: null, scope_binding: undefined
             };
         }
 
         // Standalone task-mode keeps its original permissive legacy reader.
         // Only the A1 navigator can reuse this already-authenticated projection.
         const projection = isInvocationReadObservationActive() ? readTaskTimelineValidationQuery(timelinePath, taskId) : null;
+        // Authenticated absence is a result too. A cold startup must not scan the
+        // same verified history again just because no task entry exists yet.
+        if (projection && !projection.query.taskModeNormalizationFailed && !projection.query.latestTaskMode) {
+            return { artifact_path: null, cycle_key: 'missing', declares_runtime_identity_metadata: false,
+                declares_start_banner: false, start_banner: null, declares_profile_policy_snapshot: false,
+                profile_policy_snapshot_hash: null, plan_binding: null, scope_binding: undefined };
+        }
         if (projection && !projection.query.taskModeNormalizationFailed && projection.query.latestTaskMode) {
             const latest = projection.query.latestTaskMode;
             const metadata = projectTaskModeTimelineMetadata(latest.event, latest.ordinal);
@@ -156,7 +168,7 @@ function captureLatestTaskModeTimelineMetadata(repoRoot: string, taskId: string)
             start_banner: null,
             declares_profile_policy_snapshot: false,
             profile_policy_snapshot_hash: null,
-            plan_binding: null
+            plan_binding: null, scope_binding: undefined
         };
     });
 }
@@ -165,17 +177,32 @@ interface CapturedTaskModeEvidence {
     readonly evidence: TaskModeEvidenceResult;
     readonly resolvedTaskId: string | null;
     readonly validate: boolean;
+    readonly plannedScopeBinding?: unknown;
 }
 
+const PLANNED_VISIBILITY_PUBLICATION = createInvocationReadMemoKey<boolean>('task-mode-planned-visibility-publication');
+
 export function getTaskModeEvidence(repoRoot: string, taskId: string | null, artifactPath = ''): TaskModeEvidenceResult {
+    const publish = (result: TaskModeEvidenceResult): TaskModeEvidenceResult => {
+        if (result.evidence_status === 'PASS' && result.task_id) {
+            const entrySha256 = result.evidence_hash;
+            if (!entrySha256) throw new Error('Native planned-source visibility requires the task-mode entry digest. Restore the entry evidence before retrying the gate.');
+            memoizeInvocationRead(PLANNED_VISIBILITY_PUBLICATION, JSON.stringify([path.resolve(repoRoot), result.task_id, entrySha256]), () => {
+                observeWorkspacePlannedFiles(repoRoot, result.task_id!,
+                    [...result.planned_changed_files, ...(result.plan?.scope_files ?? [])], result.plan?.plan_sha256, entrySha256);
+                return true;
+            });
+        } else clearWorkspacePlannedFiles(repoRoot, result.task_id);
+        return result;
+    };
     const active = isInvocationReadObservationActive();
     const build = (prepared?: { resolvedPath: string; timelineMetadata: TaskModeTimelineMetadata }): TaskModeEvidenceResult => {
         const captured = captureTaskModeEvidence(repoRoot, taskId, artifactPath, prepared);
         if (!active) return deriveTaskModeEvidence(captured);
         return Object.freeze(deriveTaskModeEvidence(cloneFrozenJson(captured)));
     };
-    if (!active) return build();
-    if (!taskId) return cloneJson(build());
+    if (!active) return publish(build());
+    if (!taskId) return publish(cloneJson(build()));
     const resolvedTaskId = assertValidTaskId(taskId);
     const repoKey = taskModeInvocationRepoKey(repoRoot);
     const resolvedPath = resolveTaskModeInvocationPath(
@@ -186,7 +213,7 @@ export function getTaskModeEvidence(repoRoot: string, taskId: string | null, art
     const retained = memoizeInvocationRead(TASK_MODE_EVIDENCE,
         JSON.stringify([repoKey, resolvedTaskId, resolvedPath, timelineMetadata.cycle_key]),
         () => build({ resolvedPath, timelineMetadata })).value;
-    return cloneJson(retained);
+    return publish(cloneJson(retained));
 }
 
 function captureTaskModeEvidence(
@@ -276,7 +303,8 @@ function captureTaskModeEvidence(
     let artifactObject: Record<string, unknown>;
     try {
         artifactObject = JSON.parse(readTaskModeInvocationText(resolvedPath)) as Record<string, unknown>;
-    } catch {
+    } catch (error: unknown) {
+        if (isWindowsAclEvidenceUnavailable(error)) throw error;
         result.evidence_status = 'EVIDENCE_INVALID_JSON';
         return { evidence: result, resolvedTaskId: taskId, validate: false };
     }
@@ -334,7 +362,9 @@ function captureTaskModeEvidence(
         const planSha256 = String(planObj.plan_sha256 || '').trim();
         const planSummary = String(planObj.plan_summary || '').trim();
         if (planPath && planSha256 && planSummary) {
-            result.plan = { plan_path: planPath, plan_sha256: planSha256, plan_summary: planSummary };
+            result.plan = { plan_path: planPath, plan_sha256: planSha256, plan_summary: planSummary,
+                ...(Array.isArray(planObj.scope_files) && planObj.scope_files.every(file => typeof file === 'string')
+                    ? { scope_files: [...planObj.scope_files] as string[] } : {}) };
         }
     }
     if (rawPlan != null && !result.plan) {
@@ -421,7 +451,7 @@ function captureTaskModeEvidence(
         result.effective_depth_source = effectiveDepthSource;
     }
 
-    return { evidence: result, resolvedTaskId, validate: true };
+    return { evidence: result, resolvedTaskId, validate: true, plannedScopeBinding: timelineMetadata.scope_binding };
 }
 
 /** All filesystem-dependent evidence is captured before this pure status derivation. */
@@ -523,6 +553,11 @@ function deriveTaskModeEvidence(captured: CapturedTaskModeEvidence): TaskModeEvi
             return result;
         }
     }
+    if (captured.plannedScopeBinding !== undefined && captured.plannedScopeBinding !== workspacePlannedFilesDigest(
+        result.task_id!, [...result.planned_changed_files, ...(result.plan?.scope_files ?? [])], result.plan?.plan_sha256)) {
+        result.evidence_status = 'EVIDENCE_PLANNED_SCOPE_MISMATCH';
+        return result;
+    }
     if (result.evidence_status === 'PASSED' && result.evidence_outcome === 'PASS') {
         result.evidence_status = 'PASS';
         return result;
@@ -550,6 +585,8 @@ export function getTaskModeEvidenceViolations(result: TaskModeEvidenceResult): s
             ];
         case 'EVIDENCE_INVALID_JSON':
             return [`Task-mode entry evidence is invalid JSON at '${evidencePath}'. ${recovery}`];
+        case 'EVIDENCE_PLANNED_SCOPE_MISMATCH':
+            return ['Task-mode planned-source scope does not match its native TASK_MODE_ENTERED binding. Restore the authoritative entry artifact before retrying the gate.'];
         case 'EVIDENCE_PLAN_METADATA_INVALID':
             return ['Task-mode plan attachment metadata is malformed; original attachment cannot be verified.'];
         case 'EVIDENCE_PLAN_BINDING_MISSING':

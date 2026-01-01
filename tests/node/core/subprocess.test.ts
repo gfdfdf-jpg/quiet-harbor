@@ -1313,7 +1313,7 @@ describe('shell-surface hardening', () => {
 
     it('buildWindowsBatchCommandLine quotes absolute batch paths and literal args', () => {
         const commandLine = buildWindowsBatchCommandLine('C:\\Program Files\\Tools\\npm.cmd', ['run', 'build script']);
-        assert.equal(commandLine, 'call "C:\\Program Files\\Tools\\npm.cmd" run "build script"');
+        assert.equal(commandLine, '""C:\\Program Files\\Tools\\npm.cmd" run "build script""');
     });
 
     it('buildWindowsBatchCommandLine rejects unsafe cmd.exe expansion literals', () => {

@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "id": "php-laravel",
+  "title": "PHP / Laravel",
+  "adapter": null,
+  "technologies": [
+    {
+      "id": "laravel",
+      "executable": "tools/php",
+      "compileArgv": [
+        "-l",
+        "app/Services/Orders.php"
+      ],
+      "firstArgv": [
+        "artisan",
+        "test",
+        "tests/Unit/OrdersTest.php",
+        "--filter",
+        "testTaskContract"
+      ],
+      "allArgv": [
+        "artisan",
+        "test",
+        "tests/Unit/OrdersTest.php",
+        "tests/Feature/PartnersTest.php",
+        "--filter",
+        "testTaskContract"
+      ],
+      "broadArgv": [
+        "artisan",
+        "test"
+      ],
+      "report": "text",
+      "secondArgv": [
+        "artisan",
+        "test",
+        "tests/Feature/PartnersTest.php",
+        "--filter",
+        "testTaskContract"
+      ],
+      "compileExecutable": "tools/php"
+    }
+  ],
+  "suites": [
+    {
+      "id": "orders",
+      "technology": "laravel",
+      "source": "app/Services/Orders.php",
+      "target": "tests/Unit/OrdersTest.php",
+      "case": "task-contract",
+      "comment": "//"
+    },
+    {
+      "id": "partners",
+      "technology": "laravel",
+      "source": "app/Services/Partners.php",
+      "target": "tests/Feature/PartnersTest.php",
+      "case": "task-contract",
+      "comment": "//"
+    }
+  ],
+  "helpers": []
+}

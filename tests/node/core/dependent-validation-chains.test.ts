@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { executeCommandAsync } from '../../../src/cli/gate-cli/gates-subprocess';
 
 import {
     GATE_CHAIN_MANIFEST,
@@ -26,7 +27,7 @@ function agePath(filePath: string, ageMs: number): void {
     fs.utimesSync(filePath, agedDate, agedDate);
 }
 
-function createValidationChainFixture(): {
+function createValidationChainFixture(declareProducer = true): {
     root: string;
     consumerPath: string;
     manifestPath: string;
@@ -41,6 +42,9 @@ function createValidationChainFixture(): {
     const manifestPath = path.join(root, '.node-build', 'node-foundation-manifest.json');
     const lockPath = path.join(root, '.node-build.lock');
     const nestedCwd = path.join(root, 'packages', 'feature');
+
+    if (declareProducer) writeFile(path.join(root, 'package.json'), JSON.stringify({ scripts: {
+        'build:node-foundation': 'node scripts/node-foundation/build-scripts.cjs build.js node-foundation' } }));
 
     writeFile(sourcePath, 'export const feature = true;\n');
     writeFile(path.join(root, 'tests', 'node', 'sample.test.ts'), 'void 0;\n');
@@ -78,6 +82,22 @@ test('evaluateDependentValidationChain returns NOT_APPLICABLE for non-consumer c
     } finally {
         fixture.cleanup();
     }
+});
+
+test('a foreign .node-build directory does not declare a Garda producer chain', () => {
+    const fixture = createValidationChainFixture(false);
+    try {
+        const result = evaluateDependentValidationChain(['node', '--test', fixture.consumerPath], fixture.root);
+        assert.equal(result.status, 'NOT_APPLICABLE');
+    } finally { fixture.cleanup(); }
+});
+
+test('the subprocess flow executes foreign .node-build consumers without Garda metadata', async () => {
+    const fixture = createValidationChainFixture(false);
+    try {
+        const result = await executeCommandAsync(`node --test "${fixture.consumerPath}"`, { cwd: fixture.root });
+        assert.equal(result.exitCode, 0, result.outputLines.join('\n'));
+    } finally { fixture.cleanup(); }
 });
 
 test('evaluateDependentValidationChain reports missing producer manifest for direct .node-build consumers', () => {

@@ -1,4 +1,6 @@
 import { getBundleCliCommand, resolveBundleName } from '../core/constants';
+import { COMPILE_TEST_SEPARATION_RULE } from './rule-contract-snippets';
+export { COMPILE_TEST_SEPARATION_RULE, getRuleContractSnippetAlternatives } from './rule-contract-snippets';
 import {
     FRESH_MAIN_AGENT_START_BANNER_RULE,
     START_BANNER_EXEMPTION_RULE,
@@ -36,7 +38,7 @@ export function getTaskModeRuleSectionMigrations(): readonly RuleContractSection
         requiredSnippets: Object.freeze([
             '### Compile Gate (Mandatory)',
             'must be a compile/build/type-check command',
-            'Do not use full-suite test commands here',
+            COMPILE_TEST_SEPARATION_RULE,
             `${getBundleCliCommand(bn)} gate compile-gate`
         ])
     }),

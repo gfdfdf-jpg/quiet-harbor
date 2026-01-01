@@ -174,7 +174,7 @@ installation, or update application. Manual `garda check-update` and `garda upda
 | `profiles.json` | Active profile selection plus built-in and user profile definitions | Yes, through `garda profile ...` |
 | `review-artifact-storage.json` | Review artifact retention and storage policy | Yes, through `garda cleanup policy ...` |
 | `runtime-retention.json` | Tiered runtime-retention policy for active evidence, healthy `DONE` ledger compaction, problem-task compression, confirm-only purge, and daily maintenance | Yes, through template/config review for now; `garda cleanup policy` shows it read-only |
-| `workflow-config.json` | Compile-gate, full-suite, optional-check, and workflow command settings | Yes, through `garda workflow ...` and guarded UI settings |
+| `workflow-config.json` | Compile-gate, task tests, optional-check, and workflow command settings | Yes, through `garda workflow ...` and guarded UI settings |
 | `skills-index.json` | Compact optional-skill discovery index; generated runtime index and not part of `garda.config.json` | No, generated from pack manifests |
 | `skills-headlines.json` | Compact task-start optional-skill selection surface with installed skill headlines and pack summaries | No, generated from live skill/pack manifests |
 
@@ -314,7 +314,7 @@ Controls how Garda-owned runtime artifacts are classified for cleanup and GC.
 | `compressed_forensic_candidate` | Blocked, failed, incomplete, tampered, or ambiguous tasks keep recovery-readable evidence; only heavy forensic artifacts are compression candidates. |
 | confirm-only purge | Full deletion requires an explicit confirmed cleanup/GC action; purge is not automatic. |
 
-Clean-success compile and full-suite raw output logs may be intentionally omitted by the gates. Retained evidence still records status, duration, hashes, and line/char counts; warning, failure, timeout, and non-clean runs retain raw output.
+Clean-success compile and task test raw output logs may be intentionally omitted by the gates. Retained evidence still records status, duration, hashes, and line/char counts; warning, failure, timeout, and non-clean runs retain raw output.
 
 An authenticated successful closeout can resolve earlier failed or blocked attempts for retention classification. The preview's runtime bundle must be the same canonical workspace bundle authenticated by the proof; a same-ID task in another workspace cannot authorize recovery. The current native task audit must pass, the materialized closeout must match the current cycle, and the verified ledger's canonical workspace references must still match their recorded hashes. A later failure, restart, reopened queue row, missing evidence or changed accepted content remains protected; event sequence takes precedence over skewed timestamps.
 
@@ -517,7 +517,7 @@ After a failed review, Garda repeats a review only when the fix reached it:
 | A review that already passed | The fix stayed outside its scope | Kept, not repeated |
 | A review that has not run yet | As planned | `FULL` |
 
-A kept PASS can survive consecutive fixes only through authenticated restart decisions that each preserved that lane and whose result and baseline trees link up. A kept review retains that proof when refreshed full-suite evidence requires its context to be rebuilt. The walk stops at an unusable older link and keeps the links already authenticated; a failed timeline integrity check keeps only the current baseline. A reached lane that has no accepted review on the latest failed-review tree also runs FULL: for example, after test fails on tree A and code DELTA fails on tree B, test runs FULL on tree C because it never reviewed B.
+A kept PASS can survive consecutive fixes only through authenticated restart decisions that each preserved that lane and whose result and baseline trees link up. A kept review retains that proof when refreshed task test evidence requires its context to be rebuilt. The walk stops at an unusable older link and keeps the links already authenticated; a failed timeline integrity check keeps only the current baseline. A reached lane that has no accepted review on the latest failed-review tree also runs FULL: for example, after test fails on tree A and code DELTA fails on tree B, test runs FULL on tree C because it never reviewed B.
 
 A fix is small when it stays within `max_delta_changed_files`, `max_delta_changed_lines` and `max_consecutive_delta_reviews`, keeps the list of reviewed code files and only edits existing files. The defaults are 4 files and 240 changed lines; configured limits cannot exceed 5 files, 400 changed lines and 3 consecutive DELTA reviews. A larger fix repeats those reviews in `FULL` mode in their usual order, starting with the first one it reached. Added non-test, non-document files expand the scope and repeat every review in `FULL`; added tests do not expand it.
 
@@ -610,9 +610,9 @@ Contract:
 - the mode is default-enabled when the setting is absent;
 - the shipped baseline version records which default rule set was materialized;
 - default rules cover simplification, project style fit, unnecessary abstraction, class/function/file growth, hardcoded values or contracts, duplicated logic or contracts, and test/verification scope;
-- `next-step` routes the gate after implementation and before compile, delegated review, or full-suite work when a current changed-file preflight needs checklist evidence;
+- `next-step` routes the gate after implementation and before compile, delegated review, or task test work when a current changed-file preflight needs checklist evidence;
 - `PASS` continues the normal lifecycle, while `ACTION_REQUIRED` sends the agent back to implementation before the expensive gates run;
-- disabled mode skips only the quality-checklist gate and does not replace or weaken compile-gate, full-suite validation, or independent review;
+- disabled mode skips only the quality-checklist gate and does not replace or weaken compile-gate, task test validation, or independent review;
 - baseline rule ids, titles, prompts, and deletion are managed by the shipped baseline; users can only toggle each baseline rule's `enabled` state;
 - custom rules, disabled mode, custom rule edits, and local audit metadata fields are preserved during init/update/materialization refresh;
 - update/setup refreshes shipped baseline text, adds missing shipped baseline rules, removes deprecated shipped baseline rules, and preserves each baseline rule's enabled or disabled state.
@@ -717,3 +717,8 @@ When such files are test code in your project, declare them by exact repository-
 Agent rules in `live/docs/agent-rules/40-commands.md` include a **Compact Command Hints** section that teaches agents to use efficient CLI flags. This reduces token consumption on everyday shell commands without any infrastructure changes.
 
 See `template/docs/agent-rules/40-commands.md` section `## Compact Command Hints` for the full reference.
+## Task test validation naming and migration (T-457)
+
+Use `gate task-test-validation` and `workflow set --task-test-command ...` for the selected tests of the current task. The `--task-test-*` settings mirror the previous `--full-suite-*` settings; `--task-tests on|off` controls enablement. In configuration, `task_test_validation` and the legacy `full_suite_validation` section have the same contract. Keep one section; conflicting aliases are rejected. Existing configuration remains readable and does not need a rewrite.
+
+The old `gate full-suite-validation`, `--full-suite-*` options and `--full-suite on|off` remain accepted aliases. Persisted config output, gate IDs, `FULL_SUITE_*` events, artifact filenames and binding keys keep their internal names for evidence compatibility. A project command is a reference for selecting task tests, with no special admission privilege. Every new task entry, re-entry and reset requires a fresh selection; old receipts stay unchanged. Missing old execution identity routes to a new own-test run.

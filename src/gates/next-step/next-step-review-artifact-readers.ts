@@ -1772,7 +1772,7 @@ export function readReviewArtifactState(
                     if (failureReason) {
                         failureKind = 'stale-validation-evidence';
                         violations.push(
-                            `review artifact contains fail token '${failToken}' for stale validation evidence (${failureReason}); preserve the failed artifact and refresh compile/full-suite evidence without fake implementation changes`
+                            `review artifact contains fail token '${failToken}' for stale validation evidence (${failureReason}); preserve the failed artifact and refresh compile/task test evidence without fake implementation changes`
                         );
                     }
                 }

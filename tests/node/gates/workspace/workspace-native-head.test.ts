@@ -21,7 +21,15 @@ function fixture(t: TestContext): string {
     return root;
 }
 
-function observedHead(root: string, expectedCalls: number): string | null {
+type HeadOutcome = { value: string | null } | { error: string };
+
+// HEAD authority fails closed: a Git failure is thrown, never turned into an empty HEAD.
+function headOutcome(read: () => string | null): HeadOutcome {
+    try { return { value: read() }; }
+    catch (error) { return { error: error instanceof Error ? error.message : String(error) }; }
+}
+
+function observedHeadOutcome(root: string, expectedCalls: number): HeadOutcome {
     const native = require('node:child_process') as typeof import('node:child_process');
     const original = native.spawnSync;
     let calls = 0;
@@ -32,10 +40,16 @@ function observedHead(root: string, expectedCalls: number): string | null {
         return original(...args);
     }) as typeof original;
     try {
-        const value = withInvocationReadObservation(() => readHeadSha(root));
+        const outcome = headOutcome(() => withInvocationReadObservation(() => readHeadSha(root)));
         assert.equal(calls, expectedCalls);
-        return value;
+        return outcome;
     } finally { native.spawnSync = original; }
+}
+
+function observedHead(root: string, expectedCalls: number): string | null {
+    const outcome = observedHeadOutcome(root, expectedCalls);
+    if ('error' in outcome) assert.fail(outcome.error);
+    return outcome.value;
 }
 
 test('native HEAD recognizes a linked worktree gitdir file and common branch refs', t => {
@@ -64,16 +78,17 @@ for (const backend of ['config', 'directory'] as const) {
         if (backend === 'config') fs.appendFileSync(path.join(root, '.git/config'), '\n[extensions]\nrefStorage = reftable\n');
         else fs.mkdirSync(path.join(root, '.git/reftable'));
         // Even when loose files look valid, only Git may interpret this backend.
-        const expected = readHeadSha(root);
-        assert.equal(observedHead(root, 1), expected);
+        const expected = headOutcome(() => readHeadSha(root));
+        assert.deepEqual(observedHeadOutcome(root, 1), expected);
     });
 }
 
 test('native HEAD delegates an unborn symbolic branch to Git and returns the same failure', t => {
     const root = fixture(t);
     git(root, 'symbolic-ref', 'HEAD', 'refs/heads/unborn');
-    assert.equal(readHeadSha(root), null);
-    assert.equal(observedHead(root, 1), null);
+    const expected = headOutcome(() => readHeadSha(root));
+    assert.ok('error' in expected && /git rev-parse HEAD failed/u.test(expected.error));
+    assert.deepEqual(observedHeadOutcome(root, 1), expected);
 });
 
 test('native HEAD delegates symbolic ref chains to Git', t => {
@@ -86,7 +101,7 @@ test('native HEAD delegates symbolic ref chains to Git', t => {
 test('native HEAD never accepts malformed config just because loose refs look valid', t => {
     const root = fixture(t);
     fs.appendFileSync(path.join(root, '.git/config'), '\n[core]\neditor = "unterminated\n');
-    assert.equal(observedHead(root, 1), readHeadSha(root));
+    assert.deepEqual(observedHeadOutcome(root, 1), headOutcome(() => readHeadSha(root)));
 });
 
 test('native HEAD retains the Git discovery environment through invocation exit', t => {
@@ -122,5 +137,5 @@ test('native HEAD delegates config includes and malformed packed refs instead of
     fs.writeFileSync(config, original);
     git(root, 'pack-refs', '--all', '--prune');
     fs.appendFileSync(path.join(root, '.git/packed-refs'), 'invalid ref record\n');
-    assert.equal(observedHead(root, 1), readHeadSha(root));
+    assert.deepEqual(observedHeadOutcome(root, 1), headOutcome(() => readHeadSha(root)));
 });

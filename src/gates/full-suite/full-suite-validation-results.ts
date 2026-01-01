@@ -50,7 +50,9 @@ export function isFullSuiteNotRequiredForDocsOnlyScope(preflight: Record<string,
 export function isFullSuiteNotRequiredForZeroDiffNoReviewableScope(preflight: Record<string, unknown>): boolean {
     const zeroDiffGuard = isPlainRecord(preflight.zero_diff_guard) ? preflight.zero_diff_guard : {};
     const profileGuardrails = isPlainRecord(preflight.profile_guardrails) ? preflight.profile_guardrails : {};
-    return zeroDiffGuard.zero_diff_detected === true
+    const triggers = isPlainRecord(preflight.triggers) ? preflight.triggers : {};
+    return triggers.recorded_failure_recheck !== true
+        && zeroDiffGuard.zero_diff_detected === true
         && String(zeroDiffGuard.status || '').trim() === 'BASELINE_ONLY'
         && zeroDiffGuard.completion_requires_audited_no_op === true
         && profileGuardrails.zero_diff_no_reviewable_scope === true
@@ -503,6 +505,12 @@ function inspectFailureScope(outputLines: string[], taskChangedFiles: string[], 
     }
     result.unresolved = references.length > MAX_BOUNDARY_SOURCE_REFERENCES;
     for (const ref of references.slice(0, MAX_BOUNDARY_SOURCE_REFERENCES)) {
+        // A bare filename may identify a nested task test or several repository files.
+        // Without a path, only an exact task-file match is known; never infer an outside failure.
+        if (!ref.includes('/') && !changed.has(failurePathKey(ref))) {
+            result.unresolved = true;
+            continue;
+        }
         let source = ref;
         if (repoRoot) {
             source = normalizePath(path.relative(path.resolve(repoRoot), path.resolve(repoRoot, ref)));
@@ -577,7 +585,7 @@ function collectFailureFileRefs(outputLines: string[]): string[] {
             continue;
         }
         const fileRefMatch = line.match(/\b(?:at|in|file)\s+(.+?):\d+(?::\d+)?(?:\s|$)/u)
-            ?? line.match(/(?:at\s+|in\s+|file\s+)?([^\s:()[\]]+\.[^\s:()[\]]+)[\s:(\]]/u);
+            ?? line.match(/(?:at\s+|in\s+|file\s+)?([^\s:()[\]"'{},]+\.[^\s:()[\]"'{},]+)[\s:(\]]/u);
         // A log timestamp, version or dotted identifier is no file: require a path separator or a source extension.
         if (fileRefMatch && isPathLikeFailureRef(fileRefMatch[1])) {
             failureFileRefs.push(normalizePath(fileRefMatch[1]));

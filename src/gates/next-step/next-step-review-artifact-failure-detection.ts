@@ -2,6 +2,7 @@ import {
     findJsonReviewMissingFocusedValidationTestPaths,
     parseJsonReviewFindingsArtifact
 } from '../review/review-findings-artifact-verdict';
+import { missingFocusedValidationTarget } from '../review/missing-focused-validation-marker';
 
 const REVIEW_LAUNCH_PACKAGE_FAILURE_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
     { pattern: /\breviewer_prompt_sha256\b[\s\S]{0,160}\b(?:must match|does not match|did not match|mismatch|wrong|stale|invalid|not eligible)\b/i, reason: 'reviewer_prompt_sha256 mismatch' },
@@ -19,12 +20,10 @@ const REVIEW_LAUNCH_PACKAGE_FAILURE_MARKER_PATTERN =
     /\b(?:reviewer\s+failed\s+before\s+\w+\s+review|reviewer\s+launch\s+artifact\s+is\s+not\s+eligible\s+for\s+invocation\s+attestation|reviewer\s+launch\s+package\s+failure|launch\s+package\s+failure|launch\s+metadata\s+failure|invocation\s+attestation\s+failed)\b/i;
 const REVIEW_MISSING_VALIDATION_EVIDENCE_PATTERN =
     /\b(?:missing|omitted|absent|not attached|not provided|could not find)\b[\s\S]{0,200}\b(?:manual[-\s]?validation|validation\s+(?:log|logs|evidence)|runtime\/manual-validation|gradle\s+(?:test|check)\s+(?:log|logs|evidence))\b/i;
-const REVIEW_MISSING_FOCUSED_VALIDATION_EVIDENCE_PATTERN =
-    /^\[garda:evidence-only:missing-focused-validation\]\s+test=(tests\/[^\s;]+\.(?:test|spec)\.(?:c|m)?[jt]sx?);\s*action=run-and-record-focused-test$/iu;
 const REVIEW_STALE_VALIDATION_EVIDENCE_PATTERN =
-    /(?:\b(?:stale|outdated|old|not current|no longer current|does not match|mismatch(?:ed)?|wrong)\b[\s\S]{0,220}\b(?:compile(?:-gate)?|full[-\s]?suite|validation\s+(?:log|logs|evidence)|current\s+preflight|preflight)\b|\b(?:compile(?:-gate)?|full[-\s]?suite|validation\s+(?:log|logs|evidence)|current\s+preflight|preflight)\b[\s\S]{0,220}\b(?:stale|outdated|old|not current|no longer current|does not match|mismatch(?:ed)?|wrong)\b)/i;
+    /(?:\b(?:stale|outdated|old|not current|no longer current|does not match|mismatch(?:ed)?|wrong)\b[\s\S]{0,220}\b(?:compile(?:-gate)?|full[-\s]?suite|task[-\s]?test(?:[-\s]?validation)?|validation\s+(?:log|logs|evidence)|current\s+preflight|preflight)\b|\b(?:compile(?:-gate)?|full[-\s]?suite|task[-\s]?test(?:[-\s]?validation)?|validation\s+(?:log|logs|evidence)|current\s+preflight|preflight)\b[\s\S]{0,220}\b(?:stale|outdated|old|not current|no longer current|does not match|mismatch(?:ed)?|wrong)\b)/i;
 const REVIEW_EVIDENCE_ONLY_FAILURE_PATTERN =
-    /\b(?:evidence[-\s]?only|implementation\s+diff\s+itself\s+was\s+not\s+reviewed\s+as\s+defective|no\s+(?:implementation|code|security|test|refactor)\s+findings?|no\s+implementation\s+defects?|(?:only\s+(?:defect|finding|blocker|problem|issue)\s+is\s+missing)|(?:manual[-\s]?validation|validation\s+(?:log|logs|evidence)|runtime\/manual-validation)[\s\S]{0,120}\bmust\s+be\s+attached\s+before\s+(?:a\s+)?meaningful\s+\w*\s*review|(?:compile(?:-gate)?|full[-\s]?suite|validation\s+(?:log|logs|evidence))[\s\S]{0,160}\b(?:must|needs?|should)\s+be\s+(?:fresh|current|rerun|refreshed|re-run))\b/i;
+    /\b(?:evidence[-\s]?only|implementation\s+diff\s+itself\s+was\s+not\s+reviewed\s+as\s+defective|no\s+(?:implementation|code|security|test|refactor)\s+findings?|no\s+implementation\s+defects?|(?:only\s+(?:defect|finding|blocker|problem|issue)\s+is\s+missing)|(?:manual[-\s]?validation|validation\s+(?:log|logs|evidence)|runtime\/manual-validation)[\s\S]{0,120}\bmust\s+be\s+attached\s+before\s+(?:a\s+)?meaningful\s+\w*\s*review|(?:compile(?:-gate)?|full[-\s]?suite|task[-\s]?test(?:[-\s]?validation)?|validation\s+(?:log|logs|evidence))[\s\S]{0,160}\b(?:must|needs?|should)\s+be\s+(?:fresh|current|rerun|refreshed|re-run))\b/i;
 const REVIEW_REAL_FINDING_MARKER_PATTERN =
     /\b(?:critical|high|medium|low|p[0-3])\s*:\s|\b(?<!no\s)(?:findings?|bugs?|defects?|regressions?|incorrect|unsafe|crashes?|leaks?|bypasses|bypassed|bypass|race|data loss|misroutes?|misrouted|misrouting|unauthori[sz]ed|authori[sz]ation|authn|authz|access control|secrets?|tokens?|credentials?|privilege escalation|injection|sql injection|xss|cross-site scripting|csrf|ssrf|deserialization|path traversal|directory traversal|remote code execution|rce|exploit(?:able)?|vulnerabilit(?:y|ies))\b/i;
 const REVIEW_ACTIVE_FINDING_MARKER_PATTERN =
@@ -133,7 +132,7 @@ export function findReviewFocusedFindingTestPaths(content: string): string[] {
         ...jsonTestPaths,
         ...findingsBySeverityLines(content)
         .map((line) => line.replace(/^(?:critical|high|medium|low|p[0-3])\s*:\s*/iu, ''))
-        .map((line) => line.match(REVIEW_MISSING_FOCUSED_VALIDATION_EVIDENCE_PATTERN)?.[1] || '')
+        .map((line) => missingFocusedValidationTarget(line) || '')
         .map((testPath) => normalizeWorkspacePath(testPath))
         .filter(Boolean)
     ])];
@@ -191,7 +190,9 @@ function findingsBySeverityContainsOnlyMissingValidationEvidence(content: string
 }
 
 function findingsBySeverityContainsOnlyMissingFocusedValidationEvidence(content: string): boolean {
-    return findingsBySeverityContainsOnlyEvidence(content, REVIEW_MISSING_FOCUSED_VALIDATION_EVIDENCE_PATTERN);
+    const lines = findingsBySeverityLines(content);
+    return lines.length > 0 && lines.every(line => missingFocusedValidationTarget(
+        line.replace(/^(?:critical|high|medium|low|p[0-3])\s*:\s*/iu, '')) !== null);
 }
 
 function findingsBySeverityContainsOnlyStaleValidationEvidence(content: string): boolean {
@@ -263,5 +264,5 @@ export function detectStaleValidationEvidenceFailureReason(content: string): str
             return null;
         }
     }
-    return 'stale compile/full-suite validation evidence';
+    return 'stale compile/task test validation evidence';
 }

@@ -14,7 +14,9 @@ import type {
     ReviewRemediationReviewContract,
     ReviewRemediationReviewContractValidationAuthority
 } from './review-remediation-review-contract';
-import { reviewEvidenceRequiresFindingsValidation } from './review-remediation-review-contract';
+import { buildReviewRemediationReviewContract, getReviewRemediationReviewContractViolations,
+    resolveFixPreservedTreeStateSha256s, reviewEvidenceRequiresFindingsValidation } from './review-remediation-review-contract';
+import { getPreservedReviewPassViolation } from './review-remediation-preserved-verdict';
 import { EVIDENCE_ONLY_CARRIED_LANE_REASON_CODE, getAuthoritativeReviewRemediationDecisionViolations, resolvePersistedReviewRemediationLaneDecision,
     type ReviewRemediationLaneDecision, type ReviewRemediationDecisionClassification } from './review-remediation-recovery-routing';
 import { sha256RedactedJsonPayload } from '../../core/redaction';
@@ -245,6 +247,89 @@ function buildAuthority(
     };
 }
 
+/** Keep the accepted DELTA contract as historical work; a separate current decision proves that this fix preserves it. */
+export function resolvePreservedDeltaReviewExecutionAuthority(
+    options: PersistedRemediationReviewExecutionAuthorityOptions & {
+        preservingAuthority: ReviewRemediationReviewContractValidationAuthority;
+    }
+): ReviewRemediationReviewContractValidationAuthority | null {
+    if (!isInvocationReadObservationActive()) return derivePreservedDeltaReviewExecutionAuthority(options);
+    const timelinePath = path.join(path.dirname(options.reviewsRoot), 'task-events', options.taskId + '.jsonl');
+    const verified = readInvocationVerifiedTaskEventTimeline(timelinePath, options.taskId);
+    // Share the invocation's authenticated, mutation-observed snapshot, as the persisted authority reader does.
+    // Outside that boundary the full native inspection above remains mandatory.
+    return derivePreservedDeltaReviewExecutionAuthority(options, verified ?? undefined);
+}
+
+type ExecutionTimeline = {
+    result: Pick<InvocationVerifiedTaskEventTimeline['result'], 'status'>;
+    events: readonly { readonly event: Readonly<Record<string, unknown>> }[];
+};
+
+function derivePreservedDeltaReviewExecutionAuthority(
+    options: PersistedRemediationReviewExecutionAuthorityOptions & {
+        preservingAuthority: ReviewRemediationReviewContractValidationAuthority;
+    },
+    verified?: ExecutionTimeline
+): ReviewRemediationReviewContractValidationAuthority | null {
+    const refuse = (reason: string): null => { countNextStepWork('reuse:preserved_delta_rejected:' + reason); return null; };
+    try {
+        const execution = options.reviewExecution;
+        const preserving = options.preservingAuthority;
+        const decision = preserving.authoritativeDecision;
+        const classification = preserving.authoritativeClassification;
+        const lane = decision?.lane_decisions.find(entry => entry.review_type === options.reviewType);
+        if (execution.mode !== 'DELTA' || execution.source !== 'remediation_delta'
+            || execution.task_id !== options.taskId || execution.review_type !== options.reviewType
+            || execution.preflight_sha256 === options.preflightSha256
+            || preserving.taskId !== options.taskId || preserving.preflightSha256 !== options.preflightSha256
+            || !decision || !classification || classification.source !== 'delta'
+            || !lane || lane.invalidated || !lane.reuse_eligible) return null;
+        countNextStepWork('reuse:preserved_delta_attempt');
+        // Validate the actual failed lane, including its baseline, policy, fix scope and the whole READY decision.
+        const owner = String(decision.current_review_type);
+        const ownerScope = classification.delta.scope.full_review_scope;
+        const ownerExecution = buildReviewRemediationReviewContract({ taskId: options.taskId, reviewType: owner,
+            preflightSha256: options.preflightSha256, fullReviewScope: ownerScope, authoritativeDecision: decision, classification });
+        const ownerAuthority = { ...preserving, reviewType: owner, mode: ownerExecution.mode, fullReviewScope: ownerScope };
+        if (getReviewRemediationReviewContractViolations(ownerExecution, ownerAuthority).length) return refuse('preserving_authority');
+        const delivered: Array<{ event: Readonly<Record<string, unknown>> }> = [];
+        const inspection = verified?.result ?? inspectTaskEventFile(path.join(path.dirname(options.reviewsRoot),
+            'task-events', options.taskId + '.jsonl'), options.taskId, {
+            onIntegrityEvent: event => delivered.push({ event })
+        });
+        const events = verified?.events ?? delivered;
+        if (!inspection.status.startsWith('PASS') || !options.receiptPath || !options.reviewContextPath) return refuse('timeline');
+        const receipt = readJsonRecord(options.receiptPath);
+        const receiptHash = fileSha256(options.receiptPath);
+        if (!receipt || receipt.task_id !== options.taskId || receipt.review_type !== options.reviewType
+            || receipt.review_execution_mode !== 'DELTA'
+            || receipt.review_execution_contract_sha256 !== execution.contract_sha256
+            || !receiptHash || !events.some(({ event }) => {
+                const details = isPlainRecord(event.details) ? event.details : null;
+                return event.event_type === 'REVIEW_RECORDED' && event.actor === 'gate' && event.outcome === 'PASS'
+                    && details?.review_type === options.reviewType && details.receipt_sha256 === receiptHash
+                    && pathsEqual(String(details.receipt_path || ''), options.receiptPath!);
+            })) return refuse('unsigned_receipt');
+        const artifactPath = options.receiptPath.replace(/-receipt\.json$/u, '.md');
+        if (artifactPath === options.receiptPath || fileSha256(artifactPath) !== receipt.review_artifact_sha256) return refuse('artifact');
+        const reviewContext = readJsonRecord(options.reviewContextPath);
+        if (!reviewContext || getPreservedReviewPassViolation({ taskId: options.taskId, reviewType: options.reviewType,
+            receipt, reviewContext, reviewArtifactPath: artifactPath })) return refuse('verdict');
+        const originTree = String(receipt.reused_existing_review === true
+            ? receipt.reused_from_review_tree_state_sha256 : receipt.review_tree_state_sha256);
+        if (!resolveFixPreservedTreeStateSha256s({ ...preserving, reviewType: options.reviewType }).includes(originTree)) return refuse('preserved_tree');
+        const origin = derivePersistedRemediationReviewExecutionAuthority({ ...options,
+            preflightSha256: execution.preflight_sha256, fullReviewScope: execution.full_review_scope }, { result: inspection, events });
+        if (!origin || getReviewRemediationReviewContractViolations(execution, origin).length) return refuse('origin_authority');
+        return { ...origin, preserved_current_scope: {
+            current_preflight_sha256: options.preflightSha256,
+            preserving_decision_sha256: decision.decision_sha256,
+            preserving_classification_sha256: decision.classification_sha256
+        } };
+    } catch { return refuse('exception'); }
+}
+
 const RESTART_CHAIN_BOUNDARY_EVENT_TYPES = new Set([
     'TASK_MODE_ENTERED', 'TASK_RESET', 'TASK_DISCARDED', 'PREFLIGHT_CLASSIFIED', 'COMPILE_GATE_PASSED', 'COMPILE_GATE_FAILED'
 ]);
@@ -445,7 +530,7 @@ export function resolvePersistedRemediationReviewExecutionAuthority(
 
 function derivePersistedRemediationReviewExecutionAuthority(
     options: PersistedRemediationReviewExecutionAuthorityOptions,
-    verified?: InvocationVerifiedTaskEventTimeline
+    verified?: ExecutionTimeline
 ): ReviewRemediationReviewContractValidationAuthority | null {
     countNextStepWork('derive:resolvePersistedRemediationReviewExecutionAuthority');
     if (options.reviewExecution.source === 'initial_full') {
@@ -465,6 +550,23 @@ function derivePersistedRemediationReviewExecutionAuthority(
         return null;
     }
     const normalizedPreflightSha256 = options.preflightSha256.trim().toLowerCase();
+    if (options.reviewExecution.mode === 'DELTA'
+        && options.reviewExecution.preflight_sha256 !== normalizedPreflightSha256) {
+        for (let index = events.length - 1; index >= 0; index -= 1) {
+            const event = events[index].event;
+            const details = isPlainRecord(event.details) ? event.details : null;
+            if (event.event_type !== 'REVIEW_CYCLE_RESTARTED' || details?.task_id !== options.taskId
+                || normalizeSha256(details.preflight_sha256) !== normalizedPreflightSha256) continue;
+            const restart = readAuthenticatedRestartLane({ event: events[index].event, index,
+                taskId: options.taskId, reviewType: options.reviewType, preflightSha256: normalizedPreflightSha256,
+                reviewsRoot: options.reviewsRoot });
+            if (!restart) return null;
+            const preservingAuthority = buildAuthority(options, restart.decision, restart.classification);
+            const preserved = derivePreservedDeltaReviewExecutionAuthority({ ...options, preservingAuthority }, { result: inspection, events });
+            return preserved;
+        }
+        return null;
+    }
     for (let index = events.length - 1; index >= 0; index -= 1) {
         countNextStepWork('visit:remediation_query_event');
         const event = events[index].event;

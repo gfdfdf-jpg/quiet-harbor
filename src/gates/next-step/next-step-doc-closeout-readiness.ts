@@ -173,7 +173,7 @@ export function isProjectMemoryEvidenceCurrentForCloseout(input: {
         input.timelineSnapshot
     );
     // An evidence-only restart can rerun compile after a passed review gate, making previously current
-    // project-memory evidence older than the full-suite validation that follows it.
+    // project-memory evidence older than the task test validation that follows it.
     const latestReviewRestart = input.fullSuiteValidationEnabled ? findLatestTimelineEvent(events, 'REVIEW_CYCLE_RESTARTED') : null;
     const requiresFullSuiteOrder = latestReviewRestart?.details?.detection_source === 'review_evidence_only';
     if (!requiresFullSuiteOrder && !requiresDocOrder) return true;

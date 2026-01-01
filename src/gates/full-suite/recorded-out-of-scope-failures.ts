@@ -6,6 +6,23 @@ import { isPlainRecord } from '../../core/records';
 import { inspectTaskEventFile, readTaskTimelineJsonlEntries, withTaskTimelineReadSnapshot } from '../../gate-runtime/task-events';
 import { stringSha256 } from '../../gate-runtime/hash';
 
+/** Diagnostic references are not proof that individual tests failed.
+ * Current producers emit repository-relative paths; retain all legacy raw values
+ * in authenticated evidence, but never relabel opaque tokens as failed tests.
+ */
+export function displayableFailureReferences(refs: readonly string[]): readonly string[] | null {
+    return refs.length && refs.every(ref => ref.includes('/') && !ref.includes('\\')
+        && !/^[\s/]|[\s/]$/u.test(ref) && !/[\u0000-\u001f\u007f|:]/u.test(ref)
+        && ref.split('/').every(part => part !== '' && part !== '.' && part !== '..')) ? refs : null;
+}
+
+export function recordedFailureAttributionText(refs: readonly string[]): string {
+    const paths = displayableFailureReferences(refs);
+    return paths ? `Reported failure references (informational): ${paths.join(', ')}`
+        : 'Tests: not attributed' + (refs.length
+            ? '; Original diagnostic references are retained in the authenticated failure artifact' : '');
+}
+
 export interface RecordedOutOfScopeFailure {
     task_id: string;
     task_mode_entry_sha256: string;
@@ -73,6 +90,6 @@ export function readRecordedOutOfScopeFailures(repoRoot: string, taskId: string)
 export function recordedOutOfScopeNotice(repoRoot: string, taskId: string): string {
     const records = readRecordedOutOfScopeFailures(repoRoot, taskId);
     return records.length ? `Task completed with recorded out-of-scope failures: ${[...new Set(records.flatMap(record =>
-        record.failing_tests.length ? record.failing_tests : [`not attributed (command: ${record.command}; artifact: ${record.artifact_path})`]))].join(', ')}. See the recorded failure follow-up task and its authenticated full-suite evidence.` : '';
+        displayableFailureReferences(record.failing_tests) ?? [`not attributed (command: ${record.command}; artifact: ${record.artifact_path})`]))].join(', ')}. See the recorded failure follow-up task and its authenticated full-suite evidence.` : '';
 }
 

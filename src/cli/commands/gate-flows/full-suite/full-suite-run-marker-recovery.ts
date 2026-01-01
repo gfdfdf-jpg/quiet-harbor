@@ -650,6 +650,7 @@ async function materializeInterruptedFullSuiteTimeoutEvidence(options: {
         status: 'FAILED',
         enabled: true,
         command: config.command,
+        placement: config.placement,
         exit_code: null,
         timed_out: true,
         output_artifact_path: gateHelpers.normalizePath(outputArtifactPath),

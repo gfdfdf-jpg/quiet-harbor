@@ -2,6 +2,7 @@ import { findLostReviewGateEvidence } from '../review/review-artifact-recovery';
 import { readInvocationVerifiedEventIndex, readTaskTimelineRouteQuery } from '../../gate-runtime/timeline/task-events-integrity';
 import { routePreparedAfter, routeLatestLane, routeLatestReuse, routeHasBoundedEvents, type TaskRouteQuery } from '../../gate-runtime/timeline/task-route-query';
 import { countNextStepWork } from '../../core/next-step-measurement';
+import type { CompiledReviewDependencyGraph } from '../../core/review-dependency-graph';
 import * as path from 'node:path';
 
 import {
@@ -65,15 +66,7 @@ export function readCompleteReviewTimelineEvidence(eventsRoot: string, taskId: s
     const file = path.join(eventsRoot, `${taskId}.jsonl`);
     const indexed = readInvocationVerifiedEventIndex(file, taskId);
     if (indexed) {
-        let latestCompileSequence: number | null = null;
-        for (const event of indexed.byType.COMPILE_GATE_PASSED ?? []) {
-            countNextStepWork('visit:review_evidence_compile_candidate');
-            // The index coerces legacy event types; the original boundary requires a string.
-            if (event.event_type !== 'COMPILE_GATE_PASSED') continue;
-            const sequence = getTimelineEventTaskSequence(event);
-            if (sequence != null) latestCompileSequence = Math.max(latestCompileSequence ?? 0, sequence);
-        }
-        return { events: indexed.events, latestCompileSequence };
+        return { events: indexed.events, latestCompileSequence: indexed.latestCompileSequence };
     }
     const events: ReviewReuseTelemetryEventLike[] = [];
     let latestCompileSequence: number | null = null;
@@ -636,6 +629,7 @@ export function findDownstreamReviewNeedingDependencyRebind(params: {
     requiredReviews: Record<string, boolean>;
     policyMode: EffectiveReviewExecutionPolicyMode;
     reviewStates: readonly ReviewArtifactState[];
+    dependencyGraph?: CompiledReviewDependencyGraph | null;
 }): { downstreamState: ReviewArtifactState; upstreamReviewType: string } | null {
     return withNextStepReviewEvidenceSnapshot(params.eventsRoot, params.taskId, () => {
     const timelineEvents = readTaskTimelineRouteQuery(path.join(params.eventsRoot, `${params.taskId}.jsonl`), params.taskId)
@@ -657,7 +651,8 @@ export function findDownstreamReviewNeedingDependencyRebind(params: {
         const upstreamReviewTypes = getReviewExecutionDependencies(
             reviewType,
             params.requiredReviews,
-            params.policyMode
+            params.policyMode,
+            params.dependencyGraph
         );
         for (const upstreamReviewType of upstreamReviewTypes) {
             countNextStepWork('visit:next-step-review-evidence:600');

@@ -1,4 +1,4 @@
-import { admitLegacyFullSuiteFixture, appendFixtureCompileEvent } from '../../task-test-selection-fixtures';
+import { admitLegacyFullSuiteFixture, appendFixtureCompileEvent, recordFixtureFullSuiteArtifact } from '../../task-test-selection-fixtures';
 import { describe, it } from 'node:test';
 import {
     assert,
@@ -231,6 +231,7 @@ import {
             }, null, 2), 'utf8');
 
             const outputPath = path.join(reviewsRoot, 'T-920-test-review-context.json');
+            recordFixtureFullSuiteArtifact(repoRoot, 'T-920');
             const result = buildReviewContext({
                 reviewType: 'test',
                 depth: 3,
@@ -999,6 +1000,7 @@ import {
             }, null, 2), 'utf8');
 
             const outputPath = path.join(reviewsRoot, 'T-927-code-review-context.json');
+            recordFixtureFullSuiteArtifact(repoRoot, 'T-927');
             const result = buildReviewContext({
                 reviewType: 'code',
                 depth: 3,
@@ -1094,6 +1096,7 @@ import {
             }, null, 2), 'utf8');
 
             const outputPath = path.join(reviewsRoot, 'T-928-code-review-context.json');
+            recordFixtureFullSuiteArtifact(repoRoot, 'T-928');
             const result = buildReviewContext({
                 reviewType: 'code',
                 depth: 3,
@@ -1166,6 +1169,8 @@ import {
             const preflightPath = path.join(reviewsRoot, 'T-930-preflight.json');
             fs.writeFileSync(preflightPath, JSON.stringify({
                 task_id: 'T-930',
+                // Review handoffs now use the classified intent before the task-mode fallback.
+                task_intent: 'Include skeleton-only acceptance criteria in review context',
                 required_reviews: { test: true },
                 changed_files: []
             }, null, 2), 'utf8');
@@ -1182,6 +1187,7 @@ import {
             const promptText = fs.readFileSync(String(result.rule_context.artifact_path), 'utf8');
 
             assert.equal(result.task_criteria.task_intent.text, 'Include skeleton-only acceptance criteria in review context');
+            assert.equal(result.task_criteria.task_intent.source, 'preflight');
             assert.equal(result.task_criteria.task_row.title, 'Carry task criteria into reviewer context');
             assert.equal(result.task_criteria.plan.available, true);
             assert.equal(result.task_criteria.plan.plan_sha256, planSha256);
@@ -1874,10 +1880,7 @@ import {
                 task_id: 'T-924',
                 required_reviews: { test: true }
             }, null, 2), 'utf8');
-            fs.writeFileSync(path.join(orchestratorRoot, 'runtime', 'task-events', 'T-924.jsonl'), JSON.stringify({
-                event_type: 'COMPILE_GATE_PASSED',
-                timestamp_utc: '2026-05-05T00:10:00.000Z'
-            }) + '\n', 'utf8');
+            appendFixtureCompileEvent(repoRoot, 'T-924', '2026-05-05T00:10:00.000Z');
             fs.writeFileSync(path.join(reviewsRoot, 'T-924-compile-gate.json'), JSON.stringify({
                 timestamp_utc: '2026-05-05T00:10:00.250Z',
                 status: 'PASSED'
@@ -1905,7 +1908,7 @@ import {
             assert.ok(promptArtifactText.includes('## Full-Suite Validation Evidence'));
             assert.ok(promptArtifactText.includes('- Required before this review: no'));
             assert.ok(promptArtifactText.includes('- Enabled: false'));
-            assert.ok(!promptArtifactText.includes('Full-suite validation evidence artifact is missing.'));
+            assert.ok(!promptArtifactText.includes('Task test validation evidence artifact is missing.'));
             fs.rmSync(repoRoot, { recursive: true, force: true });
         });
 
@@ -1939,10 +1942,7 @@ import {
                 task_id: 'T-925',
                 required_reviews: { test: true }
             }, null, 2), 'utf8');
-            fs.writeFileSync(path.join(orchestratorRoot, 'runtime', 'task-events', 'T-925.jsonl'), JSON.stringify({
-                event_type: 'COMPILE_GATE_PASSED',
-                timestamp_utc: '2026-05-05T00:20:00.000Z'
-            }) + '\n', 'utf8');
+            appendFixtureCompileEvent(repoRoot, 'T-925', '2026-05-05T00:20:00.000Z');
             fs.writeFileSync(path.join(reviewsRoot, 'T-925-compile-gate.json'), JSON.stringify({
                 timestamp_utc: '2026-05-05T00:20:00.250Z',
                 status: 'PASSED'
@@ -1969,10 +1969,10 @@ import {
             assert.ok(promptArtifactText.includes('## Full-Suite Validation Evidence'));
             assert.ok(promptArtifactText.includes('- Required before this review: no'));
             assert.ok(promptArtifactText.includes('- Placement: before_completion'));
-            assert.ok(promptArtifactText.includes('completion still enforces full-suite validation later'));
+            assert.ok(promptArtifactText.includes('completion still enforces task test validation later'));
             assert.ok(promptArtifactText.includes('follow the focused-self-validation contract in this handoff'));
             assert.ok(promptArtifactText.includes('never invoke Garda or write task-owned validation logs'));
-            assert.ok(!promptArtifactText.includes('Full-suite validation evidence artifact is missing.'));
+            assert.ok(!promptArtifactText.includes('Task test validation evidence artifact is missing.'));
             fs.rmSync(repoRoot, { recursive: true, force: true });
         });
 
@@ -2002,10 +2002,7 @@ import {
                 task_id: 'T-928',
                 required_reviews: { code: true }
             }, null, 2), 'utf8');
-            fs.writeFileSync(path.join(orchestratorRoot, 'runtime', 'task-events', 'T-928.jsonl'), JSON.stringify({
-                event_type: 'COMPILE_GATE_PASSED',
-                timestamp_utc: '2026-05-05T00:35:00.000Z'
-            }) + '\n', 'utf8');
+            appendFixtureCompileEvent(repoRoot, 'T-928', '2026-05-05T00:35:00.000Z');
 
             const outputPath = path.join(reviewsRoot, 'T-928-code-review-context.json');
             const result = buildReviewContext({
@@ -2030,7 +2027,7 @@ import {
             assert.ok(promptArtifactText.includes('must not demand pre-review full-suite evidence or run it manually'));
             assert.ok(promptArtifactText.includes('follow the focused-self-validation contract in this handoff'));
             assert.ok(promptArtifactText.includes('never invoke Garda or write task-owned validation logs'));
-            assert.ok(!promptArtifactText.includes('Full-suite validation evidence artifact is missing.'));
+            assert.ok(!promptArtifactText.includes('Task test validation evidence artifact is missing.'));
             fs.rmSync(repoRoot, { recursive: true, force: true });
         });
 
@@ -2060,10 +2057,7 @@ import {
                 task_id: 'T-926',
                 required_reviews: { test: true }
             }, null, 2), 'utf8');
-            fs.writeFileSync(path.join(orchestratorRoot, 'runtime', 'task-events', 'T-926.jsonl'), JSON.stringify({
-                event_type: 'COMPILE_GATE_PASSED',
-                timestamp_utc: '2026-05-05T00:25:00.000Z'
-            }) + '\n', 'utf8');
+            appendFixtureCompileEvent(repoRoot, 'T-926', '2026-05-05T00:25:00.000Z');
 
             const outputPath = path.join(reviewsRoot, 'T-926-test-review-context.json');
             const result = buildReviewContext({
@@ -2084,7 +2078,7 @@ import {
             const promptArtifactText = fs.readFileSync(outputPath.replace(/\.json$/, '.md'), 'utf8');
             assert.ok(promptArtifactText.includes('- Required before this review: yes'));
             assert.ok(promptArtifactText.includes('- Placement: after_compile_before_reviews'));
-            assert.ok(promptArtifactText.includes('Full-suite validation evidence artifact is missing.'));
+            assert.ok(promptArtifactText.includes('Task test validation evidence artifact is missing.'));
             fs.rmSync(repoRoot, { recursive: true, force: true });
         });
 
@@ -2115,10 +2109,7 @@ import {
                 required_reviews: { test: true }
             }, null, 2), 'utf8');
             const preflightSha256 = sha256Text(fs.readFileSync(preflightPath, 'utf8'));
-            fs.writeFileSync(path.join(orchestratorRoot, 'runtime', 'task-events', 'T-921.jsonl'), JSON.stringify({
-                event_type: 'COMPILE_GATE_PASSED',
-                timestamp_utc: '2026-05-05T00:05:00.000Z'
-            }) + '\n', 'utf8');
+            appendFixtureCompileEvent(repoRoot, 'T-921', '2026-05-05T00:05:00.000Z');
             fs.writeFileSync(path.join(reviewsRoot, 'T-921-compile-gate.json'), JSON.stringify({
                 timestamp_utc: '2026-05-05T00:05:00.250Z',
                 status: 'PASSED'
@@ -2247,6 +2238,7 @@ import {
             }, null, 2), 'utf8');
 
             const outputPath = path.join(reviewsRoot, 'T-922-test-review-context.json');
+            recordFixtureFullSuiteArtifact(repoRoot, 'T-922');
             const result = buildReviewContext({
                 reviewType: 'test',
                 depth: 3,
@@ -2292,17 +2284,13 @@ import {
             const newChangedFilesSha = '4'.repeat(64);
             const newScopeSha = '5'.repeat(64);
             const newScopeContentSha = '6'.repeat(64);
-            fs.writeFileSync(path.join(orchestratorRoot, 'runtime', 'task-events', 'T-923.jsonl'), JSON.stringify({
-                event_type: 'COMPILE_GATE_PASSED',
-                timestamp_utc: '2026-05-05T00:05:00.000Z',
-                details: {
-                    preflight_path: preflightPath,
-                    preflight_hash_sha256: 'new-cycle',
-                    preflight_changed_files_sha256: newChangedFilesSha,
-                    preflight_scope_sha256: newScopeSha,
-                    preflight_scope_content_sha256: newScopeContentSha
-                }
-            }) + '\n', 'utf8');
+            appendFixtureCompileEvent(repoRoot, 'T-923', '2026-05-05T00:05:00.000Z', {
+                preflight_path: preflightPath,
+                preflight_hash_sha256: 'new-cycle',
+                preflight_changed_files_sha256: newChangedFilesSha,
+                preflight_scope_sha256: newScopeSha,
+                preflight_scope_content_sha256: newScopeContentSha
+            });
             fs.writeFileSync(path.join(reviewsRoot, 'T-923-compile-gate.json'), JSON.stringify({
                 timestamp_utc: '2026-05-05T00:00:00.250Z',
                 status: 'PASSED',

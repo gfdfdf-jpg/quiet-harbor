@@ -5,12 +5,13 @@ import * as path from 'node:path';
 
 import { splitCommandLine } from '../../cli/gate-cli/gates-subprocess';
 import { isPlainRecord } from '../../core/records';
+import { declaredValidationCommandTargets, genericBoundCommandTargets, type TaskValidationPlan } from '../../core/task-validation-plan';
 import { readValidationFile, validationDigest } from '../../core/project-validation-identity';
 import { MAX_RETAINED_VALIDATION_OUTPUT_BYTES, parseValidationReportEvidenceBinding, readRetainedValidationReports } from '../../core/validation-report-evidence';
 import type { ValidationReportEvidenceBinding } from '../../core/validation-report-contract';
 import { assertCurrentIntermediateSelection, intermediateInvocationIdentity, intermediateSourcePathKey, latestMatchingIntermediateAttempt,
     type IntermediateSelectionBinding } from '../../core/intermediate-selected-cases';
-import { declaredFileRole, isTestScopePath, normalizeFileRoleBindings } from '../../core/file-role-bindings';
+import { createTaskTestScopeMatcher, declaredFileRole, normalizeFileRoleBindings } from '../../core/file-role-bindings';
 import { inspectTaskEventFile } from '../../gate-runtime/task-events';
 import {
     readNavigationOrderedTaskEvents,
@@ -261,6 +262,7 @@ export function readBoundIntermediateCommandEvidence(options: BoundIntermediateC
     let expectedScope = options.expectedScopeContentSha256;
     let selectionBinding: IntermediateSelectionBinding | undefined;
     const historicalProductionInputs = new Set<string>();
+    let historicalTestPaths: string[] | undefined;
     if (record.selected_case_binding !== undefined) {
         try {
             // Authenticate the envelope first; report-output exceptions are applied only after report validation.
@@ -284,6 +286,8 @@ export function readBoundIntermediateCommandEvidence(options: BoundIntermediateC
                     && Number(event.integrity?.task_sequence) < Number(start?.integrity?.task_sequence)).at(-1);
                 if (!native || starts.length !== 1 || Number(start.integrity?.task_sequence) >= eventTaskSequence
                     || start.details?.preflight_sha256 !== recordPreflightSha256
+                    || classified?.details?.output_sha256 !== recordPreflightSha256
+                    || path.resolve(options.repoRoot, String(classified.details.output_path ?? '')) !== path.resolve(options.repoRoot, recordPreflightPath)
                     || start.details?.command !== command || start.details?.artifact_path !== artifactPathText
                     || validationDigest(start.details?.selected_case_selection) !== validationDigest(selectionBinding.before)
                     || record.test_scope_sha256 !== details.test_scope_sha256
@@ -294,10 +298,38 @@ export function readBoundIntermediateCommandEvidence(options: BoundIntermediateC
                 const profile = isPlainRecord(originalProfile) ? originalProfile : {};
                 const policy = isPlainRecord(profile.review_trigger_policy) ? profile.review_trigger_policy : {};
                 const roles = normalizeFileRoleBindings(policy.file_roles);
+                // The native task selection distinguishes tests/support from other command inputs.
+                // Its original declaration remains authoritative for RED even after a new selection
+                // binds GREEN to the implementation bytes. No extension registration is needed.
+                const declared = cycle.filter(event => event.event_type === 'TASK_TEST_SELECTION_RECORDED'
+                    && Number(event.integrity?.task_sequence) < Number(start.integrity?.task_sequence)).at(-1);
+                const authority = declared?.details?.task_test_selection_authority;
+                let plan: TaskValidationPlan | undefined;
+                if ((declared as Record<string, unknown> | undefined)?.outcome === 'PASS'
+                    && (declared as Record<string, unknown>).actor === 'task-selection-command'
+                    && isPlainRecord(authority) && authority.origin === 'task_scoped_test_selection'
+                    && authority.task_id === options.taskId
+                    && path.resolve(String(authority.workspace_root)) === path.resolve(options.repoRoot)
+                    && isPlainRecord(authority.preflight_scope)
+                    && authority.preflight_scope.scope_content_sha256 === record.test_scope_sha256
+                    && isPlainRecord(authority.validation_plan)) {
+                    const retained = authority.validation_plan as unknown as TaskValidationPlan;
+                    const invocation = intermediateInvocationIdentity(command);
+                    if (retained.schema_version === 1 && Array.isArray(retained.targets) && Array.isArray(retained.support)
+                        && Array.isArray(retained.inputs) && retained.descriptor?.invocations.some(item => validationDigest([item]) === invocation))
+                        plan = retained;
+                }
+                const immutableInputs = new Set([...selectionBinding.before.cases.map(claim => claim.source),
+                    ...plan?.targets.map(target => target.path) ?? [], ...plan?.support.map(input => input.path) ?? []]
+                    .map(intermediateSourcePathKey));
+                const taskInputs = new Map(plan?.inputs.map(input => [intermediateSourcePathKey(input.path), input.sha256]));
+                if (plan) historicalTestPaths = genericBoundCommandTargets(command, selectionBinding, plan.targets.map(target => target.path));
                 for (const source of selectionBinding.before.sources) {
-                    if (declaredFileRole(source.path, roles) === 'source' && current.changed_files.includes(source.path)
-                        && !selectionBinding.before.cases.some(claim => intermediateSourcePathKey(claim.source) === intermediateSourcePathKey(source.path)))
-                        historicalProductionInputs.add(intermediateSourcePathKey(source.path));
+                    const key = intermediateSourcePathKey(source.path);
+                    if (current.changed_files.some(file => intermediateSourcePathKey(file) === key)
+                        && !immutableInputs.has(key) && declaredFileRole(source.path, roles) !== 'test'
+                        && (declaredFileRole(source.path, roles) === 'source' || taskInputs.get(key) === source.sha256))
+                        historicalProductionInputs.add(key);
                 }
             } else {
                 const carry = options.policyCarry;
@@ -417,10 +449,12 @@ export function readBoundIntermediateCommandEvidence(options: BoundIntermediateC
     if (!options.executionOnly && !selectionBinding && !isFocusedIntermediateCommand(commandSource, splitCommandLine(command))) {
         return { entry: null, violation: 'command is not an allowed focused test invocation' };
     }
-    const focusedTestPaths = options.executionOnly ? [] : selectionBinding
+    const focusedTestPaths = options.executionOnly ? historicalTestPaths ?? [] : selectionBinding
         ? [...new Set((selectionBinding.before.cases.length ? selectionBinding.before.cases.map(item => item.source)
             : selectionBinding.before.sources.map(item => item.path)).map(source => options.candidateTestPaths?.find(candidate =>
-                intermediateSourcePathKey(candidate) === intermediateSourcePathKey(source)))
+                intermediateSourcePathKey(candidate) === intermediateSourcePathKey(source))
+                ?? (selectionBinding.before.cases.some(claim => intermediateSourcePathKey(claim.source) === intermediateSourcePathKey(source))
+                    ? source : undefined))
             .filter((source): source is string => source !== undefined))].sort()
         : focusedTestPathsFromCommand(command, options.candidateTestPaths);
     if (selectionBinding && !options.executionOnly) {
@@ -469,6 +503,7 @@ interface IntermediateEvidenceOptions {
     eventsRoot: string;
     taskId: string;
     changedFiles: readonly string[];
+    additionalTargetPaths?: readonly string[];
     requiredTestPath?: string | null;
     minimumTimestampExclusive?: number | null;
     minimumTaskSequenceExclusive?: number | null;
@@ -578,6 +613,8 @@ function readIntermediateEvidence(options: IntermediateEvidenceOptions, executio
             .map((filePath) => normalizePath(filePath).replace(/^\.\/?/u, ''))
             .filter(filePath => isFocusedReviewTestPath(filePath) || declaredTests.has(filePath))
     );
+    const additionalTargets = (options.additionalTargetPaths ?? []).map(normalizePath);
+    for (const target of additionalTargets) changedTestPaths.add(target);
     const requiredTestPath = normalizePath(options.requiredTestPath || '').replace(/^\.\/?/u, '');
     const maxEntries = Number.isInteger(options.maxEntries) && Number(options.maxEntries) > 0
         ? Number(options.maxEntries)
@@ -635,7 +672,8 @@ function readIntermediateEvidence(options: IntermediateEvidenceOptions, executio
             expectedPreflightSha256: carried?.source_preflight_sha256 ?? options.expectedPreflightSha256,
             expectedCoverageContractSha256: options.expectedCoverageContractSha256,
             expectedScopeContentSha256: carried?.scope_content_sha256 ?? options.expectedScopeContentSha256,
-            candidateTestPaths: changedPaths, executionOnly, inspection: options.inspection, policyCarry: carried
+            candidateTestPaths: [...changedPaths, ...additionalTargets, ...(requiredTestPath ? [requiredTestPath] : [])],
+            executionOnly, inspection: options.inspection, policyCarry: carried
         });
         if (!bound.entry) {
             rejectedCandidateCount += 1;
@@ -673,9 +711,10 @@ function readIntermediateEvidence(options: IntermediateEvidenceOptions, executio
                 rejectedCandidateCount += 1; appendWarning(warnings, String(error)); continue;
             }
         }
-        if (!executionOnly && !focusedPathsMatchScope({
+        const explicitlyDeclared = Boolean(bound.entry.selected_case_binding?.before.cases.length);
+        if (!executionOnly && !(!requiredTestPath && explicitlyDeclared) && !focusedPathsMatchScope({
             focusedTestPaths: bound.entry.focused_test_paths,
-            changedTestPaths: bound.entry.selected_case_binding ? new Set(changedPaths) : changedTestPaths,
+            changedTestPaths: bound.entry.selected_case_binding ? new Set([...changedPaths, ...additionalTargets]) : changedTestPaths,
             requiredTestPath
         })) {
             rejectedCandidateCount += 1;
@@ -761,11 +800,9 @@ export function readTaskOwnedFocusedIntermediateEvidence(options: IntermediateEv
     return readIntermediateEvidence(options, false);
 }
 
-/** Only current authenticated observations can supply a symbolic focused target to command syntax inspection. */
-export function readCurrentNativeFocusedCommand(repoRoot: string, taskId: string,
-    command: string): FocusedIntermediateEvidenceEntry | null {
+function readCurrentNativeFocusedCommandFromSnapshot(repoRoot: string, taskId: string,
+    command: string, current: ReturnType<typeof readImmutableValidationEventSnapshot>): FocusedIntermediateEvidenceEntry | null {
     try {
-        const current = readImmutableValidationEventSnapshot(repoRoot, taskId);
         const relative = normalizePath(path.relative(repoRoot, current.preflight_path));
         const file = readValidationFile(repoRoot, relative, MAX_NATIVE_PREFLIGHT_BYTES);
         if (file.identity.sha256 !== current.preflight_sha256) return null;
@@ -777,55 +814,107 @@ export function readCurrentNativeFocusedCommand(repoRoot: string, taskId: string
         const evidence = readTaskOwnedFocusedIntermediateEvidence({ repoRoot, taskId,
             reviewsRoot: path.join(repoRoot, path.dirname(paths.timeline), '../reviews'),
             eventsRoot: path.join(repoRoot, path.dirname(paths.timeline)), changedFiles: preflight.changed_files,
+            additionalTargetPaths: Array.isArray(preflight.declared_test_paths) ? preflight.declared_test_paths.map(String) : [],
             expectedPreflightPath: current.preflight_path, expectedPreflightSha256: current.preflight_sha256,
             expectedScopeContentSha256: current.scope_content_sha256,
             minimumTaskSequenceExclusive: carry?.source_preflight_sequence ?? current.preflight_sequence });
         const identity = intermediateInvocationIdentity(command);
-        const entry = evidence.entries.find(item => item.selected_case_binding && item.focused_test_paths.length === 1
+        const entry = evidence.entries.find(item => item.selected_case_binding && item.focused_test_paths.length > 0
             && identity !== null && intermediateInvocationIdentity(item.command) === identity);
+        let focusedEntry = entry;
         if (entry?.selected_case_binding) {
             const snapshot = isPlainRecord(preflight.profile_policy_snapshot) ? preflight.profile_policy_snapshot : {};
             const policy = isPlainRecord(snapshot.review_trigger_policy) ? snapshot.review_trigger_policy : {};
             const roles = normalizeFileRoleBindings(policy.file_roles);
             const testPatterns = Array.isArray(policy.test_path_regexes)
                 ? policy.test_path_regexes.filter((pattern): pattern is string => typeof pattern === 'string') : [];
+            const matchesTaskTest = createTaskTestScopeMatcher(testPatterns, roles,
+                Array.isArray(preflight.declared_test_paths) ? preflight.declared_test_paths.map(String) : []);
             const isTest = (source: string): boolean => {
                 const role = declaredFileRole(source, roles);
-                return role ? role === 'test' : testPatterns.length > 0
-                    ? isTestScopePath(source, testPatterns) : isFocusedReviewTestPath(source);
+                return matchesTaskTest(source) || !role && !testPatterns.length && isFocusedReviewTestPath(source);
             };
             const selection = entry.selected_case_binding.before;
-            // Historical capture omitted directories; it cannot establish one-target native authority.
-            if (!Array.isArray(selection.scope_operands)) return null;
-            if (selection.scope_operands.length) {
-                if (selection.scope_operands.some(scope => !isPathRealpathInsideRoot(
-                    path.resolve(repoRoot, scope), repoRoot, { allowMissing: false }))) return null;
-                const operandKey = (value: string): string => intermediateSourcePathKey(
-                    normalizePath(path.relative(repoRoot, path.resolve(repoRoot, value))) || '.');
-                const operands = new Set([...selection.sources.map(source => source.path),
-                    ...selection.scope_operands, ...(selection.unobserved_operands ?? [])].map(operandKey));
-                const argumentsOnly = splitCommandLine(entry.command).slice(1);
-                const values = new Set(argumentsOnly.flatMap(token =>
-                    [token, ...(token.includes('=') ? [token.slice(token.indexOf('=') + 1)] : [])]));
-                const terminator = argumentsOnly.indexOf('--');
-                const literalValues = new Set([...argumentsOnly.flatMap(token => token.includes('=')
-                    ? [token.slice(token.indexOf('=') + 1)] : []),
-                ...(terminator < 0 ? [] : argumentsOnly.slice(terminator + 1))]);
-                // A source/directory operand or mode flag cannot pretend to narrow a directory run.
-                if (!selection.cases.length || selection.cases.some(claim =>
-                    claim.selector.startsWith('-') && !literalValues.has(claim.selector)
-                    || !values.has(claim.selector) || operands.has(operandKey(claim.selector)))) return null;
-            }
-            const allTargets = new Set([...entry.focused_test_paths, ...selection.cases.map(item => item.source),
-                ...(selection.unobserved_operands ?? []).filter(isTest),
+            // Directory/config operands remain captured for semantic review. Only declared source
+            // files are targets; a directory name cannot establish or negate their execution.
+            if ((selection.unobserved_operands ?? []).some(isTest)) return null;
+            const targetPaths = [...entry.focused_test_paths, ...selection.cases.map(item => item.source),
                 ...selection.sources.filter(source => isTest(source.path))
-                    .map(source => source.path)].map(intermediateSourcePathKey));
+                    .map(source => source.path)];
+            const allTargets = new Map<string, string>();
+            for (const target of targetPaths) if (!allTargets.has(intermediateSourcePathKey(target)))
+                allTargets.set(intermediateSourcePathKey(target), target);
             // Scope relevance cannot erase other actual test operands from the focused invocation.
-            if (allTargets.size !== 1) return null;
+            if (allTargets.size === 0) return null;
+            focusedEntry = { ...entry, focused_test_paths: [...allTargets.values()] };
         }
         if (readImmutableValidationEventSnapshot(repoRoot, taskId).timeline_sha256 !== current.timeline_sha256) return null;
-        return entry ?? null;
+        return focusedEntry ?? null;
     } catch { return null; }
+}
+
+/** A failed native attempt still declares literal targets. Its signed metadata is syntax authority
+ * only: neither missing payloads nor an observed failure can supply successful execution evidence. */
+function readCurrentNativeFocusedDeclaration(command: string,
+    current: ReturnType<typeof readImmutableValidationEventSnapshot>): string[] {
+    try {
+        const identity = intermediateInvocationIdentity(command);
+        if (!identity) return [];
+        const attempts = current.events.filter(event => ['INTERMEDIATE_COMMAND_STARTED', 'INTERMEDIATE_COMMAND_RUN',
+            'TEST_FIRST_EXPECTED_FAILURE_RECORDED'].includes(event.event_type)
+            && Number(event.integrity?.task_sequence) > current.preflight_sequence
+            && intermediateInvocationIdentity(event.details?.command) === identity);
+        const latest = attempts.at(-1), details = latest?.details;
+        const envelope = latest as Record<string, unknown> | undefined;
+        if (!latest || envelope?.actor !== 'gate' || latest.event_type !== 'INTERMEDIATE_COMMAND_RUN' || !isPlainRecord(details)
+            || !['FAIL', 'FAILED'].includes(String(envelope.outcome)) || !(Number(details.exit_code) > 0)
+            || details.timed_out === true || details.cancelled === true || details.output_truncated !== false
+            || details.termination_signal != null || details.output_sink_error !== undefined
+            || details.preflight_sha256 !== current.preflight_sha256
+            || details.scope_content_sha256_before !== current.scope_content_sha256
+            || details.scope_content_sha256_after !== current.scope_content_sha256) return [];
+        const starts = attempts.filter(event => event.event_type === 'INTERMEDIATE_COMMAND_STARTED'
+            && event.details?.execution_id === details.execution_id);
+        const binding = isPlainRecord(details.selected_case_binding) ? details.selected_case_binding : null;
+        if (starts.length !== 1 || !binding || starts[0].details?.artifact_path !== details.artifact_path
+            || validationDigest(starts[0].details?.selected_case_selection) !== validationDigest(binding.before)
+            || Number(starts[0].integrity?.task_sequence) >= Number(latest.integrity?.task_sequence)) return [];
+        return genericBoundCommandTargets(command, binding, current.changed_files);
+    } catch { return []; }
+}
+
+/** Share the existing authenticated snapshot: failed declarations add no scope/Git inspection. */
+export function readCurrentNativeFocusedObservation(repoRoot: string, taskId: string, command: string): {
+    entry: FocusedIntermediateEvidenceEntry | null; declaredTargets: string[];
+} {
+    try {
+        const current = readImmutableValidationEventSnapshot(repoRoot, taskId);
+        const entry = readCurrentNativeFocusedCommandFromSnapshot(repoRoot, taskId, command, current);
+        let declaredTargets = entry ? [] : readCurrentNativeFocusedDeclaration(command, current);
+        if (!entry && !declaredTargets.length) {
+            const preflight: unknown = JSON.parse(readValidationFile(repoRoot,
+                normalizePath(path.relative(repoRoot, current.preflight_path)), MAX_NATIVE_PREFLIGHT_BYTES).bytes.toString('utf8'));
+            if (isPlainRecord(preflight)) {
+                const snapshot = isPlainRecord(preflight.profile_policy_snapshot) ? preflight.profile_policy_snapshot : {};
+                const policy = isPlainRecord(snapshot.review_trigger_policy) ? snapshot.review_trigger_policy : {};
+                const isTest = createTaskTestScopeMatcher(Array.isArray(policy.test_path_regexes) ? policy.test_path_regexes.map(String) : [],
+                    normalizeFileRoleBindings(policy.file_roles), Array.isArray(preflight.declared_test_paths) ? preflight.declared_test_paths.map(String) : []);
+                declaredTargets = declaredValidationCommandTargets(command, [...new Set([...current.changed_files.filter(isTest),
+                    ...Array.isArray(preflight.declared_test_paths) ? preflight.declared_test_paths.map(String) : []])]);
+            }
+        }
+        if (declaredTargets.length && (readValidationFile(repoRoot,
+            normalizePath(path.relative(repoRoot, current.preflight_path)), MAX_NATIVE_PREFLIGHT_BYTES).identity.sha256 !== current.preflight_sha256
+            || readValidationFile(repoRoot, validationPaths(repoRoot, taskId).timeline, MAX_NATIVE_PREFLIGHT_BYTES).identity.sha256
+                !== current.timeline_sha256)) return { entry: null, declaredTargets: [] };
+        return { entry, declaredTargets };
+    } catch { return { entry: null, declaredTargets: [] }; }
+}
+
+/** Only current authenticated observations can supply a symbolic focused target to command syntax inspection. */
+export function readCurrentNativeFocusedCommand(repoRoot: string, taskId: string,
+    command: string): FocusedIntermediateEvidenceEntry | null {
+    return readCurrentNativeFocusedObservation(repoRoot, taskId, command).entry;
 }
 
 export type NativeIntermediateExecutionEntry = Omit<FocusedIntermediateEvidenceEntry, 'status' | 'focused_test_paths'> & {

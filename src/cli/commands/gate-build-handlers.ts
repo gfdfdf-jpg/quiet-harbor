@@ -87,6 +87,8 @@ export async function handleClassifyChange(gateArgv: string[]): Promise<void> {
 
 export async function handleCompileGate(gateArgv: string[]): Promise<void> {
     const defs = {
+        '--compile-command': { key: 'compileCommand', type: 'string' },
+        '--compile-not-applicable-reason': { key: 'compileNotApplicableReason', type: 'string' },
         '--commands-path': { key: 'commandsPath', type: 'string' },
         '--task-id': { key: 'taskId', type: 'string' },
         '--task-mode-path': { key: 'taskModePath', type: 'string' },

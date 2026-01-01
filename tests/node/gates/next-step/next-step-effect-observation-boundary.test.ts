@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import * as childProcess from 'node:child_process';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -175,4 +176,94 @@ test('real next-step effects keep live WIP checks and run nondeterministic smudg
         effectModule.createNextStepEffectPlanner = originalPlanner;
         effectModule.createNextStepEffectExecutor = originalExecutor;
     }
+});
+
+test('a native Git timeout produces an executable retry without claiming workspace authority', () => {
+    const { repoRoot } = prepareFixture();
+    const native = require('node:child_process') as typeof childProcess;
+    const original = native.execFileSync;
+    const options = { taskId: TASK_ID, repoRoot, eventsRoot: eventsRoot(repoRoot), reviewsRoot: reviewsRoot(repoRoot) };
+    let calls = 0;
+    native.execFileSync = function (this: unknown, ...args: unknown[]): unknown {
+        if (args[0] === 'git' && isInvocationReadObservationActive()) {
+            calls++;
+            throw Object.assign(new Error('Git timed out'), { status: null, signal: 'SIGTERM', code: 'ETIMEDOUT', stdout: '', stderr: '' });
+        }
+        return Reflect.apply(original, this, args);
+    } as unknown as typeof native.execFileSync;
+    try {
+        const result = inspectNextStep(options);
+        assert.equal(result.status, 'BLOCKED');
+        assert.equal(result.next_gate, 'git-observation');
+        assert.match(result.reason, /native-unavailable.*"git".*error=ETIMEDOUT/u);
+        assert.match(result.reason, /Workspace authority and planned effects were not accepted/u);
+        assert.equal(result.audit_status, 'INCOMPLETE');
+        assert.equal(result.full_suite_validation.enabled, null);
+        assert.match(result.review.trust_note || '', /Unavailable/u);
+        assert.equal(result.commands.length, 1);
+        assert.equal(result.commands[0].command, result.navigator_command);
+        assert.match(result.navigator_command, /next-step .*--repo-root .*--events-root .*--reviews-root/u);
+        assert.equal(calls, 1, 'A failed native observation must not be retried inside this invocation.');
+    } finally { native.execFileSync = original; }
+    assert.equal(inspectNextStep(options).next_gate, 'next-step-effect', 'A new invocation can retry the observation.');
+});
+
+test('a corrupt native Git index refuses navigation and effects without rewriting task evidence', () => {
+    const { repoRoot } = prepareFixture();
+    const options = { taskId: TASK_ID, repoRoot };
+    const plan = effectPlanSha(inspectNextStep(options));
+    const indexPath = path.join(repoRoot, '.git', 'index');
+    const indexBefore = fs.readFileSync(indexPath);
+    const files = [path.join(repoRoot, 'src/app.ts'), path.join(repoRoot, 'TASK.md'),
+        path.join(eventsRoot(repoRoot), TASK_ID + '.jsonl')];
+    const before = files.map(file => fs.readFileSync(file));
+    const corrupted = Buffer.from('Invalid disposable Git index.');
+    fs.writeFileSync(indexPath, corrupted);
+    for (const result of [inspectNextStep(options), executeNextStepEffects(options, plan)]) {
+        assert.equal(result.status, 'BLOCKED');
+        assert.equal(result.next_gate, 'git-observation');
+        assert.equal(result.audit_status, 'INCOMPLETE');
+        assert.equal(result.full_suite_validation.enabled, null);
+        assert.match(result.reason, /git .*failed:[\s\S]*index/u);
+        assert.match(result.reason, /Workspace authority and planned effects were not accepted/u);
+        assert.equal(result.commands[0].command, result.navigator_command);
+        assert.deepEqual(files.map(file => fs.readFileSync(file)), before);
+        assert.deepEqual(fs.readFileSync(indexPath), corrupted);
+    }
+    fs.writeFileSync(indexPath, indexBefore);
+    assert.equal(effectPlanSha(inspectNextStep(options)), plan);
+});
+
+test('an unavailable final Git check refuses effect execution and offers a fresh inspection', () => {
+    const { repoRoot, logPath } = prepareFixture();
+    const options = { taskId: TASK_ID, repoRoot };
+    const plan = effectPlanSha(inspectNextStep(options));
+    const sourcePath = path.join(repoRoot, 'src', 'app.ts'), taskPath = path.join(repoRoot, 'TASK.md');
+    const eventPath = path.join(eventsRoot(repoRoot), TASK_ID + '.jsonl');
+    const before = [sourcePath, taskPath, eventPath].map(file => fs.readFileSync(file));
+    const native = require('node:child_process') as typeof childProcess;
+    const original = native.execFileSync;
+    let selected: string | undefined, calls = 0;
+    native.execFileSync = function (this: unknown, ...args: unknown[]): unknown {
+        if (args[0] === 'git' && isInvocationReadObservationActive()) {
+            const key = JSON.stringify(args.slice(0, 3));
+            selected ??= key;
+            if (key === selected && ++calls === 2) {
+                throw Object.assign(new Error('Git timed out'), { status: null, signal: 'SIGTERM', code: 'ETIMEDOUT', stdout: '', stderr: '' });
+            }
+        }
+        return Reflect.apply(original, this, args);
+    } as unknown as typeof native.execFileSync;
+    try {
+        const result = executeNextStepEffects(options, plan);
+        assert.equal(result.status, 'BLOCKED');
+        assert.equal(result.next_gate, 'git-observation');
+        assert.match(result.reason, /native-unavailable.*initial: status=.*final: status=unavailable.*error=ETIMEDOUT/u);
+        assert.equal(calls, 2, 'Only the initial Git read and its final validation are allowed.');
+        assert.deepEqual([sourcePath, taskPath, eventPath].map(file => fs.readFileSync(file)), before);
+        assert.equal(fs.existsSync(path.join(repoRoot, 'garda-agent-orchestrator', 'runtime', 'wip', TASK_ID)), false);
+        assert.equal(filterCalls(logPath).filter(kind => kind === 'smudge').length, 0);
+        assert.match(result.commands[0].command, /next-step /u);
+    } finally { native.execFileSync = original; }
+    assert.equal(effectPlanSha(inspectNextStep(options)), plan);
 });

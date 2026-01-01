@@ -309,7 +309,7 @@ Gate pipeline:
 6. load-rule-pack or bind-rule-pack-to-preflight (POST_PREFLIGHT)
 7. implementation
 8. compile-gate
-9. full-suite-validation when the active workflow placement requires it
+9. task-test-validation when the active workflow placement requires it
 10. build-review-context for each required review
 11. fresh delegated reviewer launch and review-result recording
 12. required-reviews-check

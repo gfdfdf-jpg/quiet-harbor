@@ -1,4 +1,5 @@
 import { getAllShimmedGateNames } from '../../compat/shim-registry';
+import { taskValidationGateName } from '../../core/task-validation-names';
 import { EXIT_GATE_FAILURE } from '../exit-codes';
 import { findInvalidDefaultPreflight, InvalidPreflightError, MissingPreflightError } from './gate-reset-preflight';
 import { buildGateCommandBase } from './gate-flows/task-mode/task-mode-command-format';
@@ -36,12 +37,12 @@ export async function handleGate(commandArgv: string[]): Promise<void> {
         console.log('');
         console.log('Available gates:');
         for (const name of getAllShimmedGateNames().sort()) {
-            console.log(`  ${name}`);
+            console.log(`  ${name === 'full-suite-validation' ? 'task-test-validation (alias: full-suite-validation)' : name}`);
         }
         return;
     }
 
-    const gateName = commandArgv[0];
+    const gateName = taskValidationGateName(commandArgv[0]);
     const gateArgv = commandArgv.slice(1);
     if (hasStandaloneGateHelpFlag(gateArgv)) {
         console.log(buildGateHelpText(gateName));

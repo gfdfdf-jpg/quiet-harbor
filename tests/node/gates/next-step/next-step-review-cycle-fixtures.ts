@@ -126,6 +126,9 @@ export function makeTempRepo(): string {
         ''
     ].join('\n'), 'utf8');
     fs.writeFileSync(path.join(repoRoot, 'src', 'app.ts'), 'export const value = 1;\n', 'utf8');
+    fs.mkdirSync(path.join(repoRoot, 'tests'), { recursive: true });
+    fs.writeFileSync(path.join(repoRoot, 'tests/fixture-task-validation.test.cjs'),
+        "require('node:test').test('fixture regression input', () => {});\n");
     fs.writeFileSync(
         path.join(repoRoot, 'garda-agent-orchestrator', 'live', 'skills', 'code-review', 'SKILL.md'),
         '# code-review fixture\n',

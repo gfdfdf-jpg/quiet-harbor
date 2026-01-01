@@ -49,9 +49,30 @@ export function declaredFileRole(file: string, bindings: FileRoleBindings = {}):
     return undefined;
 }
 
+/** Task-local roles are captured in preflight, then shared by every review consumer. */
+export function bindTaskTestFileRoles(bindings: FileRoleBindings | undefined, targets: readonly string[]): FileRoleBindings {
+    const roles: Record<string, DeclaredFileRole> = { ...bindings };
+    for (const target of targets) {
+        const key = pathKey(validationRelativePath(target, 'task test path'));
+        if (Object.hasOwn(roles, key) && roles[key] !== 'test') throw new Error(`Conflicting declared file roles for ${target}.`);
+        Object.defineProperty(roles, key, { value: 'test', enumerable: true, configurable: true });
+    }
+    return roles;
+}
+
 export function isTestScopePath(file: string, testRegexes: readonly string[], bindings?: FileRoleBindings): boolean {
     const role = declaredFileRole(file, bindings);
     return role ? role === 'test' : matchAnyRegex(file.replace(/\\/gu, '/'), [...testRegexes], {
         skipInvalidRegex: true, caseInsensitive: true
     });
+}
+
+/** Task declarations supplement project hints without rewriting global classification. */
+export function createTaskTestScopeMatcher(testRegexes: readonly string[], bindings: FileRoleBindings | undefined,
+    targets: readonly string[], support: readonly string[] = []): (file: string) => boolean {
+    const tests = new Set(targets.map(pathKey)), inputs = new Set(support.map(pathKey));
+    return file => {
+        const key = pathKey(file.replace(/\\/gu, '/'));
+        return tests.has(key) || !inputs.has(key) && isTestScopePath(file, testRegexes, bindings);
+    };
 }

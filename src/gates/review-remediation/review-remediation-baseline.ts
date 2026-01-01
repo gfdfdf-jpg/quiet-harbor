@@ -1,11 +1,13 @@
 import { countNextStepWork, countNextStepArrayCopy } from '../../core/next-step-measurement';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 import { readInvocationPathObservation } from '../../core/invocation-file-observation';
+import { createInvocationReadMemoKey } from '../../core/invocation-read-observation';
 import { sha256RedactedJsonPayload } from '../../core/redaction';
 import { fileSha256 } from '../../gate-runtime/hash';
 import type { ReviewFindingPolicy } from '../../policy/profile-resolver';
-import { readReviewValidationBytes } from '../review-context/review-validation-invocation';
+import { readReviewValidationBytes, readReviewValidationNode } from '../review-context/review-validation-invocation';
 import { normalizePath } from '../shared/helpers';
 import {
     getReviewCoverageContractViolations,
@@ -177,6 +179,9 @@ export interface ReviewRemediationBaselineValidationResult {
     artifact_sha256: string | null;
     violations: string[];
 }
+
+const BASELINE_VALIDATIONS = createInvocationReadMemoKey<ReviewRemediationBaselineValidationResult>('remediation-baseline-validation');
+const BASELINE_CONSISTENCY = createInvocationReadMemoKey<string[]>('remediation-baseline-consistency');
 
 const SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
@@ -1119,6 +1124,16 @@ export function validateReviewRemediationBaselineArtifact(
         };
     }
     const artifactSha256 = fileSha256(artifactPath);
+    const validate = () => validatePinnedReviewRemediationBaselineArtifact(options, artifactPath, artifactSha256);
+    if (!artifactSha256) return validate();
+    // Describe the options themselves, so accessors and opaque values fall back to uncached validation.
+    return readReviewValidationNode(BASELINE_VALIDATIONS,
+        () => [path.resolve(artifactPath), artifactPath, artifactSha256, options], validate);
+}
+
+function validatePinnedReviewRemediationBaselineArtifact(
+    options: ReviewRemediationBaselineValidationOptions, artifactPath: string, artifactSha256: string | null
+): ReviewRemediationBaselineValidationResult {
     const violations: string[] = [];
     validateExpectedHash(violations, 'remediation baseline artifact hash', artifactSha256, options.expectedArtifactSha256);
     let parsed: unknown;
@@ -1151,7 +1166,15 @@ export function validateReviewRemediationBaselineArtifact(
             `Review remediation baseline review_type mismatch: expected ${options.expectedReviewType}, found ${artifact.review_type || 'missing'}.`
         );
     }
-    validateBaselineConsistency(artifact, violations);
+    const consistency = () => {
+        const found: string[] = [];
+        validateBaselineConsistency(artifact, found);
+        return found;
+    };
+    // The authenticated snapshots and their absence are observed on the first pass too.
+    // Expected bindings can differ by caller; consistency itself depends on the pinned baseline.
+    violations.push(...(artifactSha256 ? readReviewValidationNode(BASELINE_CONSISTENCY,
+        () => [path.resolve(artifactPath), artifactPath, artifactSha256], consistency) : consistency()));
     validateExpectedHash(violations, 'receipt_sha256', artifact.bindings.receipt?.artifact_sha256, options.expectedReceiptSha256);
     validateExpectedHash(
         violations,

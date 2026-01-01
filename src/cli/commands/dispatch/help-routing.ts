@@ -1,9 +1,4 @@
-import {
-    buildCommandHelpText,
-    buildHelpText,
-    isKnownCommandHelpName
-} from '../cli-format-output';
-import { PackageJsonLike, printHelp } from '../cli-helpers';
+import type { PackageJsonLike } from '../cli-types';
 import { buildGateCommandOverviewText, buildGateHelpText } from '../gate-command-help';
 
 function isHelpFlag(argument: string): boolean {
@@ -40,6 +35,7 @@ export function isMissingDeployedBundleOnlyParityBlock(violations: readonly stri
 }
 
 export function printHelpCommand(commandArgv: string[], packageJson: PackageJsonLike): boolean {
+    const { buildCommandHelpText, isKnownCommandHelpName, printHelp } = require('../cli-help-output') as typeof import('../cli-help-output');
     const commandHelpName = String(commandArgv[0] || '').trim();
     if (!commandHelpName) {
         printHelp(packageJson);
@@ -63,7 +59,9 @@ export function printCommandHelpIfRequested(commandName: string, commandArgv: st
         console.log(gateName ? buildGateHelpText(gateName) : buildGateCommandOverviewText());
         return true;
     }
-    if (isKnownCommandHelpName(commandName) && (isHelpSubcommand(commandArgv) || hasHelpFlag(commandArgv))) {
+    if (!isHelpOnlyRequest(commandArgv)) return false;
+    const { buildCommandHelpText, isKnownCommandHelpName } = require('../cli-help-output') as typeof import('../cli-help-output');
+    if (isKnownCommandHelpName(commandName)) {
         console.log(buildCommandHelpText(commandName));
         return true;
     }
@@ -84,6 +82,7 @@ export function buildParityHelpText(commandName: string, commandArgv: string[], 
             return buildGateCommandOverviewText(parityRoot);
         }
     }
+    const { buildCommandHelpText, buildHelpText, isKnownCommandHelpName } = require('../cli-help-output') as typeof import('../cli-help-output');
     if (isKnownCommandHelpName(commandName)) {
         return buildCommandHelpText(commandName);
     }

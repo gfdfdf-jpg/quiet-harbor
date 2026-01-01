@@ -24,6 +24,8 @@ export function buildLeafTestDeltaClassification(options: {
     unchangedScopeFiles?: Readonly<Record<string, string>>;
     /** The review context the failed review ran against, written at its bound path and bound by its file hash. */
     reviewContext?: Record<string, unknown>;
+    /** Content of the changed file after remediation; defaults to the leaf-test assertion fix. */
+    currentContent?: string;
 }): ReviewRemediationDeltaClassification {
     const reviewsRoot = getReviewsRoot(options.repoRoot);
     const unchangedScopeFiles = Object.keys(options.unchangedScopeFiles ?? {});
@@ -242,7 +244,7 @@ export function buildLeafTestDeltaClassification(options: {
     writeRepoFile(
         options.repoRoot,
         options.changedFile,
-        'assert.equal(actual, expected);\nassert.equal(receipt.mode, "DELTA");\n'
+        options.currentContent ?? 'assert.equal(actual, expected);\nassert.equal(receipt.mode, "DELTA");\n'
     );
     return classifyReviewRemediationDelta({
         repoRoot: options.repoRoot,

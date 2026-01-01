@@ -155,12 +155,11 @@ describe('reviewer focused validation policy', () => {
         assert.ok(guidance.includes('absent command hint is not proof'));
     });
 
-    it('keeps absolute paths, traversal, multi-target runs, mutations, broad suites and shell chains rejected', () => {
+    it('keeps absolute paths, traversal, mutations, broad suites and shell chains rejected', () => {
         for (const command of [
             'node --test ../outside.test.ts',
             'node --test /tmp/outside.test.ts',
             'node --test C:\\outside.test.ts',
-            `node --test ${TARGET} tests/node/second.test.ts`,
             'node --test tests/node',
             'npm test',
             `node --test ${TARGET} && node --test ${TARGET}`,
@@ -252,16 +251,17 @@ describe('authenticated reviewer command hints', () => {
         assert.equal(result.evidence.reviewer_command_hints!.commands.length, 1);
     });
 
-    it('keeps authenticated multi-target PASS history while declining to advertise it as a focused invocation', () => {
+    it('advertises every authenticated focused target without restricting their count', () => {
         const evidence = withFixture((fixture) => {
             fs.writeFileSync(path.join(fixture.repoRoot, 'tests/node/second.test.ts'), 'export {};\n', 'utf8');
             appendEvidence(fixture, { command: `${COMMAND} tests/node/second.test.ts` });
             return buildEvidence(fixture);
         });
         assert.equal(evidence.entries.length, 1);
-        assert.equal(evidence.reviewer_command_hints!.status, 'NOT_AVAILABLE');
-        assert.equal(evidence.reviewer_command_hints!.commands.length, 0);
-        assert.equal(evidence.reviewer_command_hints!.rejected_command_count, 1);
+        assert.equal(evidence.reviewer_command_hints!.status, 'AVAILABLE');
+        assert.equal(evidence.reviewer_command_hints!.commands.length, 1);
+        assert.deepEqual(evidence.reviewer_command_hints!.commands[0].targets, [TARGET, 'tests/node/second.test.ts']);
+        assert.equal(evidence.reviewer_command_hints!.rejected_command_count, 0);
     });
 
     for (const [name, options] of [

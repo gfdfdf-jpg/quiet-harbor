@@ -67,7 +67,7 @@ export function resolvePermanentSplitRequiredLatchRoute(options: {
                 `A valid split-required latch already exists for ${formatInlineValue(options.taskId)}, ` +
                 'but the gate could not restore TASK.md to SPLIT_REQUIRED after detecting later status/config/scope drift. ' +
                 `Status sync outcome: ${describeStatusSync(options.restoreResult)}. ` +
-                'Do not run classify, compile, review, full-suite, completion, or final closeout gates on the parent. ' +
+                'Do not run classify, compile, review, task test validation, completion, or final closeout gates on the parent. ' +
                 splitRequiredWipGuidance(options.taskId, options.cliPrefix),
             commands: []
         };
@@ -82,7 +82,7 @@ export function resolvePermanentSplitRequiredLatchRoute(options: {
                 reason:
                     'A valid split-required latch is permanent for this task attempt, but the gate could not transition the parent to DECOMPOSED after detecting linked child tasks. ' +
                     `Status sync outcome: ${describeStatusSync(options.transitionResult)}. ` +
-                    'Do not run classify, compile, review, full-suite, completion, or final closeout gates on the parent. ' +
+                    'Do not run classify, compile, review, task test validation, completion, or final closeout gates on the parent. ' +
                     splitRequiredWipGuidance(options.taskId, options.cliPrefix),
                 commands: []
             };
@@ -108,7 +108,7 @@ export function resolvePermanentSplitRequiredLatchRoute(options: {
             title: 'Split-required latch cleared; no unfinished child remains.',
             reason:
                 'A valid split-required latch stayed permanent after later status/config/scope drift. Linked child tasks were detected, so the gate restored the parent latch and transitioned the parent to DECOMPOSED. ' +
-                'No unfinished child task could be resolved from its notes. Do not run classify, compile, review, full-suite, completion, or final closeout gates on the parent. ' +
+                'No unfinished child task could be resolved from its notes. Do not run classify, compile, review, task test validation, completion, or final closeout gates on the parent. ' +
                 splitRequiredWipGuidance(options.taskId, options.cliPrefix),
             commands: []
         };
@@ -145,7 +145,7 @@ export function resolveSplitRequiredTaskQueueRoute(options: {
             title: 'Split-required latch evidence is invalid.',
             reason:
                 `TASK.md marks ${formatInlineValue(options.taskId)} as SPLIT_REQUIRED, but gate-owned latch evidence is invalid: ${options.latchInvalidReason}. ` +
-                'Do not clear the latch, route child tasks, or run parent classify, compile, review, full-suite, completion, or final closeout gates until an operator repairs or resets the task. ' +
+                'Do not clear the latch, route child tasks, or run parent classify, compile, review, task test validation, completion, or final closeout gates until an operator repairs or resets the task. ' +
                 splitRequiredWipGuidance(options.taskId, options.cliPrefix),
             commands: []
         };
@@ -160,7 +160,7 @@ export function resolveSplitRequiredTaskQueueRoute(options: {
                 reason:
                     `TASK.md marks ${formatInlineValue(options.taskId)} as SPLIT_REQUIRED, but the gate could not transition the parent to DECOMPOSED after detecting linked child tasks. ` +
                     `Status sync outcome: ${describeStatusSync(options.transitionResult)}. ` +
-                    'Do not run classify, compile, review, full-suite, completion, or final closeout gates on the parent. ' +
+                    'Do not run classify, compile, review, task test validation, completion, or final closeout gates on the parent. ' +
                     splitRequiredWipGuidance(options.taskId, options.cliPrefix),
                 commands: []
             };
@@ -186,7 +186,7 @@ export function resolveSplitRequiredTaskQueueRoute(options: {
             title: 'Split-required latch cleared; no unfinished child remains.',
             reason:
                 'Linked child tasks were detected, so the gate transitioned the parent from SPLIT_REQUIRED to DECOMPOSED. ' +
-                'No unfinished child task could be resolved from its notes. Do not run classify, compile, review, full-suite, completion, or final closeout gates on the parent. ' +
+                'No unfinished child task could be resolved from its notes. Do not run classify, compile, review, task test validation, completion, or final closeout gates on the parent. ' +
                 splitRequiredWipGuidance(options.taskId, options.cliPrefix),
             commands: []
         };
@@ -198,7 +198,7 @@ export function resolveSplitRequiredTaskQueueRoute(options: {
         title: 'Split-required latch is active.',
         reason:
             `TASK.md marks ${formatInlineValue(options.taskId)} as SPLIT_REQUIRED. ` +
-            'This parent task was blocked by an auto-split guard and cannot continue through classify, compile, review, full-suite, completion, or final closeout gates. ' +
+            'This parent task was blocked by an auto-split guard and cannot continue through classify, compile, review, task test validation, completion, or final closeout gates. ' +
             'Create and link at least two meaningful, independently scoped, non-terminal child tasks so the gate can transition the parent to DECOMPOSED. ' +
             'If the work is genuinely unsplittable, use an explicit operator remediation or terminal decision; task-reset/discard remains the only way to clear the latch. ' +
             splitRequiredWipGuidance(options.taskId, options.cliPrefix),
@@ -235,7 +235,7 @@ export function resolveDoneTaskQueueTerminalRoute(options: {
         title: 'Task is already marked DONE in TASK.md.',
         reason:
             `TASK.md marks ${formatInlineValue(options.taskId)} as DONE. ` +
-            'Treat this task as terminal and do not run stale lifecycle recovery, classify, compile, review, full-suite, or completion gates. ' +
+            'Treat this task as terminal and do not run stale lifecycle recovery, classify, compile, review, task test validation, or completion gates. ' +
             'Use an explicit operator task-reset/reopen command before starting a new lifecycle cycle for this task; do not hand-edit active TASK.md lifecycle statuses.',
         commands: []
     };
@@ -302,7 +302,7 @@ export function resolveDecomposedParentTerminalRoute(options: {
                 `${options.decomposedReason} Every explicit child task, including nested decomposed children, is DONE. ` +
                 `The gate-owned status sync transitioned completed parent task(s) to DONE: ${completedChain}. ` +
                 'This queue transition does not establish original parent acceptance. Run the native aggregate audit to verify child source provenance, original command composition, preserved WIP and memory obligations. ' +
-                'Do not run stale parent classify, compile, review, full-suite, or completion gates.',
+                'Do not run stale parent classify, compile, review, task test validation, or completion gates.',
             commands: [options.auditCommand]
         };
     }
@@ -313,7 +313,7 @@ export function resolveDecomposedParentTerminalRoute(options: {
         title: 'Parent task is decomposed and has no unfinished child.',
         reason:
             `${options.decomposedReason} No unfinished child task could be resolved from its notes. ` +
-            'Do not execute the parent directly or run classify, compile, review, full-suite, or completion gates on it. ' +
+            'Do not execute the parent directly or run classify, compile, review, task test validation, or completion gates on it. ' +
             'Add or reopen a child task when the parent objective is not complete, and record an explicit child task list or child range in Notes; do not infer candidates from unrelated task IDs.',
         commands: []
     };
@@ -334,7 +334,7 @@ export function resolveStrictDecompositionSplitTerminalRoute(options: {
             reason:
                 `A current strict decomposition decision says split-required and linked ${options.childProfile || 'strict'} child tasks were detected, but the gate could not transition the parent to DECOMPOSED. ` +
                 `Status sync outcome: ${describeStatusSync(options.transitionResult)}. ` +
-                'Do not run parent classify, compile, review, full-suite, completion, or final closeout gates until status sync succeeds.',
+                'Do not run parent classify, compile, review, task test validation, completion, or final closeout gates until status sync succeeds.',
             commands: []
         };
     }
@@ -361,7 +361,7 @@ export function resolveStrictDecompositionSplitTerminalRoute(options: {
         reason:
             `A current strict decomposition decision says split-required, and linked parent-derived ${options.childProfile || 'strict'} child tasks match the decision artifact. ` +
             'The gate transitioned the parent to DECOMPOSED, but no unfinished child task could be resolved from its notes. ' +
-            'Do not run classify, compile, review, full-suite, completion, or final closeout gates on the parent.',
+            'Do not run classify, compile, review, task test validation, completion, or final closeout gates on the parent.',
         commands: []
     };
 }

@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import type { ValidationFileIdentity } from './project-validation-contract';
 import { readValidationFile, validationDigest } from './project-validation-identity';
 import { isPlainRecord } from './records';
-import { inspectValidationCommand, type ValidationCommandDescriptor } from './validation-command-contract';
+import { inspectValidationCommand, literalValidationValues, type ValidationCommandDescriptor } from './validation-command-contract';
 
 const MAX_SOURCES = 128, MAX_SOURCE_BYTES = 8 * 1024 * 1024;
 export interface SelectedCaseClaim { source: string; case_id: string; selector: string }
@@ -21,7 +21,7 @@ export interface IntermediateSelectionBinding {
 }
 export function intermediateInvocationIdentity(command: unknown): string | null {
     if (typeof command !== 'string') return null;
-    const descriptor = inspectValidationCommand(command, 'validation').descriptor;
+    const descriptor = inspectValidationCommand(command, 'validation', { allowConjunction: true }).descriptor;
     return descriptor ? validationDigest(descriptor.invocations) : null;
 }
 export const intermediateSourcePathKey = (value: string): string => process.platform === 'win32' ? value.toLowerCase() : value;
@@ -41,7 +41,7 @@ function describeAbsentSelector(selector: string, values: readonly string[]): st
     const containing = [...new Set(values.filter(value => value !== selector && value.includes(selector)))]
         .sort((left, right) => left.length - right.length).slice(0, 3).map(value => JSON.stringify(value.length > 160 ? `${value.slice(0, 157)}...` : value));
     return 'Selected case selector is absent from the actual literal command. The selector must equal one whole '
-        + 'command token or the text after "=" in a token. '
+        + 'command token, the text after "=" in a token, or one exact comma-list item. '
         + (containing.length > 0
             ? `Use the full token instead: ${containing.join(' or ')}.`
             : 'Put the selector into --command exactly as the selector value.');
@@ -51,7 +51,7 @@ function describeAbsentSelector(selector: string, values: readonly string[]): st
 export function captureIntermediateSelection(root: string, descriptor: ValidationCommandDescriptor,
     input?: unknown): IntermediateSelection {
     const tokens = descriptor.invocations.flatMap(item => [item.executable, ...item.argv]);
-    const values = tokens.flatMap(token => [token, ...(token.includes('=') ? [token.slice(token.indexOf('=') + 1)] : [])]);
+    const values = literalValidationValues(tokens);
     if (input !== undefined && !Array.isArray(input)) throw new Error('Selected cases must be an array.');
     if (Array.isArray(input) && input.length > MAX_SOURCES) throw new Error('Selected cases exceed their bound.');
     const cases: SelectedCaseClaim[] = (Array.isArray(input) ? input : []).map((item: unknown) => {

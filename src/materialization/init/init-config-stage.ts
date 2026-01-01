@@ -1,3 +1,4 @@
+import { normalizeTaskValidationConfigNames } from '../../core/task-validation-names';
 import * as path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { cloneJsonValue, isPlainObject, mergeConfig } from '../../core/config-merge';
@@ -134,6 +135,7 @@ export function mergeProfilesConfigWithTemplate(
 }
 
 export function getFullSuiteEnabledDiagnostic(config: Record<string, unknown>): string {
+    config = normalizeTaskValidationConfigNames(config);
     const fullSuiteSection = isPlainObject(config.full_suite_validation)
         ? config.full_suite_validation
         : null;

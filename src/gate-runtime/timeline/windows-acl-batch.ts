@@ -5,6 +5,32 @@ import { lstatFileIdentitySync } from '../../core/file-stat';
 import { countNextStepWork } from '../../core/next-step-measurement';
 import { getWindowsSystemDirectory } from '../../core/windows-native-environment';
 
+// Bounds sized for slow CI runners (cold PowerShell start, busy disks): one hung tool costs at most one attempt,
+// and the whole observation stays bounded; exhausting it reports unavailable evidence, never a change.
+export const WINDOWS_ACL_OBSERVATION_BUDGET_MS = 20_000;
+export const WINDOWS_ACL_NATIVE_TIMEOUT_MS = 5_000;
+export const WINDOWS_ACL_SID_TIMEOUT_MS = 10_000;
+
+/** Acquisition failure is neither a negative authority verdict nor a changed ACL. */
+export class WindowsAclEvidenceUnavailableError extends Error {
+    readonly code = 'GARDA_WINDOWS_ACL_UNAVAILABLE';
+    constructor(filePath: string) {
+        const command = `& '${path.join(getWindowsSystemDirectory(), 'icacls.exe').replace(/'/gu, "''")}' '${filePath.replace(/'/gu, "''")}'`;
+        super(`Windows ACL evidence is unavailable: ${filePath}. Retry in PowerShell: ${command}; then rerun the original Garda command with the same arguments.`);
+        this.name = 'WindowsAclEvidenceUnavailableError';
+    }
+}
+
+export function isWindowsAclEvidenceUnavailable(error: unknown): error is WindowsAclEvidenceUnavailableError {
+    return error instanceof WindowsAclEvidenceUnavailableError;
+}
+
+export function windowsAclNativeTimeout(deadline: number, filePath: string, limit = WINDOWS_ACL_NATIVE_TIMEOUT_MS): number {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw new WindowsAclEvidenceUnavailableError(filePath);
+    return Math.min(limit, remaining);
+}
+
 export interface WindowsAclObjectIdentity {
     readonly dev: bigint;
     readonly ino: bigint;
@@ -25,7 +51,7 @@ export function sameAclObject(left: WindowsAclObjectIdentity, right: WindowsAclO
 }
 
 export type WindowsAclBatchEntry = { identity: WindowsAclObjectIdentity; bytes: Buffer };
-const MAX_SIBLINGS = 32;
+const MAX_SIBLINGS = 128;
 
 /** Recognize only complete native records. Keep original ACE bytes, including codepage bytes. */
 export function parseAclEntries(bytes: Buffer, files: readonly string[]): Map<string, Buffer> | null {
@@ -68,20 +94,26 @@ export function aclEvidenceBytes(filePath: string, bytes: Buffer): Buffer {
 function siblings(parent: string): string[] | null {
     // ASCII paths avoid interpreting lossy native-codepage output as a different pathname.
     if (!/^[\x20-\x7e]+$/u.test(parent) || parent === path.parse(parent).root) return null;
-    const directory = fs.opendirSync(parent);
     const result: string[] = [];
-    try {
-        for (let entry = directory.readSync(); entry; entry = directory.readSync()) {
-            if (result.length === MAX_SIBLINGS || !/^[\x20-\x7e]+$/u.test(entry.name)
-                || !entry.isFile() || entry.isSymbolicLink()) return null;
-            result.push(path.join(parent, entry.name));
-        }
-    } finally { directory.closeSync(); }
+    const pending = [parent];
+    while (pending.length) {
+        const current = pending.pop()!;
+        const directory = fs.opendirSync(current);
+        try {
+            for (let entry = directory.readSync(); entry; entry = directory.readSync()) {
+                if (result.length === MAX_SIBLINGS || !/^[\x20-\x7e]+$/u.test(entry.name)
+                    || (!entry.isFile() && !entry.isDirectory()) || entry.isSymbolicLink()) return null;
+                const file = path.join(current, entry.name);
+                result.push(file);
+                if (entry.isDirectory()) pending.push(file);
+            }
+        } finally { directory.closeSync(); }
+    }
     return result.length >= 1 ? result.sort() : null;
 }
 
 /** One synchronous acquisition for an explicitly requested directory/file pair. Never retain siblings. */
-export function captureAclPairEvidence(parent: string, requestedFile: string): ReadonlyMap<string, WindowsAclBatchEntry> | null {
+export function captureAclPairEvidence(parent: string, requestedFile: string, deadline: number): ReadonlyMap<string, WindowsAclBatchEntry> | null {
     let stage = 'enumeration';
     const declined = () => { countNextStepWork('acl_batch_fallback:' + stage); return null; };
     try {
@@ -89,14 +121,19 @@ export function captureAclPairEvidence(parent: string, requestedFile: string): R
         if (!children || !children.includes(requestedFile)) return declined();
         const files = [parent, ...children];
         stage = 'identity';
-        const identities = new Map(files.map(file => [file, aclObjectIdentity(file)]));
-        // Directory enumeration and object inspection must agree about links and special files.
+        // Only the requested pair can become authority. Sibling names/types frame native
+        // output; their object identities and ACL verdicts are never retained or reused.
+        const identities = new Map([parent, requestedFile].map(file => [file, aclObjectIdentity(file)]));
         if ((identities.get(parent)!.mode & 0o170000n) !== 0o040000n
-            || children.some(file => (identities.get(file)!.mode & 0o170000n) !== 0o100000n)) return declined();
+            || (identities.get(requestedFile)!.mode & 0o170000n) !== 0o100000n) return declined();
         stage = 'native-read';
         countNextStepWork('acl_batch_probe:initial:' + parent);
         const result = childProcess.spawnSync(path.join(getWindowsSystemDirectory(), 'icacls.exe'), [parent, '/T'],
-            { maxBuffer: 256 * 1024, timeout: 1_000, windowsHide: true });
+            // Up to 129 native ACL records include path-width indentation on every ACE.
+            // A 256 KiB truncation forced redundant individual probes on a second child.
+            { maxBuffer: 1024 * 1024, timeout: windowsAclNativeTimeout(deadline, requestedFile), windowsHide: true });
+        // Do not spend extra icacls processes falling back after a slow native read.
+        if ((result.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT') throw new WindowsAclEvidenceUnavailableError(requestedFile);
         if (result.error || result.status !== 0 || !Buffer.isBuffer(result.stdout)) return declined();
         stage = 'output';
         const entries = parseAclEntries(result.stdout, files), afterFiles = siblings(parent);
@@ -105,11 +142,13 @@ export function captureAclPairEvidence(parent: string, requestedFile: string): R
         if (!afterFiles || children.length !== afterFiles.length || children.some((file, index) => file !== afterFiles[index])) return declined();
         stage = 'current-identity';
         const batch = new Map<string, WindowsAclBatchEntry>();
-        for (const file of files) {
-            const identity = identities.get(file)!;
+        for (const [file, identity] of identities) {
             if (!sameAclObject(identity, aclObjectIdentity(file))) return declined();
-            if (file === parent || file === requestedFile) batch.set(file, { identity, bytes: entries.get(file)! });
+            batch.set(file, { identity, bytes: entries.get(file)! });
         }
         return batch;
-    } catch { return declined(); } // Unsupported/partial acquisition retains the individual native reader.
+    } catch (error: unknown) {
+        if (isWindowsAclEvidenceUnavailable(error)) throw error;
+        return declined(); // Unsupported/partial acquisition retains the individual native reader.
+    }
 }

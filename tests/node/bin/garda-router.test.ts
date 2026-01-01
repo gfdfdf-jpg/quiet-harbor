@@ -642,6 +642,29 @@ test('loadCliMainModule skips source-checkout runtime with missing UI language p
     }
 });
 
+test('navigator startup is independent of UI translations and still checks runtime code', () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gao-router-navigator-ui-isolation-'));
+    try {
+        const dist = path.join(tempRoot, 'dist', 'src');
+        const fallback = path.join(tempRoot, '.node-build', 'src');
+        createGardaPackageRoot(tempRoot, '2.4.0', { sourceCheckout: true });
+        writeHealthyRuntimeCandidate(dist, 'dist');
+        writeHealthyRuntimeCandidate(fallback, 'node-build');
+        const translations = 'src/reports/ui/lang-packs/garda-ui-ru.json';
+        fs.unlinkSync(path.join(tempRoot, 'dist', translations));
+        const manifest = path.join(tempRoot, 'dist', 'publish-runtime-manifest.json');
+        writeFile(manifest, JSON.stringify({ files: ['src/index.js', translations] }));
+        const runtime = (argv: string[]) => (loadCliMainModule(tempRoot, argv) as ReturnType<typeof loadCliMainModule> & { runtimeId?: string }).runtimeId;
+        assert.equal(runtime(['next-step', 'T-001']), 'dist');
+        assert.equal(runtime(['--offline', 'gate', 'next-step', 'T-001']), 'dist');
+        assert.equal(runtime(['ui']), 'node-build');
+        writeFile(manifest, JSON.stringify({ files: ['src/index.js', translations, 'src/cli/missing.js'] }));
+        assert.equal(runtime(['next-step', 'T-001']), 'node-build');
+    } finally {
+        cleanupRouterTempRoot(tempRoot);
+    }
+});
+
 test('loadCliMainModule skips source-checkout runtime with inconsistent UI language packs', () => {
     const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gao-router-runtime-langpacks-inconsistent-'));
     try {

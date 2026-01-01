@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "archetypes": [
+    {
+      "id": 1,
+      "name": "production-regression",
+      "criteria": "Change order total behavior and guard the result.",
+      "route": "own-green"
+    },
+    {
+      "id": 2,
+      "name": "test-only-boundary",
+      "criteria": "Add the zero-order-total boundary case without changing production.",
+      "route": "own-green"
+    },
+    {
+      "id": 3,
+      "name": "two-components",
+      "criteria": "Change order total and partner isolation together; both components must pass.",
+      "route": "two-target-groups"
+    },
+    {
+      "id": 4,
+      "name": "docs-only",
+      "criteria": "Document the partner isolation contract; do not execute compilation or tests.",
+      "route": "not-applicable"
+    },
+    {
+      "id": 5,
+      "name": "own-failure-fixed",
+      "criteria": "Observe a failing order regression, repair only its source, and rerun the selection.",
+      "route": "failed-own-then-green"
+    },
+    {
+      "id": 6,
+      "name": "broad-failure-narrowed",
+      "criteria": "Retain an unattributed failed broad run, narrow to task targets and materialize debt.",
+      "route": "broad-failed-own-green-follow-up"
+    },
+    {
+      "id": 7,
+      "name": "test-first-red",
+      "criteria": "Write the task regression first, observe RED before implementation, then own GREEN.",
+      "route": "red-before-source-green"
+    },
+    {
+      "id": 8,
+      "name": "security-refactor",
+      "criteria": "Harden partner authorization and refactor access checks; resolve a focused test finding.",
+      "route": "four-lanes-focused-delta"
+    },
+    {
+      "id": 9,
+      "name": "decomposed",
+      "criteria": "Split order and partner contracts into two native children and audit the parent.",
+      "route": "two-children-parent-audit"
+    }
+  ]
+}

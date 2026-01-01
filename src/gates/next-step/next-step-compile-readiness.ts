@@ -36,6 +36,8 @@ import {
     onlyNeutralCloseoutDomainChanged
 } from './next-step-readiness-domain-scope';
 import { isPlainRecord } from '../../core/records';
+import { inspectTaskEventFile } from '../../gate-runtime/task-events';
+import { retainedTaskCompileDeclaration } from '../compile/compile-gate';
 import {
     normalizeGitChangeClassificationEvidence
 } from '../../core/git-change-classification';
@@ -44,6 +46,16 @@ export interface CompileReadiness {
     ready: boolean;
     reason: string;
     recoveryGate?: 'classify-change' | 'enter-task-mode';
+    retryStoredCompileCommand?: boolean;
+}
+
+function hasRetainedTaskCompileCommand(eventsRoot: string, taskId: string): boolean {
+    const history: Readonly<Record<string, unknown>>[] = [];
+    const inspection = inspectTaskEventFile(path.join(eventsRoot, `${taskId}.jsonl`), taskId, {
+        onIntegrityEvent: event => { history.push(event); }
+    });
+    return (inspection.status === 'PASS' || inspection.status === 'PASS_WITH_LEGACY_PREFIX')
+        && retainedTaskCompileDeclaration(history)?.kind === 'command';
 }
 
 function requiresProtectedTaskModeRestart(errorText: string): boolean {
@@ -169,14 +181,16 @@ export function readCompileReadiness(
         const infraRecoverySuffix = infraRecoveryHintLine
             ? ` ${infraRecoveryHintLine}`
             : '';
-        // Retrying cannot help when the configured toolchain is absent; surface the operator action.
-        const missingToolchain = /\S+ is required but was not found in PATH\.[\s\S]*?(?= NextStep:|$)/u.exec(evidenceError)?.[0];
-        const missingToolchainSuffix = missingToolchain ? ` ${missingToolchain.trim()}` : '';
+        // Keep the actual refusal: task-local applicability and other recovery routes depend on it.
+        const failureReason = evidenceError.split(' NextStep:')[0];
+        const failureSuffix = failureReason ? ` ${failureReason}` : '';
         return {
             ready: false,
+            retryStoredCompileCommand: evidence.compile_command_source === 'task_local'
+                && hasRetainedTaskCompileCommand(eventsRoot, taskId),
             reason:
                 `Compile gate did not pass. Evidence status='${evidenceStatus || 'UNKNOWN'}', ` +
-                `outcome='${evidenceOutcome || 'UNKNOWN'}'.${missingToolchainSuffix}${infraRecoverySuffix}`
+                `outcome='${evidenceOutcome || 'UNKNOWN'}'.${failureSuffix}${infraRecoverySuffix}`
         };
     }
     const evidencePreflightHash = String(evidence.preflight_hash_sha256 || '').trim().toLowerCase();

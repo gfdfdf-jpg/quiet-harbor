@@ -88,7 +88,7 @@ Use these as read-only review lenses within the generated scope. An explicitly a
 
 ## Validation Boundary
 - Missing prior focused execution evidence alone is not a finding or residual risk. Report concrete unsafe rollout, permission, provenance, or compatibility behavior with evidence; distinguish it from an unperformed validation recommendation.
-- When the generated handoff permits a safe focused check, use exactly one relevant authenticated repository target. Otherwise report reserved F-000 only with the exact evidence-only marker and target required by the generated handoff, when its narrow conditions actually apply. This never authorizes Terraform plan, deployment, or access to live infrastructure.
+- Follow the generated focused-self-validation contract for relevant authenticated repository targets, their commands and unavailable-attempt markers. That contract owns the target mapping and evidence rules. This never authorizes Terraform plan, deployment, or access to live infrastructure.
 
 ## Standalone Advice And Implementation
 Standalone advice is not a mandatory review receipt. Outside a generated mandatory review, an explicitly authorized executor may propose or implement a scoped delivery plan under the task lifecycle and command policy. State assumptions, rollout/rollback checks, and missing platform evidence truthfully. This advisory or implementation mode does not relax a generated reviewer's restrictions or grant CI, deployment, credential, or publication access.

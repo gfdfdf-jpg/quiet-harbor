@@ -4,6 +4,14 @@ import { inspectValidationProgramBoundary } from './project-validation-command';
 import { parseValidationRunnerCommandText, resolveValidationCommandDispatch, VALIDATION_POSIX_SHELL_EXECUTABLES } from './validation-command-dispatch';
 
 export type ValidationCommandPurpose = 'compile' | 'test' | 'validation';
+
+/** Exact argv elements, option values and comma-list items; never substring matching. */
+export function literalValidationValues(tokens: readonly string[]): string[] {
+    return tokens.flatMap(token => {
+        const value = token.includes('=') ? token.slice(token.indexOf('=') + 1) : token;
+        return [...new Set([token, value, ...value.split(',')])];
+    });
+}
 export interface ValidationCommandDescriptor {
     schema_version: 1;
     purpose: ValidationCommandPurpose;

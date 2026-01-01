@@ -13,6 +13,27 @@ import { findMatchingRoutingEvent } from '../../../../src/cli/commands/gate-revi
 import { findMatchingRoutingEvent as findRequiredRoutingEvent } from '../../../../src/gates/required-reviews/required-reviews-check-dependencies';
 import { findReviewGateStaleUpstreamRecovery } from '../../../../src/gates/next-step/next-step-review-evidence';
 
+test('task-local compile N/A can replay only with the same justified applicability declaration', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'garda-compile-na-replay-'));
+    try {
+        for (const changed of [false, true]) {
+            const taskId = 'T-N-A', bundle = path.join(root, String(changed));
+            const details = { task_id: taskId, status: 'PASSED', exit_code: 0,
+                preflight_path: 'runtime/reviews/T-N-A-preflight.json', preflight_hash_sha256: 'a'.repeat(64),
+                scope_changed_files_sha256: 'b'.repeat(64), scope_sha256: 'c'.repeat(64), scope_content_sha256: 'd'.repeat(64),
+                command_descriptors: [], compile_commands: [], compile_command_source: 'task_local',
+                compile_declaration: { kind: 'not_applicable', reason: 'The orbital stack is interpreted without a separate compile phase.' } };
+            appendTaskEvent(bundle, taskId, 'COMPILE_GATE_PASSED', 'PASS', 'Compile applicability.', details);
+            appendTaskEvent(bundle, taskId, 'REVIEWER_DELEGATION_ROUTED', 'PASS', 'Review.', {});
+            appendTaskEvent(bundle, taskId, 'COMPILE_GATE_PASSED', 'PASS', 'Same scope.', changed
+                ? { ...details, compile_declaration: { ...details.compile_declaration, reason: 'A different applicability reason with different semantics.' } }
+                : details);
+            const timeline = path.join(bundle, 'runtime/task-events', taskId + '.jsonl');
+            assert.equal(Boolean(readAuthenticatedCompileReplay(timeline, taskId)), !changed);
+        }
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 for (const [readerName, read] of [['canonical', readCanonical], ['launch', readLaunch]] as const) {
     for (const label of ['Reviewer launch artifact', 'Reviewer launch input artifact', 'Reviewer launch lane reservation']) {
         test(`${readerName}: missing, corrupt and non-object ${label} refuse with an operator recovery`, () => {

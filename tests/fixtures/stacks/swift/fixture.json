@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "id": "swift",
+  "title": "Swift / XCTest",
+  "adapter": null,
+  "technologies": [
+    {
+      "id": "swift",
+      "executable": "tools/swift",
+      "compileArgv": [
+        "build"
+      ],
+      "firstArgv": [
+        "test",
+        "--filter",
+        "OrderTests/testTaskContract"
+      ],
+      "allArgv": [
+        "test",
+        "--filter",
+        "OrderTests/testTaskContract|PartnerTests/testTaskContract"
+      ],
+      "broadArgv": [
+        "test"
+      ],
+      "report": "text",
+      "secondArgv": [
+        "test",
+        "--filter",
+        "PartnerTests/testTaskContract"
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "orders",
+      "technology": "swift",
+      "source": "Sources/Orders/Service.swift",
+      "target": "Tests/OrdersTests/OrderTests.swift",
+      "case": "task-contract",
+      "comment": "//"
+    },
+    {
+      "id": "partners",
+      "technology": "swift",
+      "source": "Sources/Partners/Service.swift",
+      "target": "Tests/PartnersTests/PartnerTests.swift",
+      "case": "task-contract",
+      "comment": "//"
+    }
+  ],
+  "helpers": []
+}

@@ -10,7 +10,8 @@ import {
 } from '../../../../gate-runtime/lifecycle-events';
 import {
     appendMandatoryTaskEventAsync,
-    assertValidTaskId
+    assertValidTaskId,
+    inspectTaskEventFile
 } from '../../../../gate-runtime/task-events';
 import type { CommandCompactnessAudit } from '../../../../gates/task-events-summary/task-events-summary';
 import {
@@ -18,6 +19,8 @@ import {
     getCompileCommandContractHints,
     getPreflightContext,
     getWorkspaceSnapshot,
+    taskCompileDeclaration,
+    retainedTaskCompileDeclaration,
     validateCompileGateCommand
 } from '../../../../gates/compile/compile-gate';
 import {
@@ -103,6 +106,8 @@ import {
     readCurrentTaskSummary
 } from './compile-flow-shared-evidence';
 import { loadTaskFullSuiteConfig } from '../../../../gates/full-suite/task-full-suite-config';
+import { taskCompileApplicability } from '../../../../gates/compile/task-compile-applicability';
+import { readValidationEventSnapshot } from '../../../../gates/project-validation/attempt-evidence';
 import {
     evaluateGateFlowOptionalSkillSelection,
     evaluateGateFlowStartupDiagnostics
@@ -134,6 +139,8 @@ export interface CompileGateCommandOptions {
     allowPlanDriftReason?: string;
     allowFullTestCompileCommand?: unknown;
     allowFullTestCompileCommandReason?: string;
+    compileCommand?: string;
+    compileNotApplicableReason?: string;
 }
 
 export async function runCompileGateCommand(options: CompileGateCommandOptions): Promise<{ outputLines: string[]; exitCode: number }> {
@@ -159,7 +166,9 @@ export async function runCompileGateCommand(options: CompileGateCommandOptions):
 
     let resolvedCommandsPath: string | null = null;
     let compileCommands: string[] = [];
-    let compileCommandSource: 'workflow_config' | 'unconfigured' = 'unconfigured';
+    let compileCommandSource: 'workflow_config' | 'unconfigured' | 'task_local' | 'docs_only' = 'unconfigured';
+    let compileDeclaration: ReturnType<typeof taskCompileDeclaration> = null;
+    let compileApplicability: ReturnType<typeof taskCompileApplicability> | null = null;
     let compileWorkflowConfigPath: string | null = null;
     let resolvedPreflightPath: string | null = null;
     let preflightHash: string | null = null;
@@ -193,34 +202,6 @@ export async function runCompileGateCommand(options: CompileGateCommandOptions):
     let workflowConfigBaselineForCompile: Record<string, string | null> | null = null;
 
     try {
-        const fullSuiteCommand = readConfiguredFullSuiteCommandForCompileGate(repoRoot);
-        const configuredCompileGateCommand = readConfiguredCompileGateCommandForCompileGate(repoRoot);
-        compileWorkflowConfigPath = configuredCompileGateCommand.configPath;
-        if (configuredCompileGateCommand.command) {
-            compileCommandSource = 'workflow_config';
-            validateCompileGateCommand(configuredCompileGateCommand.command, configuredCompileGateCommand.configPath, {
-                fullSuiteCommand,
-                allowFullTestCompileCommand,
-                allowFullTestCompileCommandReason
-            });
-            const taskFullSuite = loadTaskFullSuiteConfig(repoRoot, resolvedTaskId);
-            if (taskFullSuite.selection.status === 'current' && taskFullSuite.config.command !== fullSuiteCommand) {
-                validateCompileGateCommand(configuredCompileGateCommand.command, configuredCompileGateCommand.configPath, {
-                    fullSuiteCommand: taskFullSuite.config.command,
-                    allowFullTestCompileCommand,
-                    allowFullTestCompileCommandReason
-                });
-            }
-            compileCommands = [configuredCompileGateCommand.command];
-        } else {
-            compileCommands = [];
-            compileCommandSource = 'unconfigured';
-            exitCode = EXIT_GATE_FAILURE;
-            exceptionMessage = buildUnconfiguredCompileGateCommandMessage(
-                repoRoot,
-                configuredCompileGateCommand.configPath
-            );
-        }
         const sharedPreflight = await runCompileFlowPreflightPipeline({
             repoRoot,
             orchestratorRoot,
@@ -303,6 +284,54 @@ export async function runCompileGateCommand(options: CompileGateCommandOptions):
             exitCode = EXIT_GATE_FAILURE;
             exceptionMessage = timelineReadiness.violations.join(' ');
         }
+        const fullSuiteCommand = readConfiguredFullSuiteCommandForCompileGate(repoRoot);
+        const configuredCompileGateCommand = readConfiguredCompileGateCommandForCompileGate(repoRoot);
+        compileWorkflowConfigPath = configuredCompileGateCommand.configPath;
+        compileApplicability = taskCompileApplicability({ repoRoot, preflight: preflightContext.preflight,
+            changedFiles: workspaceSnapshot.changed_files, gitChangeClassification: workspaceSnapshot.git_change_classification });
+        compileDeclaration = taskCompileDeclaration(options.compileCommand, options.compileNotApplicableReason,
+            configuredCompileGateCommand.command);
+        if (!compileDeclaration && compileApplicability.kind === 'not_applicable') {
+            compileDeclaration = { kind: 'not_applicable', reason: compileApplicability.reason };
+        }
+        if (!compileDeclaration && !configuredCompileGateCommand.command) {
+            const history: Readonly<Record<string, unknown>>[] = [];
+            const integrity = inspectTaskEventFile(path.join(orchestratorRoot, 'runtime/task-events', `${resolvedTaskId}.jsonl`),
+                resolvedTaskId, { onIntegrityEvent: event => { history.push(event); } });
+            if (integrity.status === 'PASS' || integrity.status === 'PASS_WITH_LEGACY_PREFIX')
+                compileDeclaration = retainedTaskCompileDeclaration(history, configuredCompileGateCommand.command);
+        }
+        const command = compileDeclaration?.kind === 'command' ? compileDeclaration.command : configuredCompileGateCommand.command;
+        if (compileDeclaration?.kind === 'not_applicable') {
+            compileCommandSource = compileApplicability.kind === 'not_applicable' ? 'docs_only' : 'task_local';
+            compileApplicability = { kind: 'not_applicable', reason: compileDeclaration.reason };
+        } else if (command) {
+            compileCommandSource = compileDeclaration ? 'task_local' : 'workflow_config';
+            if (compileDeclaration) compileApplicability = { kind: 'applicable', reason: 'A task-local compile command was explicitly declared.' };
+            validateCompileGateCommand(command, compileDeclaration ? 'task-local declaration' : configuredCompileGateCommand.configPath, {
+                fullSuiteCommand,
+                allowFullTestCompileCommand,
+                allowFullTestCompileCommandReason
+            });
+            const taskFullSuite = loadTaskFullSuiteConfig(repoRoot, resolvedTaskId);
+            if (taskFullSuite.selection.status === 'current' && taskFullSuite.config.command !== fullSuiteCommand) {
+                validateCompileGateCommand(command, configuredCompileGateCommand.configPath, {
+                    fullSuiteCommand: taskFullSuite.config.command,
+                    allowFullTestCompileCommand,
+                    allowFullTestCompileCommandReason
+                });
+            }
+            compileCommands = [command];
+        } else {
+            compileCommands = [];
+            compileCommandSource = 'unconfigured';
+            exitCode = EXIT_GATE_FAILURE;
+            exceptionMessage = buildUnconfiguredCompileGateCommandMessage(
+                repoRoot,
+                configuredCompileGateCommand.configPath,
+                resolvedTaskId
+            );
+        }
         if (!exceptionMessage) {
             const diagnosticsViolations = evaluateGateFlowStartupDiagnostics({
                 repoRoot,
@@ -328,6 +357,20 @@ export async function runCompileGateCommand(options: CompileGateCommandOptions):
             if (optionalSkillSelectionViolations.length > 0) {
                 exitCode = EXIT_GATE_FAILURE;
                 exceptionMessage = optionalSkillSelectionViolations.join(' ');
+            }
+        }
+
+        if (!exceptionMessage && compileDeclaration?.kind === 'not_applicable') {
+            // Producer-time inspection only: a new applicability declaration cannot erase
+            // an executed required compile failure, including across preflight refreshes.
+            const executedCompile = readValidationEventSnapshot(repoRoot, resolvedTaskId).events.slice().reverse().find(event =>
+                ['COMPILE_GATE_PASSED', 'COMPILE_GATE_FAILED'].includes(event.event_type)
+                && (event as Record<string, unknown>).actor === 'gate'
+                && Array.isArray(event.details?.invocation_executions) && event.details.invocation_executions.length > 0);
+            if (executedCompile?.event_type === 'COMPILE_GATE_FAILED') {
+                exitCode = EXIT_GATE_FAILURE;
+                exceptionMessage = 'Not-applicable cannot close a failed required compile. Fix and rerun the task compile command '
+                    + 'with --compile-command before recording a different applicability declaration.';
             }
         }
 
@@ -420,25 +463,27 @@ export async function runCompileGateCommand(options: CompileGateCommandOptions):
                 changed_files_count: preflightContext.changed_files.length,
                 changed_lines_total: preflightContext.changed_lines_total
             });
-            compileOutputInitialized = true;
+            if (compileCommands.length > 0) {
+                compileOutputInitialized = true;
 
-            const compileExecution = await executeCompileCommands({
-                commands: compileCommands,
-                repoRoot
-            });
-            compileOutputLines.push(...compileExecution.outputLines);
-            compileOutputChunks.push(...compileExecution.outputChunks);
-            compileCommandAudits.push(...compileExecution.commandAudits);
-            warningCount = compileExecution.warningCount;
-            errorCount = compileExecution.errorCount;
-            selectedCommandProfile = compileExecution.selectedCommandProfile;
-            selectedCommandIndex = compileExecution.selectedCommandIndex;
-            selectedInvocationIndex = compileExecution.selectedInvocationIndex;
-            selectedInvocationExecutable = compileExecution.selectedInvocationExecutable;
-            invocationExecutions = compileExecution.invocationExecutions;
-            if (compileExecution.exceptionMessage) {
-                exitCode = compileExecution.exitCode;
-                exceptionMessage = compileExecution.exceptionMessage;
+                const compileExecution = await executeCompileCommands({
+                    commands: compileCommands,
+                    repoRoot
+                });
+                compileOutputLines.push(...compileExecution.outputLines);
+                compileOutputChunks.push(...compileExecution.outputChunks);
+                compileCommandAudits.push(...compileExecution.commandAudits);
+                warningCount = compileExecution.warningCount;
+                errorCount = compileExecution.errorCount;
+                selectedCommandProfile = compileExecution.selectedCommandProfile;
+                selectedCommandIndex = compileExecution.selectedCommandIndex;
+                selectedInvocationIndex = compileExecution.selectedInvocationIndex;
+                selectedInvocationExecutable = compileExecution.selectedInvocationExecutable;
+                invocationExecutions = compileExecution.invocationExecutions;
+                if (compileExecution.exceptionMessage) {
+                    exitCode = compileExecution.exitCode;
+                    exceptionMessage = compileExecution.exceptionMessage;
+                }
             }
         }
         if (!exceptionMessage) {
@@ -531,6 +576,8 @@ export async function runCompileGateCommand(options: CompileGateCommandOptions):
         commands_path: normalizeOptionalPath(resolvedCommandsPath),
         workflow_config_path: normalizeOptionalPath(compileWorkflowConfigPath),
         compile_command_source: compileCommandSource,
+        ...(compileDeclaration ? { compile_declaration: compileDeclaration } : {}),
+        compile_applicability: compileApplicability,
         compile_commands: compileCommands,
         compile_command: compileCommands.length > 0 ? compileCommands[0] : null,
         preflight_path: normalizeOptionalPath(resolvedPreflightPath),

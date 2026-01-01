@@ -1,3 +1,4 @@
+import { captureWorkspacePlannedFiles, type WorkspacePlannedFiles } from './workspace-planned-files';
 import { readInvocationTextFile } from './invocation-file-observation';
 import * as path from 'node:path';
 import { isRecognizedPackageName } from './constants';
@@ -34,31 +35,33 @@ export function normalizeUntrackedBuildOutputRegexes(value: unknown): string[] {
     return [...value];
 }
 
-function readBuildOutputMatchers(repoRoot: string): RegExp[] {
+export function readUntrackedBuildOutputRegexes(repoRoot: string): string[] {
     const configPath = joinOrchestratorPath(repoRoot, 'live/config/paths.json');
     let data: Record<string, unknown> = {};
     try { data = JSON.parse(readInvocationTextFile(configPath)); }
     catch (error) {
         if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
     }
-    const patterns = data[UNTRACKED_BUILD_OUTPUT_CONFIG_KEY] === undefined
-        ? DEFAULT_UNTRACKED_BUILD_OUTPUT_REGEXES
+    return data[UNTRACKED_BUILD_OUTPUT_CONFIG_KEY] === undefined
+        ? [...DEFAULT_UNTRACKED_BUILD_OUTPUT_REGEXES]
         : normalizeUntrackedBuildOutputRegexes(data[UNTRACKED_BUILD_OUTPUT_CONFIG_KEY]);
-    return patterns.map(pattern => new RegExp(pattern, 'i'));
 }
 
-export function filterUntrackedBuildOutputPaths(repoRoot: string, untrackedPaths: readonly string[]): string[] {
-    const matchers = readBuildOutputMatchers(repoRoot);
+export function filterUntrackedBuildOutputPaths(repoRoot: string, untrackedPaths: readonly string[],
+    planned: WorkspacePlannedFiles = captureWorkspacePlannedFiles(repoRoot)): string[] {
+    const plannedPaths = new Set(planned.paths);
+    const matchers = readUntrackedBuildOutputRegexes(repoRoot).map(pattern => new RegExp(pattern, 'i'));
     // The source checkout launches dist/src before any other runtime candidate.
     const retainExecutableRuntime = untrackedPaths.some(file => file.startsWith(SOURCE_CHECKOUT_EXECUTABLE_PREFIX))
         && isGardaSourceCheckout(repoRoot);
-    return untrackedPaths.filter(file => (retainExecutableRuntime && file.startsWith(SOURCE_CHECKOUT_EXECUTABLE_PREFIX))
+    return untrackedPaths.filter(file => plannedPaths.has(file) || (retainExecutableRuntime && file.startsWith(SOURCE_CHECKOUT_EXECUTABLE_PREFIX))
         || !matchers.some(regex => regex.test(file)));
 }
 
 /** Scope lists may include tracked files, including staged deletions; protect both. */
-export function filterBuildOutputScopePaths(repoRoot: string, paths: readonly string[]): string[] {
-    const retained = new Set(filterUntrackedBuildOutputPaths(repoRoot, paths));
+export function filterBuildOutputScopePaths(repoRoot: string, paths: readonly string[],
+    planned: WorkspacePlannedFiles = captureWorkspacePlannedFiles(repoRoot)): string[] {
+    const retained = new Set(filterUntrackedBuildOutputPaths(repoRoot, paths, planned));
     const candidates = paths.filter(file => !retained.has(file));
     if (!candidates.length) return [...paths];
     const pathspecs = candidates.map(file => `:(literal)${file}`);

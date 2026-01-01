@@ -5,7 +5,8 @@ import {
     resolveNextStepFullSuiteValidationRoute,
     buildTaskTestSelectionCommand,
     resolveTestSelectionRoute,
-    resolveOutOfScopeFullSuiteRoute
+    resolveOutOfScopeFullSuiteRoute,
+    resolveTaskTestFailureRoute
 } from '../../../../src/gates/next-step/next-step-full-suite-routing';
 import { resolvePostReviewCloseoutRoute } from '../../../../src/gates/next-step/next-step-closeout-routing';
 
@@ -24,8 +25,8 @@ const BASE_OPTIONS = Object.freeze({
     commandText: 'npm test',
     testSelectionCommand: buildTaskTestSelectionCommand('node bin/garda.js', 'T-123', ['tests/current.test.ts'], false),
     testSelectionRequiresConfirmation: false,
-    timeoutForecastLine: 'Recommended full-suite command timeout: 240s.',
-    command: 'node bin/garda.js gate full-suite-validation --task-id "T-123" --preflight-path "runtime/reviews/T-123-preflight.json" --repo-root "."',
+    timeoutForecastLine: 'Recommended task test command timeout: 240s.',
+    command: 'node bin/garda.js gate task-test-validation --task-id "T-123" --preflight-path "runtime/reviews/T-123-preflight.json" --repo-root "."',
     runMarkerRecoveryCommand: 'node bin/garda.js gate full-suite-run-marker-recovery --task-id "T-123" --preflight-path "runtime/reviews/T-123-preflight.json" --repo-root "."',
     runMarkerCleanupCommand: 'node bin/garda.js gate full-suite-run-marker-recovery --task-id "T-123" --preflight-path "runtime/reviews/T-123-preflight.json" --clear-dead-marker --operator-confirmed yes --repo-root "."',
     timeoutRepairTaskCommand: 'node bin/garda.js gate materialize-full-suite-repair-task --task-id "T-123" --preflight-path "runtime/reviews/T-123-preflight.json" --full-suite-artifact-path "runtime/reviews/T-123-full-suite-validation.json" --repo-root "."',
@@ -34,6 +35,38 @@ const BASE_OPTIONS = Object.freeze({
 });
 
 describe('next-step full-suite route helper', () => {
+    it('offers reselection after an opaque failure at every placement without dropping required targets', () => {
+        const selection = buildTaskTestSelectionCommand('garda', 'T-123', ['qa/current.case', 'qa/carried.case'], false);
+        for (const placement of ['after_compile_before_reviews', 'before_test_review'] as const) {
+            const route = resolveNextStepFullSuiteValidationRoute({ ...BASE_OPTIONS, placement,
+                gateStatus: 'FAIL', testSelectionReselectCommand: selection });
+            assert.equal(route?.nextGate, 'implementation');
+            assert.equal(route?.commands[0].command, BASE_OPTIONS.command);
+            assert.equal(route?.commands[1].command, selection);
+        }
+        const completion = resolveTaskTestFailureRoute(BASE_OPTIONS.command, 'repair', selection);
+        assert.equal(completion.commands[1].command, selection);
+        assert.match(selection, /--focused-required-test-path "qa\/current.case".*--focused-required-test-path "qa\/carried.case"/u);
+    });
+    it('checks execution integrity only at the declared validation placement', () => {
+        for (const placement of ['before_test_review', 'before_completion'] as const)
+            assert.equal(resolveNextStepFullSuiteValidationRoute({ ...BASE_OPTIONS, placement,
+                nextReviewType: 'code', executionIntegrityViolations: ['damaged process binding'] }), null);
+        const required = resolveNextStepFullSuiteValidationRoute({ ...BASE_OPTIONS,
+            executionIntegrityViolations: ['damaged process binding'] });
+        assert.equal(required?.nextGate, 'full-suite-validation');
+        assert.equal(required?.commands[0].command, BASE_OPTIONS.command);
+        assert.match(required?.reason || '', /damaged process binding/u);
+    });
+    it('preserves exhausted timeout repair before requiring a fresh successful execution', () => {
+        const options = { ...BASE_OPTIONS, placement: 'after_compile_before_reviews' as const,
+            timeoutBlockerExhausted: true, timeoutRepairTaskProposal: 'T-123-F1',
+            executionIntegrityViolations: ['the timed-out command did not complete'] };
+        assert.equal(resolveNextStepFullSuiteValidationRoute(options)?.nextGate, 'full-suite-timeout-repair-task');
+        assert.equal(resolveNextStepFullSuiteValidationRoute({ ...options, timeoutRepairTaskMaterialized: true })?.nextGate,
+            'full-suite-validation');
+    });
+
     it('revalidates the original command after authenticated repair restore without rematerializing terminal children', () => {
         const failure = { refs: ['ModuleBoundaryTest'], repairCommand: BASE_OPTIONS.timeoutRepairTaskCommand,
             widenScopeCommand: 'garda gate enter-task-mode', restoredRepairValidationCommand: BASE_OPTIONS.command };
@@ -68,7 +101,7 @@ describe('next-step full-suite route helper', () => {
         });
 
         assert.equal(route?.nextGate, 'full-suite-validation');
-        assert.equal(route?.title, 'Run full-suite validation after compile before reviews.');
+        assert.equal(route?.title, 'Run task test validation after compile before reviews.');
         assert.match(route?.reason || '', /after compile-gate and before launching independent reviewers/);
         assert.equal(route?.commands[0]?.command, BASE_OPTIONS.command);
     });
@@ -90,7 +123,7 @@ describe('next-step full-suite route helper', () => {
         const route = resolveNextStepFullSuiteValidationRoute(BASE_OPTIONS);
 
         assert.equal(route?.nextGate, 'full-suite-validation');
-        assert.equal(route?.title, 'Run full-suite validation before test review.');
+        assert.equal(route?.title, 'Run task test validation before test review.');
         assert.match(route?.reason || '', /before launching the mandatory test reviewer/);
     });
 
@@ -111,7 +144,7 @@ describe('next-step full-suite route helper', () => {
         });
 
         assert.equal(route?.nextGate, 'full-suite-validation');
-        assert.equal(route?.title, 'Retry full-suite validation with updated timeout forecast.');
+        assert.equal(route?.title, 'Retry task test validation with updated timeout forecast.');
         assert.match(route?.reason || '', /recommends a longer timeout/);
         assert.equal(route?.commands[0]?.command, BASE_OPTIONS.command);
     });
@@ -121,7 +154,7 @@ describe('next-step full-suite route helper', () => {
             ...BASE_OPTIONS,
             gateStatus: 'FAIL',
             timeoutBlockerExhausted: true,
-            timeoutRepairTaskProposal: 'id=T-123-F1; title=Fix full-suite timeout blocker'
+            timeoutRepairTaskProposal: 'id=T-123-F1; title=Fix task test timeout blocker'
         });
 
         assert.equal(route?.nextGate, 'full-suite-timeout-repair-task');
@@ -139,7 +172,7 @@ describe('next-step full-suite route helper', () => {
             gateStatus: null,
             gatePassed: false,
             timeoutBlockerExhausted: true,
-            timeoutRepairTaskProposal: 'id=T-123-F1; title=Fix full-suite timeout blocker'
+            timeoutRepairTaskProposal: 'id=T-123-F1; title=Fix task test timeout blocker'
         });
 
         assert.equal(route?.nextGate, 'full-suite-timeout-repair-task');
@@ -154,14 +187,14 @@ describe('next-step full-suite route helper', () => {
             nextReviewType: 'code',
             gateStatus: 'FAIL',
             timeoutBlockerExhausted: true,
-            timeoutRepairTaskProposal: 'id=T-123-F1-F1; title=Fix full-suite timeout blocker',
+            timeoutRepairTaskProposal: 'id=T-123-F1-F1; title=Fix task test timeout blocker',
             repeatedTimeoutBlockerAnalysis:
                 'source_task_id=T-123; observed_task_id=T-123-F1; matched_ancestor_task_id=T-123; '
                 + `fingerprint=${'a'.repeat(64)}; gate=full-suite-validation; failure_class=timeout_retry_exhausted; `
                 + 'required_resolution=TRUE_DECOMPOSITION_OR_EXPLICIT_RECOVERY_DECISION'
         });
 
-        assert.match(route?.title || '', /Analyze repeated full-suite blocker/);
+        assert.match(route?.title || '', /Analyze repeated task test blocker/);
         assert.match(route?.reason || '', /same blocker fingerprint must not create another automatic nested repair child/);
         assert.match(route?.reason || '', /TRUE_DECOMPOSITION_OR_EXPLICIT_RECOVERY_DECISION/);
         assert.match(route?.reason || '', /declare one meaningful linked repair task with independent Repair scope paths/);
@@ -188,7 +221,7 @@ describe('next-step full-suite route helper', () => {
             }
         });
 
-        assert.equal(route?.commands[0]?.label, 'Clear dead full-suite run marker after preserving recovery evidence');
+        assert.equal(route?.commands[0]?.label, 'Clear dead task test run marker after preserving recovery evidence');
         assert.equal(route?.commands[0]?.command, BASE_OPTIONS.runMarkerCleanupCommand);
     });
 
@@ -219,8 +252,8 @@ describe('next-step full-suite route helper', () => {
         });
 
         assert.equal(route?.nextGate, 'full-suite-validation');
-        assert.equal(route?.title, 'Recover interrupted full-suite validation run.');
-        assert.match(route?.reason || '', /no terminal full-suite artifact was materialized/);
+        assert.equal(route?.title, 'Recover interrupted task test validation run.');
+        assert.match(route?.reason || '', /no terminal task test artifact was materialized/);
         assert.match(route?.reason || '', /child pid 12346 is still alive/);
         assert.match(route?.reason || '', /Live descendant candidates/);
         assert.match(route?.reason || '', /pid=12347/);
@@ -239,7 +272,7 @@ describe('next-step full-suite route helper', () => {
         });
 
         assert.equal(route?.nextGate, 'full-suite-validation');
-        assert.equal(route?.title, 'Inspect unresolved full-suite run marker state.');
+        assert.equal(route?.title, 'Inspect unresolved task test run marker state.');
         assert.match(route?.reason || '', /stale, invalid, malformed, or not bound/);
         assert.match(route?.reason || '', /would overwrite the diagnostic marker/);
         assert.equal(route?.commands[0]?.command, BASE_OPTIONS.runMarkerRecoveryCommand);
@@ -293,8 +326,8 @@ describe('next-step full-suite route helper', () => {
         });
 
         assert.equal(route?.nextGate, 'full-suite-validation');
-        assert.equal(route?.title, 'Wait for active full-suite validation run.');
-        assert.match(route?.reason || '', /Do not start a second full-suite run/);
+        assert.equal(route?.title, 'Wait for active task test validation run.');
+        assert.match(route?.reason || '', /Do not start a second task test run/);
         assert.equal(route?.commands[0]?.command, BASE_OPTIONS.navigatorCommand);
     });
 
@@ -319,8 +352,8 @@ describe('next-step full-suite route helper', () => {
             }
         });
 
-        assert.match(route?.title || '', /unverifiable full-suite validation process state/u);
-        assert.match(route?.reason || '', /Do not start a second full-suite run or clear this marker/u);
+        assert.match(route?.title || '', /unverifiable task test validation process state/u);
+        assert.match(route?.reason || '', /Do not start a second task test run or clear this marker/u);
         assert.equal(route?.commands[0]?.command, BASE_OPTIONS.runMarkerRecoveryCommand);
     });
 
@@ -389,7 +422,7 @@ describe('next-step full-suite route helper', () => {
         });
 
         assert.equal(route?.nextGate, 'implementation');
-        assert.match(route?.title || '', /Fix full-suite failures/);
+        assert.match(route?.title || '', /Fix task test failures/);
         assert.equal(route?.commands[0]?.command, BASE_OPTIONS.command);
         assert.match(route?.commands[0]?.label || '', /after fixing implementation/);
     });
@@ -418,7 +451,7 @@ describe('next-step full-suite route helper', () => {
 
         assert.equal(route?.nextGate, 'full-suite-validation');
         assert.match(route?.title || '', /focused transient evidence/);
-        assert.match(route?.reason || '', /does not replace mandatory full-suite evidence/);
+        assert.match(route?.reason || '', /does not replace mandatory task test evidence/);
         assert.equal(route?.commands[0]?.command, BASE_OPTIONS.command);
     });
 
@@ -432,7 +465,7 @@ describe('next-step full-suite route helper', () => {
 
         assert.equal(route?.nextGate, 'full-suite-validation');
         assert.match(route?.title || '', /targeted diagnostics/);
-        assert.match(route?.reason || '', /do not replace mandatory full-suite evidence/);
+        assert.match(route?.reason || '', /do not replace mandatory task test evidence/);
         assert.match(route?.reason || '', /full-suite-retry-evidence\.json/);
         assert.equal(route?.commands[0]?.command, BASE_OPTIONS.command);
     });
@@ -460,7 +493,7 @@ describe('test selection at the test boundary', () => {
             ['tests/one test.js', 'tests/two.test.js'], true);
         assert.match(command, /--focused-required-test-path "tests\/one test\.js" --focused-required-test-path "tests\/two\.test\.js"/u);
         assert.match(command, /--operator-confirmed yes --operator-confirmed-at-utc "<ISO-8601 timestamp of operator approval>"/u);
-        assert.match(command, /--full-suite-command "<command that runs only this task's tests and required regressions>"/u);
+        assert.match(command, /--task-test-command "<command that runs only this task's tests and required regressions>"/u);
         assert.doesNotMatch(BASE_OPTIONS.testSelectionCommand, /--operator-confirmed/u);
     });
 
