@@ -1,4 +1,5 @@
 import { buildReviewExecutionPolicySummaryLine } from '../../core/review-execution-policy';
+import { readOperatorTaskIntent } from '../review-context/review-context-task-intent';
 import { declaredFileRole, isTestScopePath } from '../../core/file-role-bindings';
 import { matchAnyRegex } from '../../gate-runtime/text-utils';
 import {
@@ -100,6 +101,7 @@ export interface ClassifyChangeMetrics {
 }
 
 export interface ClassifyChangeTriggers {
+    recorded_failure_recheck?: true;
     runtime_changed: boolean;
     runtime_code_changed: boolean;
     protected_control_plane_changed: boolean;
@@ -185,6 +187,10 @@ export interface ClassifyChangeTriggers {
 }
 
 export interface ClassifyChangeResult {
+    /** Scope facts for criteria binding; excludes intent wording and review-lane policy. */
+    scope_review_requirements?: Record<string, boolean>;
+    recorded_failure_recheck?: { command: string; targets: string[] };
+    declared_test_paths?: string[];
     detection_source: string;
     review_coverage_contract_required: true;
     mode: string;
@@ -237,6 +243,10 @@ export function classifyChange(options: ClassifyChangeOptions): ClassifyChangeRe
     const normalizedFiles = generatedRuntimeSplit.reviewableFiles;
     const ignoredGeneratedRuntimeFiles = generatedRuntimeSplit.ignoredGeneratedRuntimeFiles;
     const taskIntent = options.taskIntent || '';
+    const operatorIntent = options.repoRoot && options.taskId
+        ? readOperatorTaskIntent(options.repoRoot, options.taskId)?.task_intent : null;
+    // Classify each independently: explanatory wording cannot suppress an operator's obligation.
+    const taskIntents = [...new Set([taskIntent, operatorIntent].filter((intent): intent is string => !!intent))];
     const fastPathMaxFiles = options.fastPathMaxFiles || 2;
     const fastPathMaxChangedLines = options.fastPathMaxChangedLines || 40;
     const performanceHeuristicMinLines = options.performanceHeuristicMinLines || 120;
@@ -276,6 +286,7 @@ export function classifyChange(options: ClassifyChangeOptions): ClassifyChangeRe
         normalizedFiles: reviewTriggerFiles,
         repoRoot: options.repoRoot,
         taskIntent,
+        taskIntents,
         classificationConfig,
         callbacks: {
             testMatch,
@@ -330,15 +341,17 @@ export function classifyChange(options: ClassifyChangeOptions): ClassifyChangeRe
     const testOnlyDomainReviewSuppressed = scopeClassification.category === 'test-only';
     const runtimeIntentReviewEligible = (pathTriggers.runtimeCodeChanged || reviewableCodeChanged) && !testOnlyDomainReviewSuppressed;
 
-    const securityIntentClassification = runtimeIntentReviewEligible
-        ? classifySecurityReviewIntent(taskIntent)
-        : { triggered: false, reasons: [] };
+    const securityIntentClassifications = runtimeIntentReviewEligible ? taskIntents.map(classifySecurityReviewIntent) : [];
+    const securityIntentClassification = {
+        triggered: securityIntentClassifications.some(intent => intent.triggered),
+        reasons: [...new Set(securityIntentClassifications.flatMap(intent => intent.reasons))]
+    };
     const securityIntentTriggered = securityIntentClassification.triggered;
-    const apiIntentTriggered = runtimeIntentReviewEligible && hasApiReviewIntent(taskIntent);
-    const performanceIntentTriggered = runtimeIntentReviewEligible && hasPerformanceReviewIntent(taskIntent);
+    const apiIntentTriggered = runtimeIntentReviewEligible && taskIntents.some(hasApiReviewIntent);
+    const performanceIntentTriggered = runtimeIntentReviewEligible && taskIntents.some(hasPerformanceReviewIntent);
     const securityTriggered = pathTriggers.securityTriggered || securityIntentTriggered;
     const refactorIntentReviewEligible = runtimeIntentReviewEligible || testOnlyDomainReviewSuppressed;
-    const refactorIntentTriggered = refactorIntentReviewEligible && hasRefactorIntent(taskIntent);
+    const refactorIntentTriggered = refactorIntentReviewEligible && taskIntents.some(hasRefactorIntent);
     const refactorPathTriggeredFiles = testOnlyDomainReviewSuppressed
         ? []
         : pathTriggers.refactorPathTriggeredFiles;
@@ -368,6 +381,23 @@ export function classifyChange(options: ClassifyChangeOptions): ClassifyChangeRe
     const rawPerformanceTriggered = pathTriggers.performancePathTriggered || performanceHeuristicTriggered || performanceIntentTriggered;
     const apiTriggered = (pathTriggers.apiTriggered || apiIntentTriggered) && !testOnlyDomainReviewSuppressed;
     const performanceTriggered = rawPerformanceTriggered && !testOnlyDomainReviewSuppressed;
+    const scopePerformancePathTriggered = pathTriggers.performancePathTriggeredFiles.some(file =>
+        !pathTriggers.ordinaryCacheMaintenanceFiles.includes(file));
+    const scopeReviewRequirements = {
+        security: pathTriggers.securityTriggered,
+        api: pathTriggers.apiTriggered && !testOnlyDomainReviewSuppressed,
+        performance: !testOnlyDomainReviewSuppressed && (scopePerformancePathTriggered || isPerformanceHeuristicTriggered({
+            performancePathTriggered: scopePerformancePathTriggered, apiTriggered: pathTriggers.apiTriggered,
+            dbTriggered: pathTriggers.dbTriggered, runtimeCodeChanged: pathTriggers.runtimeCodeChanged,
+            onlySqlOrMigration: pathTriggers.onlySqlOrMigration, changedLinesTotal: companionEffectiveChangedLinesTotal,
+            performanceHeuristicMinLines
+        })),
+        refactor: refactorPathTriggered || buildRefactorHeuristicReasons({
+            runtimeChanged: pathTriggers.runtimeChanged, normalizedFilesCount: normalizedFiles.length,
+            renameCount, additionsTotal, deletionsTotal, runtimeCodeLikeCount: pathTriggers.runtimeCodeLikeCount,
+            dbTriggered: pathTriggers.dbTriggered, securityTriggered: pathTriggers.securityTriggered
+        }).length > 0
+    };
 
     const fastPathEligible = (
         pathTriggers.runtimeChanged
@@ -432,6 +462,7 @@ export function classifyChange(options: ClassifyChangeOptions): ClassifyChangeRe
                 }
                 : {})
         },
+        scope_review_requirements: scopeReviewRequirements,
         triggers: {
             runtime_changed: pathTriggers.runtimeChanged,
             runtime_code_changed: pathTriggers.runtimeCodeChanged,
@@ -487,6 +518,7 @@ export function classifyChange(options: ClassifyChangeOptions): ClassifyChangeRe
             ignored_generated_runtime_files: ignoredGeneratedRuntimeFiles
         },
         required_reviews: requiredReviews,
+        ...(options.declaredTestPaths?.length ? { declared_test_paths: [...options.declaredTestPaths] } : {}),
         review_execution_policy: reviewExecutionPolicyMode
             ? {
                 mode: reviewExecutionPolicyMode,

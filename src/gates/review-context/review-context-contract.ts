@@ -1,4 +1,5 @@
 import { resolveTaskAcceptanceCriteria } from './review-context-coverage';
+import { sha256RedactedJsonPayload } from '../../core/redaction';
 import { getReviewContextTaskCriteriaViolation } from './review-context-task-criteria-binding';
 import { countNextStepWork, describeProcessInputs } from '../../core/next-step-measurement';
 import type { ValidationEvidenceInspection } from '../project-validation/attempt-evidence';
@@ -997,6 +998,17 @@ function deriveReviewContextContractViolations(
                 const executionViolations = validationAuthority
                     ? getReviewRemediationReviewContractViolations(reviewExecution, validationAuthority)
                     : ['remediation review_execution validation authority is required before coverage can be trusted.'];
+                const preservation = validationAuthority?.preserved_current_scope;
+                if (preservation) {
+                    if (preservation.current_preflight_sha256 !== expectedPreflightSha256
+                        || sha256RedactedJsonPayload(reviewContext.review_execution_preserved_by ?? null)
+                            !== sha256RedactedJsonPayload(preservation)) {
+                        executionViolations.push('Preserved review execution lacks its authenticated current-preflight authority.');
+                    }
+                } else if (reviewContext.review_execution_preserved_by !== undefined
+                    || reviewExecution.preflight_sha256 !== expectedPreflightSha256) {
+                    executionViolations.push('Review execution has a foreign preflight without authenticated preservation authority.');
+                }
                 violations.push(...executionViolations);
                 reviewExecutionIsAuthenticated = executionViolations.length === 0;
             }

@@ -1,6 +1,5 @@
-import * as crypto from 'node:crypto';
-import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { fileSha256 } from '../../core/file-hashing';
 
 import { isPlainRecord } from '../../core/records';
 import { isPathRealpathInsideRoot } from '../../core/orchestrator-paths';
@@ -118,7 +117,7 @@ export function collectUnpassedRestartInvalidatedReviewTypes(options: {
 
 function fileMatchesSha256(filePath: string, expectedSha256: string): boolean {
     try {
-        return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex') === expectedSha256;
+        return fileSha256(filePath) === expectedSha256;
     } catch {
         return false;
     }

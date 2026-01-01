@@ -459,13 +459,20 @@ function pinReadinessFixtureActions(repoRoot: string): void {
     for (const match of validatorSource.matchAll(/\['([^']+)',\s*\{\s*sha:\s*'([0-9a-f]{40})',\s*version:\s*'(v\d+\.\d+\.\d+)'/gu)) {
         catalogPins.set(match[1], { sha: match[2], version: match[3] });
     }
-    assert.equal(catalogPins.size, 4, 'readiness fixture must reflect the complete reviewed workflow pin catalog');
     const reviewedPins = [
         ['actions/checkout', 'v7.0.0'],
         ['actions/setup-node', 'v6'],
         ['actions/upload-artifact', 'v7.0.1'],
         ['google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml', 'v2.3.0']
     ] as const;
+    // Catalog pins that no release workflow uses; readiness never normalizes them.
+    // actions/download-artifact is used only by the manual reference-stand workflow.
+    const nonReleasePins = ['actions/download-artifact'] as const;
+    assert.deepEqual(
+        [...catalogPins.keys()].sort(),
+        [...reviewedPins.map(([identity]) => identity), ...nonReleasePins].sort(),
+        'readiness fixture must reflect the complete reviewed workflow pin catalog'
+    );
     for (const fileName of ['security.yml', 'secret-scanning.yml', 'sbom.yml', 'publish.yml']) {
         const workflowPath = path.join(repoRoot, '.github', 'workflows', fileName);
         let workflow = fs.readFileSync(workflowPath, 'utf8');

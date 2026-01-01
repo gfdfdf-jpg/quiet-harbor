@@ -656,6 +656,16 @@ export function evaluateDependentValidationChain(tokens: string[], cwd: string):
         const artifactRoot = resolveArtifactRootFromConsumerPaths(consumerPaths, artifactDirName)
             || path.resolve(resolvedCwd, rule.artifactRootRelative);
         const repoRoot = path.dirname(artifactRoot);
+        // Directory names carry no producer authority. Only an explicitly configured Garda
+        // build entrypoint opts a project into Garda's manifest/lock/freshness contract.
+        let declaresNodeFoundationProducer = false;
+        try {
+            const project = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
+            const producer = project?.scripts?.['build:node-foundation'];
+            declaresNodeFoundationProducer = typeof producer === 'string'
+                && /(?:^|\s)node\s+scripts\/node-foundation\/build-scripts\.cjs\s+build\.js\s+node-foundation(?:\s|$)/u.test(producer);
+        } catch { /* An unrecognized project has no Garda producer obligation. */ }
+        if (!declaresNodeFoundationProducer) continue;
         const manifestPath = path.join(artifactRoot, path.basename(rule.manifestRelativePath));
         const lockInspection = inspectProducerLock(`${artifactRoot}.lock`);
         if (lockInspection.active) {

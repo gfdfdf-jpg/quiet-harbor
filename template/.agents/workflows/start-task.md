@@ -47,7 +47,7 @@ Mandatory gate order:
 9. `gate build-review-context` for each required review
 10. `gate required-reviews-check`
 11. `gate doc-impact-gate`
-12. `gate full-suite-validation` (when enabled via workflow-config.json)
+12. `gate task-test-validation` (when enabled via workflow-config.json)
 13. `gate completion-gate`
 
 Hard stops:
@@ -61,10 +61,10 @@ Hard stops:
 - After the review receipt is persisted, close or release the reviewer sub-agent session. Keep it open until the result is accepted and the receipt is persisted. If the report is rejected, ask the same open reviewer to correct it through the bound correction flow.
 - Do not spawn or pre-launch a dependent downstream reviewer before the required upstream accepted findings receipt reports findings-satisfied for the same cycle.
 - Parallel reviewer fan-out is allowed only between independent review types with no dependency edge.
-- Use next-step review navigation output before reviewer launch: `ReviewLaunchableBatch` / `launchable_review_types` list lanes that may be launched now, `BlockedReviewLanes` / `blocked_review_lanes` list dependency reasons, `NextReview` remains legacy single-lane compatibility, failed current reviews take remediation priority, and enabled full-suite validation blocks `test` review until current full-suite PASS evidence exists.
+- Use next-step review navigation output before reviewer launch: `ReviewLaunchableBatch` / `launchable_review_types` list lanes that may be launched now, `BlockedReviewLanes` / `blocked_review_lanes` list dependency reasons, `NextReview` remains legacy single-lane compatibility, failed current reviews take remediation priority, and enabled task test validation blocks `test` review until current task test PASS evidence exists.
 - Do not fan out known producer-consumer validation commands as raw shell sidecars. Flows such as a generator, build or compile step followed by a command that consumes its output (for example tests over generated or compiled artifacts) must use the guarded workflow path or run strictly sequentially, never in parallel.
 - Do not hand-edit active `TASK.md` lifecycle statuses (`IN_PROGRESS`, `IN_REVIEW`, `DONE`, `BLOCKED`) as a substitute for gates; completion finalization owns `DONE`, review-gate owns `IN_REVIEW`, task-mode owns `IN_PROGRESS`, and explicit operator `task-reset` owns reset/discard.
 - Do not mark `DONE` without `COMPLETION_GATE_PASSED`.
 - Do not create fake review artifacts or bypass reviewer routing.
-- The `40-commands.md` restraint applies only to standalone ad-hoc commands. It does NOT exempt mandatory gates: gates such as `compile-gate` and `full-suite-validation` must execute their underlying build/test/type-check commands when the workflow requires them.
+- The `40-commands.md` restraint applies only to standalone ad-hoc commands. It does NOT exempt mandatory gates: gates such as `compile-gate` and `task-test-validation` must execute their underlying build/test/type-check commands when the workflow requires them.
 <!-- garda-agent-orchestrator:managed-end -->

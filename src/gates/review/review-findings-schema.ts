@@ -2,8 +2,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { splitCommandLine } from '../../core/command-line';
 import { inspectRecipeFocusedCommand } from '../project-validation/focused';
-import { readCurrentNativeFocusedCommand } from './focused-intermediate-evidence';
+import { readCurrentNativeFocusedObservation } from './focused-intermediate-evidence';
 import { parseFocusedCommandSyntax } from './review-focused-command-tokenizer';
+import { parseMissingFocusedValidationMarkerTargets, isContainedFocusedTarget } from './missing-focused-validation-marker';
 import { parseMavenFocusedCommand, resolveMavenFocusedTargets } from './review-focused-command-maven';
 import { getNativeCaseResolutionViolations, type NativeCaseResolution } from './native-case-semantics';
 
@@ -25,10 +26,7 @@ import {
     normalizeReviewEvidenceDomainPaths
 } from './review-evidence-domain';
 import {
-    REVIEWER_FOCUSED_SELF_VALIDATION_TOPIC,
-    REVIEWER_MISSING_FOCUSED_TEST_ACTION,
-    REVIEWER_MISSING_FOCUSED_VALIDATION_ACTION,
-    REVIEWER_MISSING_FOCUSED_VALIDATION_MARKER
+    REVIEWER_FOCUSED_SELF_VALIDATION_TOPIC
 } from './reviewer-execution-contract';
 import {
     getReviewRemediationReviewContractViolations,
@@ -611,13 +609,15 @@ function validateFocusedValidationNoteCommand(
     const commandInspection = inspectReviewerFocusedValidationCommand(fields.command, repoRoot, expectedTaskId);
     violations.push(...commandInspection.violations);
     if (commandInspection.syntax_supported && fields.commandOutcome === 'passed' && repoRoot && expectedTaskId) {
+        if (commandInspection.process_passed === false)
+            violations.push(`Focused command '${fields.command}' requires a current authenticated successful process observation before claiming passed.`);
         const recipe = inspectRecipeFocusedCommand(repoRoot, expectedTaskId, getFocusedCommandTokens(fields.command));
         if (recipe && !recipe.process_passed) violations.push('Declared recipe process PASS requires a current authenticated successful process observation.');
     }
     if (
-        commandInspection.target
+        (commandInspection.targets ?? (commandInspection.target ? [commandInspection.target] : [])).some(target =>
+            !focusedEvidenceExplainsTargetRelevance(fields.evidence, target, expectedTaskId))
         && fields.commandOutcome !== 'passed'
-        && !focusedEvidenceExplainsTargetRelevance(fields.evidence, commandInspection.target, expectedTaskId)
     ) {
         violations.push(
             'Reviewer focused self-validation authenticated changed-file evidence must name the exact focused command target and why it is relevant in one clause: that same clause must include the current task id or affected/changed/modified/new/updated plus a relationship verb such as validates/covers/exercises/asserts. Semicolons, newlines, sentence punctuation, and contrastive conjunctions but/however/whereas/while start a new clause. Keep evidence.location inside the assigned lane domain and put the target path in evidence.observation when necessary, rather than only in note, command, or diagnostics.'
@@ -705,20 +705,6 @@ function parseValidationNotes(
     return notes;
 }
 
-function escapeFocusedPatternLiteral(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-}
-
-const MISSING_FOCUSED_TARGET_CAPTURE_PATTERN =
-    '([^\\s;\\r\\n](?:[^;\\r\\n]*[^\\s;\\r\\n])?)';
-const MISSING_FOCUSED_VALIDATION_MARKER_PATTERN = new RegExp(
-    `^${escapeFocusedPatternLiteral(REVIEWER_MISSING_FOCUSED_VALIDATION_MARKER)}\\s+`
-    + `(?:test=${MISSING_FOCUSED_TARGET_CAPTURE_PATTERN};\\s*`
-    + `action=${escapeFocusedPatternLiteral(REVIEWER_MISSING_FOCUSED_TEST_ACTION)}`
-    + `|target=${MISSING_FOCUSED_TARGET_CAPTURE_PATTERN};\\s*`
-    + `action=${escapeFocusedPatternLiteral(REVIEWER_MISSING_FOCUSED_VALIDATION_ACTION)})$`,
-    'u'
-);
 // Inspect overlapping starts so an ignored negated claim cannot consume the next affirmative one.
 const MISSING_FOCUSED_VALIDATION_CLAIM_PATTERN =
     /(?=\b(?:missing|absent|no)\s+(?:prior\s+)?focused\s+(?:(?:test|check|validation)\s+)?(?:execution|run|evidence)\b|\bfocused\s+(?:test|check|validation|execution)(?:\s+(?:execution|run|evidence))?\b.{0,48}?\b(?:missing|absent|unavailable|prohibited|not\s+(?:run|executed))\b|\b(?:could\s+not|cannot|can't|unable\s+to)\s+(?:run|execute)\b.{0,48}?\bfocused\s+(?:test|check|validation)\b)/giu;
@@ -1443,7 +1429,7 @@ function getFocusedCommandTargetTokens(command: string, repoRoot?: string): stri
 
 function focusedCommandHasConcreteTarget(command: string, repoRoot?: string): boolean {
     const parsedTargets = parseFocusedCommandTargets(command, repoRoot);
-    return parsedTargets.targets.length === 1 && parsedTargets.invalidPositionalTokens.length === 0;
+    return parsedTargets.targets.length > 0 && parsedTargets.invalidPositionalTokens.length === 0;
 }
 
 function focusedCommandExecutesValidation(command: string, repoRoot?: string): boolean {
@@ -1466,13 +1452,24 @@ function authenticatedFocusedCommandViolation(command: string, tokens: string[])
 export function inspectReviewerFocusedValidationCommand(command: string, repoRoot?: string, taskId?: string): {
     syntax_supported: boolean;
     target: string | null;
+    targets?: string[];
+    process_passed?: false;
     violations: string[];
 } {
     const violations: string[] = [];
-    const native = repoRoot && taskId ? readCurrentNativeFocusedCommand(repoRoot, taskId, command) : null;
+    const observation = repoRoot && taskId ? readCurrentNativeFocusedObservation(repoRoot, taskId, command) : null;
+    const native = observation?.entry;
     if (native) {
         const unsafe = authenticatedFocusedCommandViolation(command, getFocusedCommandTokens(command));
         return { syntax_supported: !unsafe, target: unsafe ? null : native.focused_test_paths[0],
+            ...(native.focused_test_paths.length > 1 ? { targets: unsafe ? [] : native.focused_test_paths } : {}),
+            violations: unsafe ? [`Reviewer focused self-validation must not ${unsafe}.`] : [] };
+    }
+    const declaredTargets = observation?.declaredTargets ?? [];
+    if (declaredTargets.length) {
+        const unsafe = authenticatedFocusedCommandViolation(command, getFocusedCommandTokens(command));
+        return { syntax_supported: !unsafe, target: unsafe ? null : declaredTargets[0],
+            ...(declaredTargets.length > 1 ? { targets: unsafe ? [] : declaredTargets } : {}), process_passed: false,
             violations: unsafe ? [`Reviewer focused self-validation must not ${unsafe}.`] : [] };
     }
     if (repoRoot && taskId) {
@@ -1484,7 +1481,8 @@ export function inspectReviewerFocusedValidationCommand(command: string, repoRoo
         if (recipe) {
             const unsafe = authenticatedFocusedCommandViolation(command, tokens);
             const reasons = [...recipe.violations, ...(unsafe ? [`Reviewer focused self-validation must not ${unsafe}.`] : [])];
-            return { syntax_supported: reasons.length === 0, target: reasons.length === 0 ? recipe.target : null, violations: reasons };
+            return { syntax_supported: reasons.length === 0, target: reasons.length === 0 ? recipe.target : null,
+                ...('targets' in recipe && recipe.targets ? { targets: reasons.length === 0 ? recipe.targets : [] } : {}), violations: reasons };
         }
     }
     const unsafeReason = getUnsafeFocusedCommandReason(command);
@@ -1498,25 +1496,28 @@ export function inspectReviewerFocusedValidationCommand(command: string, repoRoo
     return {
         syntax_supported: violations.length === 0,
         target: executesValidation ? getFocusedCommandTargetTokens(command, repoRoot)[0] : null,
+        ...(executesValidation && getFocusedCommandTargetTokens(command, repoRoot).length > 1
+            ? { targets: getFocusedCommandTargetTokens(command, repoRoot) } : {}),
         violations
     };
 }
 
 function focusedCommandExecutesMarkerTarget(command: string, markerTarget: string, repoRoot?: string, taskId?: string): boolean {
     const normalizedTarget = normalizeFocusedTargetPath(markerTarget);
-    if (repoRoot && taskId && readCurrentNativeFocusedCommand(repoRoot, taskId, command)) {
+    const observation = repoRoot && taskId ? readCurrentNativeFocusedObservation(repoRoot, taskId, command) : null;
+    if (observation && (observation.entry || observation.declaredTargets.length > 0)) {
         const inspection = inspectReviewerFocusedValidationCommand(command, repoRoot, taskId);
-        return inspection.syntax_supported && inspection.target === normalizedTarget;
+        return inspection.syntax_supported && (inspection.targets ?? [inspection.target]).includes(normalizedTarget);
     }
     if (repoRoot && taskId && inspectRecipeFocusedCommand(repoRoot, taskId, getFocusedCommandTokens(command))) {
         const inspection = inspectReviewerFocusedValidationCommand(command, repoRoot, taskId);
-        return inspection.syntax_supported && inspection.target === normalizedTarget;
+        return inspection.syntax_supported && (inspection.targets ?? [inspection.target]).includes(normalizedTarget);
     }
     const parsedTargets = parseFocusedCommandTargets(command, repoRoot);
     if (
-        parsedTargets.targets.length !== 1
+        parsedTargets.targets.length === 0
         || parsedTargets.invalidPositionalTokens.length > 0
-        || parsedTargets.targets[0] !== normalizedTarget
+        || !parsedTargets.targets.includes(normalizedTarget)
     ) {
         return false;
     }
@@ -1591,12 +1592,7 @@ function focusedAttemptBindsTargetToEvidence(
 }
 
 function isSafeRepositoryRelativeFocusedTarget(markerTarget: string): boolean {
-    const normalizedTarget = markerTarget.replace(/\\/gu, '/');
-    if (normalizedTarget.startsWith('/') || /^[a-z]:/iu.test(normalizedTarget)) {
-        return false;
-    }
-    const segments = normalizedTarget.split('/');
-    return segments.length > 0 && segments.every((segment) => segment !== '' && segment !== '.' && segment !== '..');
+    return isContainedFocusedTarget(markerTarget);
 }
 
 function validateFailedFocusedFindingLinks(
@@ -1631,13 +1627,11 @@ function validateFailedFocusedFindingLinks(
 
 function getMissingFocusedValidationMarkerTargets(finding: ReviewFinding): string[] {
     return [finding.title, finding.description]
-        .map((value) => MISSING_FOCUSED_VALIDATION_MARKER_PATTERN.exec(value))
-        .filter((match): match is RegExpExecArray => Boolean(match))
-        .map((match) => match[1] || match[2]);
+        .flatMap(parseMissingFocusedValidationMarkerTargets);
 }
 
 function containsMissingFocusedValidationClaim(value: string): boolean {
-    if (MISSING_FOCUSED_VALIDATION_MARKER_PATTERN.test(value)) return true;
+    if (parseMissingFocusedValidationMarkerTargets(value).length > 0) return true;
     for (const match of value.matchAll(MISSING_FOCUSED_VALIDATION_CLAIM_PATTERN)) {
         const prefix = value.slice(Math.max(0, match.index - FOCUSED_VALIDATION_CLAIM_PREFIX_LIMIT), match.index);
         if (!NEGATED_FOCUSED_VALIDATION_CLAIM_PREFIX_PATTERN.test(prefix)) return true;
@@ -1689,9 +1683,6 @@ function validateMissingFocusedMarkerOwnership(
         const markerTargets = getMissingFocusedValidationMarkerTargets(finding);
         if (markerTargets.length === 0) {
             violations.push('Finding id F-000 is reserved for the exact canonical missing-focused-validation marker.');
-        }
-        if (new Set(markerTargets).size > 1) {
-            violations.push('Finding id F-000 title and description must not declare different missing-focused-validation targets.');
         }
     }
     return evidenceOnlyFindings;

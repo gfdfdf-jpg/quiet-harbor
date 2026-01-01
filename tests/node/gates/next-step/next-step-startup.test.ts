@@ -703,17 +703,31 @@ describe('gates/next-step startup routing', () => {
         assert.deepEqual(result.commands, []);
     });
 
-    it('blocks a retained preflight which omitted legacy task requirements', () => {
+    it('recovers a retained preflight which omitted legacy task requirements after task entry', () => {
         const repoRoot = makeTempRepo();
         const taskPath = path.join(repoRoot, 'TASK.md');
         fs.writeFileSync(taskPath, fs.readFileSync(taskPath, 'utf8').replace('Test queue entry.',
             'Reviews: api; Required reviews: code.'));
         writePreflight(repoRoot, TASK_ID, { code: true, api: false }, { seedPostPreflight: false });
+        // Native startup must happen before refreshing an incomplete retained classification.
+        const startup = resolveNextStep({ taskId: TASK_ID, repoRoot });
+        assert.equal(startup.status, 'BLOCKED');
+        assert.equal(startup.next_gate, 'enter-task-mode');
+        assert.equal(startup.commands.length, 1);
+        assert.match(startup.commands[0].command, /gate enter-task-mode/u);
+        seedStartedTask(repoRoot, TASK_ID);
+
         const result = resolveNextStep({ taskId: TASK_ID, repoRoot });
+        assert.equal(result.status, 'BLOCKED');
         assert.equal(result.next_gate, 'task-metadata-validation');
         assert.match(result.reason, /preflight omits currently declared required reviews: api/u);
         assert.match(result.reason, /native recovery/u);
         assert.doesNotMatch(result.reason, /Correct the task notes/u);
+        assert.equal(result.commands.length, 1);
+        assert.match(result.commands[0].command, /gate classify-change/u);
+        // The native refresh/progress assertion lives in gates-task-required-reviews.test.ts;
+        // this minimal routing fixture has no compiled dependency graph or frozen profile policy.
+        assert.match(fs.readFileSync(taskPath, 'utf8'), /Reviews: api; Required reviews: code\./u);
     });
 
     it('uses task profile depth for fresh task-mode command defaults', () => {

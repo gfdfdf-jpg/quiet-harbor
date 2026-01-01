@@ -297,7 +297,7 @@ describe('gates/next-step split-required latch finalization', () => {
         assert.equal(result.status, 'SPLIT_REQUIRED');
         assert.equal(result.next_gate, 'split-required-latch');
         assert.equal(result.commands.length, 0);
-        assert.ok(result.reason.includes('cannot continue through classify, compile, review, full-suite, completion, or final closeout gates'));
+        assert.ok(result.reason.includes('cannot continue through classify, compile, review, task test validation, completion, or final closeout gates'));
         assert.ok(fs.readFileSync(path.join(repoRoot, 'TASK.md'), 'utf8').includes('| T-638 | 🟫 SPLIT_REQUIRED |'));
         assert.ok(text.includes('Status: SPLIT_REQUIRED'));
     });

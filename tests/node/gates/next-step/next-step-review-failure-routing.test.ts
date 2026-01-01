@@ -2345,7 +2345,7 @@ describe('gates/next-step', { concurrency: 2 }, () => {
         assert.match(result.title, /Prepare 'security' review context/);
     });
 
-    it('shares one TASK.md observation across review lanes while retaining native parent audit reads', () => {
+    it('shares one TASK.md observation across review lanes and native parent audit input', () => {
         const repoRoot = makeTempRepo({ currentSkillBinding: true, currentSkillIds: ['code-review', 'security-review'] });
         seedStartedTask(repoRoot, TASK_ID);
         writePreflight(repoRoot, TASK_ID, { ...ALL_REVIEW_FLAGS, code: true, security: true }, {
@@ -2392,9 +2392,11 @@ describe('gates/next-step', { concurrency: 2 }, () => {
             assert.notEqual(result.status, 'FAILED', `${result.next_gate}: ${result.title} :: ${result.reason}`);
             assert.ok(measurement);
             // Q2 hashes one shared queue observation regardless of lanes/fingerprints.
-            // Native parent-obligation qualification separately reads its input and
-            // lifecycle facts; retain and count both, rather than hiding descriptor I/O.
-            assert.equal(measurement.work['payload_read:' + taskPath], 3);
+            // Native parent-obligation input and lifecycle facts reuse those
+            // descriptor-verified bytes after a live transaction-path authority check;
+            // the invocation revalidates them at exit. Only a qualifying parent adds
+            // live transaction checkpoints (task-audit-parent-read-cost.test.ts).
+            assert.equal(measurement.work['payload_read:' + taskPath], 1);
             assert.equal(measurement.work['file_hash:' + taskPath], 1);
         }
     });
@@ -3474,9 +3476,9 @@ describe('gates/next-step', { concurrency: 2 }, () => {
         assert.equal(result.next_gate, 'compile-gate');
         assert.equal(result.review.next_review_type, 'code');
         assert.match(result.title, /Refresh validation evidence for 'code' review/);
-        assert.match(result.reason, /stale compile\/full-suite validation evidence/);
+        assert.match(result.reason, /stale compile\/task test validation evidence/);
         assert.match(result.reason, /do not make fake implementation changes/);
-        assert.match(result.reason, /configured full-suite validation/);
+        assert.match(result.reason, /configured task test validation/);
         assert.equal(result.commands[0].label, 'Run compile gate to refresh validation evidence');
         assert.ok(result.commands[0].command.includes('gate compile-gate'));
         assert.ok(!result.commands[0].command.includes('record-review-result'));
@@ -3534,7 +3536,7 @@ describe('gates/next-step', { concurrency: 2 }, () => {
         assert.equal(result.status, 'BLOCKED');
         assert.equal(result.next_gate, 'compile-gate');
         assert.equal(result.review.next_review_type, 'code');
-        assert.match(result.reason, /stale compile\/full-suite validation evidence/);
+        assert.match(result.reason, /stale compile\/task test validation evidence/);
         assert.ok(result.commands[0].command.includes('gate compile-gate'));
         assert.ok(!result.commands[0].command.includes('record-review-result'));
     });

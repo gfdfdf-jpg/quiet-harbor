@@ -4,6 +4,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { appendTaskEvent } from '../../../../src/gate-runtime/task-events';
+import { withInvocationReadObservation } from '../../../../src/core/invocation-read-observation';
+import { readInvocationVerifiedEventIndex } from '../../../../src/gate-runtime/timeline/task-events-integrity';
 import { acquireFilesystemLock, releaseFilesystemLock } from '../../../../src/gate-runtime/task-events-locking';
 import { buildNoOpArtifact } from '../../../../src/gates/task-mode/no-op';
 import { fileSha256 } from '../../../../src/gates/shared/helpers';
@@ -72,10 +74,29 @@ for (const [eventType, details] of [
         appendTaskEvent(path.join(repoRoot, 'garda-agent-orchestrator'), 'T-103', eventType, 'PASS', 'End receiver lifecycle.', details);
         writeQueue(repoRoot, 'IN_PROGRESS', 'IN_PROGRESS');
         assert.deepEqual(findUnapprovedActiveImplementationOwners(repoRoot, 'T-103'), ['T-101']);
+        withInvocationReadObservation(() => {
+            const timeline = path.join(repoRoot, 'garda-agent-orchestrator/runtime/task-events/T-103.jsonl');
+            assert.ok(readInvocationVerifiedEventIndex(timeline, 'T-103'), 'exercise the verified index');
+            assert.deepEqual(findUnapprovedActiveImplementationOwners(repoRoot, 'T-103'), ['T-101']);
+        });
         assert.throws(() => runEnterTaskMode(reentry), /Ask the operator/u);
         assert.equal(runEnterTaskMode({ ...reentry, ...fresh, operatorConfirmedAtUtc: new Date().toISOString() }).exitCode, 0);
     });
 }
+
+test('indexed ownership accepts active status updates and rejects a damaged approval journal', t => {
+    const { repoRoot } = seedConfirmedReceiver(t);
+    const bundle = path.join(repoRoot, 'garda-agent-orchestrator');
+    const timeline = path.join(bundle, 'runtime/task-events/T-103.jsonl');
+    appendTaskEvent(bundle, 'T-103', 'STATUS_CHANGED', 'PASS', 'Receiver enters review.', { new_status: 'IN_REVIEW' });
+    writeQueue(repoRoot, 'IN_PROGRESS', 'IN_REVIEW');
+    withInvocationReadObservation(() => {
+        assert.ok(readInvocationVerifiedEventIndex(timeline, 'T-103'), 'exercise the verified index');
+        assert.deepEqual(findUnapprovedActiveImplementationOwners(repoRoot, 'T-103'), []);
+    });
+    fs.appendFileSync(timeline, '{invalid\n');
+    assert.deepEqual(withInvocationReadObservation(() => findUnapprovedActiveImplementationOwners(repoRoot, 'T-103')), ['T-101']);
+});
 
 test('inactive receiver queue status cannot reuse consent even without an ending event', t => {
     const { repoRoot } = seedConfirmedReceiver(t);

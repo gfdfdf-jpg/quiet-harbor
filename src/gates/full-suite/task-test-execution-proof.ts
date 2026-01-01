@@ -6,6 +6,39 @@ import { prepareValidationReportCapture, completeValidationReportCapture } from 
 import type { ValidationReportCapture, ValidationReportCaptureStart } from '../../core/validation-report-contract';
 import { joinOrchestratorPath, normalizePath } from '../../core/orchestrator-paths';
 import { assertFreshValidationReport } from '../../core/validation-report-capture';
+import { taskValidationProcessViolations, reusableTaskValidationPlan, type TaskValidationPlan } from '../../core/task-validation-plan';
+import { isPlainRecord } from '../../core/records';
+import { validationDigest } from '../../core/project-validation-identity';
+
+/** Compatibility reader: old records are projected, never rewritten into new executions. */
+export function taskTestProcessEvidenceViolations(plan: TaskValidationPlan | undefined, artifact: unknown, legacyPlan?: TaskValidationPlan,
+    authenticatedTaskCycleRebind = false): string[] {
+    if (!isPlainRecord(artifact)) return ['Task test process integrity: invalid execution artifact. Rerun selected own tests.'];
+    if (!plan && artifact.task_test_process_evidence !== undefined) plan = legacyPlan;
+    if (!plan) return legacyPlan?.binding && artifact.task_test_process_evidence === undefined
+        && artifact.exit_code === 0 && artifact.timed_out === false
+        && isPlainRecord(artifact.command_provenance) && isPlainRecord(artifact.command_provenance.command_descriptor)
+        && validationDigest(artifact.command_provenance.command_descriptor) === validationDigest(legacyPlan.descriptor)
+        && isPlainRecord(artifact.cycle_binding) && artifact.cycle_binding.task_id === legacyPlan.binding.task_id
+        && artifact.cycle_binding.preflight_sha256 === legacyPlan.binding.preflight_sha256
+        && isPlainRecord(artifact.cycle_binding.scope_binding)
+        && artifact.cycle_binding.scope_binding.scope_sha256 === legacyPlan.binding.scope_sha256
+        && artifact.cycle_binding.scope_binding.scope_content_sha256 === legacyPlan.binding.scope_content_sha256
+        && typeof artifact.cycle_binding.compile_gate_timestamp === 'string'
+        && Date.parse(artifact.cycle_binding.compile_gate_timestamp) >= Date.parse(legacyPlan.binding.selected_at) ? []
+        : ['Task test process identity is insufficient for reuse in this scope. Select current own tests and rerun task-test-validation; retain the old result unchanged.'];
+    plan = reusableTaskValidationPlan(plan, artifact.task_test_validation_plan, authenticatedTaskCycleRebind) ?? plan;
+    const violations = taskValidationProcessViolations(plan, artifact.task_test_process_evidence);
+    const expectedScope = validationDigest([isPlainRecord(artifact.cycle_binding) ? artifact.cycle_binding.scope_binding : undefined, plan]);
+    if (isPlainRecord(artifact.task_test_process_evidence) && Array.isArray(artifact.task_test_process_evidence.invocations)
+        && artifact.task_test_process_evidence.invocations.some(invocation => !isPlainRecord(invocation)
+            || invocation.scope_before !== expectedScope))
+        violations.push('Task test process integrity: execution scope differs from its selected cycle. Select current own tests and rerun task-test-validation.');
+    return violations;
+}
+
+/** Adapter observations are informational; missing/unsupported reports never revoke process PASS. */
+export const TASK_TEST_ADAPTERS = Object.freeze([{ id: 'maven-junit', version: 1, supports: isMaven }]);
 
 interface TargetCapture { target: string; className: string; starts: ValidationReportCaptureStart[] }
 
@@ -60,8 +93,9 @@ export function taskTestExecutionProofSatisfied(command: string, targets: readon
 }
 
 export function startTaskTestExecutionProof(root: string, command: string, targets: readonly string[]): TargetCapture[] {
-    if (!isMaven(command)) return [];
-    return targets.map(target => {
+    if (!TASK_TEST_ADAPTERS.some(adapter => adapter.supports(command))) return [];
+    return targets.flatMap(target => {
+        try {
         const source = readValidationFile(root, target).bytes.toString('utf8');
         const layout = mavenTargetLayout(target);
         const packageName = /^\s*package\s+([\w.]+)\s*;/mu.exec(source)?.[1];
@@ -75,7 +109,8 @@ export function startTaskTestExecutionProof(root: string, command: string, targe
             [{ path: reportPath(layout.module, directory, className), max_bytes: 1024 * 1024 }],
             { evidenceDirectory: normalizePath(path.relative(root, joinOrchestratorPath(root, `runtime/validation-output/task-test-proof-${randomUUID()}`))),
                 excludedPaths: targets })!);
-        return { target, className, starts };
+        return [{ target, className, starts }];
+        } catch { return []; } // Unsupported layout/report location falls back to generic evidence.
     });
 }
 
@@ -84,7 +119,10 @@ export function completeTaskTestExecutionProof(root: string, captures: TargetCap
 } {
     const reports: ValidationReportCapture[] = [], violations: string[] = [];
     for (const capture of captures) {
-        const attempts = capture.starts.map(start => completeValidationReportCapture(root, start)!);
+        const attempts = capture.starts.flatMap(start => {
+            try { const attempt = completeValidationReportCapture(root, start); return attempt ? [attempt] : []; }
+            catch { return []; }
+        });
         const proof = attempts.find(attempt => !attempt.violations.length && attempt.reports.some(report => {
             const xml = Buffer.from(report.content_base64, 'base64').toString('utf8').replace(/<!--[\s\S]*?-->/gu, '');
             if (/<!DOCTYPE|<!ENTITY/iu.test(xml)) return false;
@@ -93,8 +131,10 @@ export function completeTaskTestExecutionProof(root: string, captures: TargetCap
                 /\bclassname\s*=\s*(["'])(.*?)\1/u.exec(test[1])?.[2] === capture.className
                 && !/<(?:skipped|failure|error)\b/u.test(test[2] ?? ''));
         }));
-        if (proof) reports.push(proof);
-        else violations.push(`No fresh Surefire/Failsafe execution report proves target ${capture.target} ran. Inspect the module and parent POM skip/includes/excludes settings, clear stale target reports, and rerun the task selection and validation with a runner that executes this class.`);
+        reports.push(...attempts.filter(attempt => attempt.reports.length > 0));
+        if (!proof) violations.push(`Maven adapter finding: no fresh unskipped Surefire/Failsafe testcase was observed for ${capture.target}. Review the declared runner, target mapping and process evidence.`);
+        if (attempts.some(attempt => attempt.reports.some(report => /<(?:skipped|failure|error)\b/u.test(Buffer.from(report.content_base64, 'base64').toString('utf8')))))
+            violations.push(`Maven adapter finding: retained cases for ${capture.target} include skipped, failed or errored observations. Resolve these facts in the existing independent review.`);
     }
     return { reports, violations };
 }

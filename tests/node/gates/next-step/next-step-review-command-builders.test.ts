@@ -11,6 +11,7 @@ import {
     buildRestartReviewCycleCommand
 } from '../../../../src/gates/next-step/next-step-review-command-builders';
 import { quoteCommandValue } from '../../../../src/core/command-quoting';
+import { resolveRestartTaskIntentFromPreflightPath } from '../../../../src/gates/review-context/review-context-task-criteria-binding';
 import { REMEDIATION_IMPACT_ANALYSIS_TOPICS, resolveReviewRemediationImpactAnalysis }
     from '../../../../src/cli/commands/gate-flows/recovery/recovery-flow-remediation-impact-analysis';
 
@@ -29,6 +30,19 @@ function writeTaskMode(repoRoot: string, taskId: string, payload: Record<string,
 }
 
 describe('gates/next-step review command builders', () => {
+    it('keeps refined preflight intent in later restart suggestions', () => {
+        const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'garda-refined-restart-'));
+        try {
+            const intent = 'Export personal data securely: authentication and authorization';
+            fs.writeFileSync(path.join(repoRoot, 'preflight.json'), JSON.stringify({
+                effective_review_snapshot: { inputs: { task_intent: intent } }
+            }));
+            const resolved = resolveRestartTaskIntentFromPreflightPath(repoRoot, 'T-1', 'preflight.json', { task_summary: 'Original wording' });
+            const command = buildRestartReviewCycleCommand(repoRoot, 'node bin/garda.js', 'T-1', resolved,
+                'preflight.json', null, [], { includeChangedFileScope: false });
+            assert.ok(command.includes(`--task-intent "${intent}"`), command);
+        } finally { fs.rmSync(repoRoot, { recursive: true, force: true }); }
+    });
     it('shows every required impact topic and rejects untouched or partially filled guidance', () => {
         const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'garda-impact-guidance-'));
         try {

@@ -2,7 +2,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { parseCommandChain } from '../../core/command-line';
 import { getClassificationConfig } from '../preflight/classify-change-config';
-import { isTestScopePath } from '../../core/file-role-bindings';
+import { isTestScopePath, createTaskTestScopeMatcher } from '../../core/file-role-bindings';
 import { createInvocationReadMemoKey, memoizeInvocationRead } from '../../core/invocation-read-observation';
 
 const CHANGED_TEST_PATHS = createInvocationReadMemoKey<readonly string[]>('changed-test-paths');
@@ -11,16 +11,19 @@ function isExistingDirectory(repoRoot: string, value: string): boolean {
     try { return fs.statSync(path.resolve(repoRoot, value)).isDirectory(); } catch { return false; }
 }
 
-export function getChangedTestPaths(repoRoot: string, changedFiles: readonly string[]): readonly string[] {
+export function getChangedTestPaths(repoRoot: string, changedFiles: readonly string[], declaredTests: readonly string[] = []): readonly string[] {
     const files = changedFiles.map(file => file.replace(/\\/gu, '/'));
-    return memoizeInvocationRead(CHANGED_TEST_PATHS, JSON.stringify([path.resolve(repoRoot), files]), () => {
+    return memoizeInvocationRead(CHANGED_TEST_PATHS, JSON.stringify([path.resolve(repoRoot), files, declaredTests]), () => {
         const classification = getClassificationConfig(repoRoot);
-        return Object.freeze(files.filter(file => isTestScopePath(file, classification.test_trigger_regexes, classification.file_roles)
+        const isTaskTest = createTaskTestScopeMatcher(classification.test_trigger_regexes, classification.file_roles, declaredTests);
+        return Object.freeze(files.filter(file => isTaskTest(file)
             && fs.existsSync(path.resolve(repoRoot, file))));
     }).value;
 }
 
-/** Return only provable exclusions; do not infer coverage from a successful command. */
+/** Legacy adapter observations. New task plans use the generic association contract.
+ * These observations may be shown to review, never substituted for process identity or semantics.
+ */
 export function getExcludedChangedTests(repoRoot: string, command: string, changedFiles: readonly string[]): string[] {
     return getExcludedTestPaths(repoRoot, command, getChangedTestPaths(repoRoot, changedFiles));
 }

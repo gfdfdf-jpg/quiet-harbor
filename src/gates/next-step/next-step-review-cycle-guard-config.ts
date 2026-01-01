@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import { normalizeReviewCycleGuardConfig } from '../../core/review-cycle-guard';
 import { buildDefaultWorkflowConfig } from '../../core/workflow-config';
 import { validateWorkflowConfig } from '../../schemas/config-artifacts';
-import { resolveWorkflowConfigPath } from '../full-suite/full-suite-validation';
+import { resolveWorkflowConfigPath } from '../../core/full-suite-validation-config';
 import { toRepoDisplayPath } from './next-step-command-formatters';
 import { isPlainRecord } from '../../core/records';
 function fileExists(filePath: string): boolean {

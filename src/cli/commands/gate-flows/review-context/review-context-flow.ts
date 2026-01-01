@@ -25,7 +25,7 @@ import {
     type AuthoritativeReviewRemediationDecision,
     type ReviewRemediationDecisionClassification
 } from '../../../../gates/review-remediation/review-remediation-recovery-routing';
-import { resolveEvidenceOnlyCarriedLaneOrigin } from '../../../../gates/review-remediation/review-remediation-execution-authority';
+import { resolveEvidenceOnlyCarriedLaneOrigin, resolvePreservedDeltaReviewExecutionAuthority, resolvePersistedRemediationReviewExecutionAuthority } from '../../../../gates/review-remediation/review-remediation-execution-authority';
 import {
     buildReviewRemediationReviewContract,
     getReviewRemediationReviewContractViolations,
@@ -661,9 +661,9 @@ export async function runBuildReviewContextCommand(
             });
         }
     }
-    const effectiveReviewExecutionContract = reviewExecutionContract
+    let effectiveReviewExecutionContract = reviewExecutionContract
         || persistedRemediationReusePolicy.reviewExecutionContract;
-    const effectiveReviewExecutionValidationAuthority = reviewExecutionValidationAuthority
+    let effectiveReviewExecutionValidationAuthority = reviewExecutionValidationAuthority
         || persistedRemediationReusePolicy.reviewExecutionValidationAuthority;
     if (persistedRemediationReusePolicy.failClosed) {
         throw new Error(persistedRemediationReusePolicy.blockedReason);
@@ -692,6 +692,38 @@ export async function runBuildReviewContextCommand(
             previousReviewContextText = null;
             previousReviewContextReuseSha256 = null;
         }
+    }
+    const originalExecutionContract = effectiveReviewExecutionContract;
+    const originalExecutionAuthority = effectiveReviewExecutionValidationAuthority;
+    const preservationAuthority = reuseAuthority?.validationAuthority || originalExecutionAuthority;
+    let preservingDelta = false;
+    if (!effectiveReviewReuseBlockedReason && previousReviewContextText && taskId) {
+        try {
+            const previous = JSON.parse(previousReviewContextText) as Record<string, unknown>;
+            const execution = previous.review_execution as ReviewRemediationReviewContract | undefined;
+            const currentPreflightSha256 = execution?.mode === 'DELTA' ? fileSha256(preflightPath) : null;
+            const preservationOptions = execution?.mode === 'DELTA' && currentPreflightSha256
+                && execution.preflight_sha256 !== currentPreflightSha256 ? {
+                reviewsRoot: path.dirname(preflightPath), taskId, reviewType,
+                preflightSha256: currentPreflightSha256, preflightPath,
+                fullReviewScope: readReviewContextChangedFiles(preflightPayload.changed_files),
+                reviewExecution: execution, reviewContextPath: outputPath,
+                receiptPath: path.join(path.dirname(preflightPath), taskId + '-' + reviewType + '-receipt.json')
+            } : null;
+            // After the first carry-forward the policy may expose the historical authority, or none.
+            // Recover the separate current preservation decision from signed history before trying the
+            // not-yet-published decision supplied by restart-review-cycle.
+            const persisted = preservationOptions ? resolvePersistedRemediationReviewExecutionAuthority(preservationOptions) : null;
+            const preserved = persisted?.preserved_current_scope ? persisted
+                : preservationOptions && preservationAuthority ? resolvePreservedDeltaReviewExecutionAuthority({
+                    ...preservationOptions, preservingAuthority: preservationAuthority
+                }) : null;
+            if (preserved && execution) {
+                effectiveReviewExecutionContract = execution;
+                effectiveReviewExecutionValidationAuthority = preserved;
+                preservingDelta = true;
+            }
+        } catch { /* Unreadable origin stays on the ordinary FULL fallback. */ }
     }
     const currentPassReviewEvidenceAccepted = shouldAcceptCurrentPassReviewEvidence(
         currentPassReviewEvidence,
@@ -729,7 +761,7 @@ export async function runBuildReviewContextCommand(
         });
         return persistedQualityCommandResult;
     }
-    const result = buildReviewContext({
+    const buildCurrentContext = () => buildReviewContext({
         reviewType,
         depth,
         preflightPath,
@@ -748,6 +780,15 @@ export async function runBuildReviewContextCommand(
         reviewExecutionContract: effectiveReviewExecutionContract,
         reviewExecutionValidationAuthority: effectiveReviewExecutionValidationAuthority
     });
+    let result: ReturnType<typeof buildCurrentContext>;
+    try { result = buildCurrentContext(); }
+    catch (error) {
+        if (!preservingDelta) throw error;
+        effectiveReviewExecutionContract = originalExecutionContract;
+        effectiveReviewExecutionValidationAuthority = originalExecutionAuthority;
+        preservingDelta = false;
+        result = buildCurrentContext();
+    }
     let reviewReuseResult: ReviewReuseResult = {
         reused: false,
         receiptPath: null,
@@ -770,7 +811,6 @@ export async function runBuildReviewContextCommand(
             telemetryLockRetryMs: options.telemetryLockRetryMs
         });
 
-        const preservationAuthority = reuseAuthority?.validationAuthority || effectiveReviewExecutionValidationAuthority;
         try {
             reviewReuseResult = effectiveReviewReuseBlockedReason
                 ? {
@@ -781,6 +821,7 @@ export async function runBuildReviewContextCommand(
                     reason: effectiveReviewReuseBlockedReason
                 }
                 : await tryReuseReviewEvidence({
+                    reviewExecutionValidationAuthority: effectiveReviewExecutionValidationAuthority,
                     repoRoot,
                     taskId,
                     reviewType,
@@ -805,6 +846,17 @@ export async function runBuildReviewContextCommand(
                 reason: `review reuse check failed: ${error instanceof Error ? error.message : String(error)}`
             };
         }
+    }
+
+    // A preserved DELTA context exists only to reuse the authenticated work. Never expose it as a fresh review fallback.
+    if (preservingDelta && !reviewReuseResult.reused) {
+        effectiveReviewExecutionContract = originalExecutionContract;
+        effectiveReviewExecutionValidationAuthority = originalExecutionAuthority;
+        result = buildCurrentContext();
+        if (taskId) await emitGeneratedReviewContextPreparationTelemetry({ repoRoot, taskId, reviewType, depth,
+            preflightPath, outputPath: result.output_path, ruleContextArtifactPath: result.rule_context.artifact_path,
+            selectedSkill: result.rule_context.selected_skill, telemetryLockTimeoutMs: options.telemetryLockTimeoutMs,
+            telemetryLockRetryMs: options.telemetryLockRetryMs });
     }
 
     if (effectivePersistedRemediationReuseRequired && !reviewReuseResult.reused) {

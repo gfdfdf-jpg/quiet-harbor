@@ -1,3 +1,5 @@
+// The route observer must instrument next-step before any scenario module imports it.
+import '../synthetic/engine/walk-route-observer';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as path from 'node:path';
@@ -6,7 +8,7 @@ import * as os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { beginRouteObservation, extractRoutes, observeRouteConstruction, reachedRoutePoints, readRouteInventory, routeCoverage } from '../synthetic/engine/walk-routes';
-import { analyzeWalkMetrics, anomalyFindings, fittedGrowth, workCounters, type CounterBaseline } from '../synthetic/engine/walk-metrics';
+import { analyzeWalkMetrics, anomalyFindings, fittedGrowth, verdictResult, workCounters, type CounterBaseline } from '../synthetic/engine/walk-metrics';
 import { walkFixtureByteNormalizer } from '../synthetic/engine/walk-byte-normalization';
 import { buildWalkReport } from '../synthetic/engine/walk-report';
 import { applicableDisturbances, artifactKind, buildSweepScenarios, captureArtifactReads, hasHumanRecovery, isActionableIntegrityRefusal, isCompletedSweepReset,
@@ -21,7 +23,6 @@ import { quoteProviderForCommand, usesPowerShellEnvironmentSyntax } from '../../
 import { matchesDisturbanceSelection, SAMPLE_WALK_SCENARIOS, walkRunPlan } from '../synthetic/engine/walk-plan';
 import { WALK_SCENARIOS } from '../synthetic/engine/walk-scenarios';
 import { captureWalkOutput } from '../synthetic/engine/walk-output';
-// Loaded after navigator-walk: the guard imports next-step, which the route observer must instrument first.
 import { formatOutOfOrderRefusal } from '../../../src/cli/commands/gate-flows/support/out-of-order-gate-guard';
 
 test('non-Git refusal progress hashes source changes but not runtime bookkeeping', () => {
@@ -169,6 +170,42 @@ test('timeline byte budgets normalize fixture paths while retaining actual paylo
         .some(entry => entry.metric === 'timeline_bytes_normalization_failed' && entry.kind === 'missing-baseline'));
 });
 
+test('per-file counters aggregate the same way under a Windows drive and a POSIX root, and the route counter set stays bounded', () => {
+    const work = (root: string) => ({ ['timeline_capture:' + root + '/runtime/task-events/T-WALK.jsonl']: 1,
+        ['timeline_payload_read:' + root + '/runtime/reviews/T-WALK-task-mode.json']: 2, ['file_hash:' + root + '/src/a.ts']: 3,
+        ['visit:verified_timeline_index_event']: 4, timeline_parse: 1 });
+    const windows = workCounters({ ...step(0), measurement: { phases_ms: {}, work: work('C:/Temp/garda-walk-AbC123') } });
+    const linux = workCounters({ ...step(0), measurement: { phases_ms: {}, work: work('/tmp/garda-walk-xYz789') } });
+    assert.deepEqual(linux, windows);
+    assert.deepEqual(Object.keys(linux).sort(), ['file_hash:file', 'timeline_capture:file', 'timeline_parse', 'timeline_payload_read:file',
+        'visit:verified_timeline_index_event']);
+    // Twenty scenarios on twenty Linux fixture roots measure one counter set, not twenty.
+    const results = Array.from({ length: 20 }, (_unused, index) => ({ ...result([{ ...step(0),
+        measurement: { phases_ms: {}, work: work('/tmp/garda-walk-' + index) } }]), scenarioId: 'linux-' + index }));
+    const [route] = analyzeWalkMetrics(results, BASELINE, false).routes;
+    assert.equal(Object.keys(route.counters).length, 5);
+    assert.ok(route.growthByScenario.every(entry => Object.keys(entry.counters).length === 5));
+});
+
+test('the merge projection keeps every work key a verdict reads and yields the identical report', () => {
+    const steps = [0, 1, 2].map(index => ({ ...step(index, 10 + index), measurement: { phases_ms: { total: 9 },
+        io: { lstatSync: { count: 12 }, existsSync: { count: 3 } }, work: {
+            ['payload_read:/tmp/garda-walk-a/TASK.md']: 1 + index, ['file_hash:/tmp/garda-walk-a/src/' + index + '.ts']: 2,
+            ['process:git:' + index]: 1, ['subprocess_timeout:git']: index === 2 ? 1 : 0, ['timeline_capture:/tmp/garda-walk-a/T.jsonl']: 1,
+            timeline_parse: 1, ['root_chain_probe:lstatSync:0/3']: 2, ['root_chain_probe:lstatSync:1/3']: 2, ['root_chain_probe:lstatSync:2/3']: 2,
+            ['visit:derivation_descriptor_value']: 4000 + index, ['native_realpath_observation:/tmp/garda-walk-a']: 1,
+            ['artifact_json_parse:/tmp/garda-walk-a/x.json']: index } } }) as unknown as WalkStep);
+    const raw = [result(steps)];
+    const projected = raw.map(verdictResult);
+    assert.deepEqual(Object.keys(projected[0].steps[0].measurement!.work).filter(key => /visit:derivation|native_realpath|artifact_json/u.test(key)), []);
+    assert.ok(Object.keys(raw[0].steps[0].measurement!.work).some(key => key.startsWith('visit:derivation')), 'The stored record is not mutated');
+    for (const baseline of [BASELINE, { ...BASELINE, routes: { 'BLOCKED/compile-gate': { payload_reads: { expected: 1, tolerance: 0, constantWithEvents: true },
+        'subprocess:git': { expected: 0, tolerance: 0, constantWithEvents: true }, 'file_probes:lstatSync': { expected: 1, tolerance: 0, constantWithEvents: false } } } }]) {
+        assert.deepEqual(analyzeWalkMetrics(projected, baseline, false), analyzeWalkMetrics(raw, baseline, false));
+    }
+    assert.deepEqual(JSON.parse(JSON.stringify(buildWalkReport(projected, []))), JSON.parse(JSON.stringify(buildWalkReport(raw, []))));
+});
+
 test('a declared handoff requires the exact terminal gate, status and guidance, even if a walk reaches DONE', () => {
     const scenario: WalkScenario = { id: 'handoff', edits: [], expectedReviews: {}, expectedModes: [],
         expectedBlockedGate: null, expectedGuidance: /Restore its original approved bytes/u };
@@ -257,9 +294,15 @@ function preSelectionCounterBaseline(): CounterBaseline {
 test('selection calibration retains subprocess limits and rejects work above each measured bound', () => {
     const baseline = JSON.parse(fs.readFileSync('tests/node/synthetic/walk-counter-baseline.json', 'utf8')) as CounterBaseline;
     const calibration = readSelectionCounterCalibration();
+    const nativeShapes = JSON.parse(fs.readFileSync('tests/node/synthetic/native-counter-input-shapes.json', 'utf8')) as { shapes: Array<{ id: string }> };
+    const laterProfiles = new Set(['stack-fixture-spring-maven-two-modules', 'native-api-selected-initial',
+        'native-api-selected-remediation', ...nativeShapes.shapes.map(shape => shape.id)]);
     const sections: Record<string, { routes: CounterBaseline['routes'] }> = { ordinary: baseline, ...baseline.states };
-    const subprocessBudgets = Object.entries(sections).flatMap(([state, section]) => Object.entries(section.routes)
-        .flatMap(([route, metrics]) => Object.entries(metrics).filter(([metric]) => metric.startsWith('subprocess:'))
+    // Preserve the original fingerprint: later sealed profiles and the newly observed PowerShell metric
+    // have their own calibrations. Every current subprocess ceiling is exercised by the test below.
+    const subprocessBudgets = Object.entries(sections).filter(([state]) => !laterProfiles.has(state))
+        .flatMap(([state, section]) => Object.entries(section.routes)
+        .flatMap(([route, metrics]) => Object.entries(metrics).filter(([metric]) => metric.startsWith('subprocess:') && metric !== 'subprocess:powershell.exe')
             .map(([metric, budget]) => [state + '|' + route + '|' + metric, budget] as const)))
         .sort(([a], [b]) => a.localeCompare(b));
     assert.equal(createHash('sha256').update(JSON.stringify(subprocessBudgets)).digest('hex'), calibration.unchangedSubprocessBudgetSha256);
@@ -297,6 +340,36 @@ test('selection calibration retains subprocess limits and rejects work above eac
         assert.equal(probe.before['visit:timeline_cloned_event'] ?? 0, 0);
         assert.equal(probe.after['visit:timeline_cloned_event'] ?? 0, 0);
     }
+});
+
+test('all current subprocess calibration sections reject one extra call', () => {
+    const baseline = JSON.parse(fs.readFileSync('tests/node/synthetic/walk-counter-baseline.json', 'utf8')) as CounterBaseline;
+    const sections: Record<string, { routes: CounterBaseline['routes'] }> = { ordinary: baseline, ...baseline.states };
+    const currentBudgets = Object.entries(sections).flatMap(([state, section]) => Object.entries(section.routes)
+        .flatMap(([route, metrics]) => Object.entries(metrics).filter(([metric]) => metric.startsWith('subprocess:'))
+            .map(([metric, budget]) => [state + '|' + route + '|' + metric, budget] as const)))
+        .sort(([a], [b]) => a.localeCompare(b));
+    // Lock the complete separately accepted surface too; the original calibration hash above stays unchanged.
+    assert.equal(createHash('sha256').update(JSON.stringify(currentBudgets)).digest('hex'),
+        '9c0adc6eea0b010b785fb4b0fb779636c421aac5aaf158e3c0da669a7188e052');
+    const programs = new Set<string>();
+    for (const [state, section] of Object.entries(sections)) for (const [route, metrics] of Object.entries(section.routes)) {
+        for (const [metric, budget] of Object.entries(metrics)) {
+            if (!metric.startsWith('subprocess:')) continue;
+            const program = metric.slice('subprocess:'.length), limit = budget.expected + budget.tolerance;
+            programs.add(program);
+            for (const extra of [0, 1]) {
+                const current = { ...step(0), route, counterState: state === 'ordinary' ? undefined : state,
+                    measurement: { phases_ms: {}, work: { ['process:spawnSync:' + program + ':calibration-control']: limit + extra } } };
+                const failures = analyzeWalkMetrics([result([current])], baseline, false).anomalies
+                    .filter(entry => entry.kind === 'counter-budget' && entry.metric === metric);
+                assert.equal(failures.length, extra, state + '/' + route + '/' + metric);
+            }
+        }
+    }
+    assert.ok(programs.has('git'));
+    assert.ok(programs.has('icacls.exe'));
+    assert.ok(programs.has('powershell.exe'));
 });
 
 test('review fixes calibrate unique payload reads and the actual selection and native-ref routes', () => {
@@ -1039,7 +1112,8 @@ test('a run without walk variables walks only the sample; full and sweep need an
     assert.deepEqual(discovery.scenarioIds, [...SAMPLE_WALK_SCENARIOS]);
     assert.equal(discovery.runSweep, false);
     assert.ok(discovery.timeoutMs <= 1_800_000, 'A normal run must stay inside a shard budget');
-    assert.equal(walkRunPlan({ GARDA_SYNTHETIC_WALK_LEVEL: 'full' }, ids).scenarioIds.length, ids.length);
+    // Deep stack-review families rotate by seed and run only at the sweep level.
+    assert.deepEqual(walkRunPlan({ GARDA_SYNTHETIC_WALK_LEVEL: 'full' }, ids).scenarioIds, ids.filter(id => !id.startsWith('deep-stack-')));
     assert.equal(walkRunPlan({ GARDA_SYNTHETIC_WALK_LEVEL: 'sweep' }, ids).runSweep, true);
     assert.deepEqual(walkRunPlan({ GARDA_SYNTHETIC_WALK_ONLY: 'document-only' }, ids).scenarioIds, ['document-only']);
     assert.equal(walkRunPlan({ GARDA_SYNTHETIC_WALK_ONLY: 'sweep-clean-pass-s1-dabc-seed1' }, ids).runSweep, true);

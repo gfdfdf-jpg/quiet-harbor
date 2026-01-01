@@ -3,8 +3,9 @@ import { resolveRestartTaskIntent } from '../review-context/review-context-task-
 import * as path from 'node:path';
 import { buildCoherentCycleRestartCommand } from '../completion/completion-reporting';
 
-import type {
-    EffectiveReviewExecutionPolicyMode
+import {
+    getReviewExecutionDependencies,
+    type EffectiveReviewExecutionPolicyMode
 } from '../../core/review-execution-policy';
 import {
     buildCommand,
@@ -102,7 +103,7 @@ export function resolvePostReviewLifecycleDecisionRoute(
 }
 
 function buildReviewRecoveryRouteContext(
-    options: PostReviewLifecycleStateOptions,
+    options: Omit<PostReviewLifecycleStateOptions, 'closeoutState'>,
     reviewType: string,
     state: ReviewArtifactState,
     reason: string,
@@ -188,9 +189,12 @@ function buildReviewRecoveryRouteContext(
     };
 }
 
-function resolveDownstreamDependencyRebindDecisionRoute(
-    options: PostReviewLifecycleStateOptions
+export function resolveDownstreamDependencyRebindDecisionRoute(
+    options: Omit<PostReviewLifecycleStateOptions, 'closeoutState'>
 ): PostReviewRoute | null {
+    const dependencyGraph = options.preflight
+        ? resolveCompiledReviewDependencyGraphFromPreflight(options.preflight, options.reviewPolicyMode)
+        : null;
     const dependencyRebind = options.reviewGateAlreadyPassed
         ? null
         : findDownstreamReviewNeedingDependencyRebind({
@@ -199,12 +203,21 @@ function resolveDownstreamDependencyRebindDecisionRoute(
             requiredReviewTypes: options.requiredReviewTypes,
             requiredReviews: options.requiredReviews,
             policyMode: options.reviewPolicyMode,
-            reviewStates: options.reviewStates
+            reviewStates: options.reviewStates,
+            dependencyGraph
         });
     if (!dependencyRebind) {
         return null;
     }
     const reviewType = dependencyRebind.downstreamState.reviewType;
+    // This check also runs before fresh launches. Do not offer a rebind whose upstream
+    // evidence still needs recovery; build-review-context would refuse the same inputs.
+    const dependencies = getReviewExecutionDependencies(reviewType, options.requiredReviews, options.reviewPolicyMode,
+        dependencyGraph);
+    if (dependencies.some(dependency => {
+        const state = options.reviewStates.find(candidate => candidate.reviewType === dependency);
+        return !state || !reviewStateHasSatisfiedEvidence(options.repoRoot, options.eventsRoot, options.taskId, state);
+    })) return null;
     const context = buildReviewRecoveryRouteContext(
         options,
         reviewType,

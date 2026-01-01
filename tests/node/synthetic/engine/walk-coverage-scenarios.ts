@@ -3,6 +3,14 @@ import * as path from 'node:path';
 import { serializeTaskPlan, validateTaskPlan } from '../../../../src/schemas/task-plan';
 import { runGit } from '../../cli/commands/gate-test-helpers';
 import type { WalkScenario } from './navigator-walk';
+import { executeLegacyRed, legacyTaskFixture } from './walk-legacy-task-contract';
+
+const TIMEOUT_TASK_COMMAND = 'node tests/app.test.ts';
+const timeoutFixture = legacyTaskFixture(TIMEOUT_TASK_COMMAND);
+timeoutFixture.files = { ...timeoutFixture.files,
+    'tests/app.test.ts': 'import test from "node:test";\nimport assert from "node:assert/strict";\nimport { readFileSync } from "node:fs";\n'
+        + 'test("status timeout", async () => { assert.match(readFileSync("src/app.ts", "utf8"), /return "ready"/); '
+        + 'await new Promise(resolve => setTimeout(resolve, 60000)); });\n' };
 
 const TASK = 'T-WALK';
 const BUNDLE = 'garda-agent-orchestrator';
@@ -34,7 +42,8 @@ function handoff(id: string, gate: string | null, guidance: RegExp, options: Par
         expectedBlockedGate: gate, expectedGuidance: guidance, ...options };
 }
 
-function configureSuiteTimeout(root: string): void {
+/** The configured broad command really times out: the repair families need an actual timed-out task test run. */
+export function configureSuiteTimeout(root: string): void {
     const file = path.join(root, BUNDLE, 'live/config/workflow-config.json');
     const config = JSON.parse(fs.readFileSync(file, 'utf8'));
     Object.assign(config.full_suite_validation, { timeout_ms: 1000, timeout_retry_count: 0 });
@@ -111,12 +120,21 @@ export const COVERAGE_WALK_SCENARIOS: readonly WalkScenario[] = [
                 expectedReviews: { code: 1, api: 1, test: 1 }, expectedModes: ['code:FULL', 'api:FULL', 'test:FULL'] } : {})
         })),
     handoff('full-suite-timeout', 'full-suite-timeout-repair-task', /one meaningful linked (?:repair|child) task/iu, {
+        fixture: timeoutFixture,
+        selectionTargets: ['tests/app.test.ts'],
+        testSelectionCommand: TIMEOUT_TASK_COMMAND,
         expectedFailingGates: ['full-suite-validation'],
-        configure: configureSuiteTimeout
+        configure: root => {
+            const file = path.join(root, BUNDLE, 'live/config/workflow-config.json');
+            const config = JSON.parse(fs.readFileSync(file, 'utf8'));
+            Object.assign(config.full_suite_validation, { timeout_ms: 1000, timeout_retry_count: 0 });
+            fs.writeFileSync(file, JSON.stringify(config));
+        }
     }),
     ...(['singular', 'unmaterialized', 'changed-scope'] as const).map(kind => handoff('repair-child-' + kind,
         kind === 'changed-scope' ? 'full-suite-repair-child-scope' : 'full-suite-repair-child-handoff',
         kind === 'changed-scope' ? /scope declarations changed/iu : /parent materializes the validated handoff/iu, {
+            selectionTargets: ['tests/app.test.ts'],
             configure: configureSuiteTimeout, expectedFailingGates: ['full-suite-validation'],
             disturbanceReason: 'Inspect an unadmitted timeout repair child: ' + kind,
             inspectTask: steps => steps.some(step => step.gate === 'full-suite-validation' && step.exitCode !== 0) ? TASK + '-F1' : TASK,
@@ -176,13 +194,19 @@ export const COVERAGE_WALK_SCENARIOS: readonly WalkScenario[] = [
         setup: root => queue(root, text => text.replace('Synthetic navigator walk.', 'Test-first: expected-red.'))
     }),
     ...([false, true] as const).map(stale => handoff(stale ? 'test-first-red-stale' : 'test-first-current-green',
-        stale ? 'test-first-expected-red-stale' : 'test-first-current-green', stale ? /fresh RED|current test bytes/iu : /current passing focused tests/iu, {
-        counterState: 'test-first-recorded-red',
+        stale ? 'test-first-expected-red-stale' : 'run-intermediate-command', stale ? /fresh RED|current test bytes/iu : /current passing focused tests/iu, {
+        counterState: 'task-local-expected-red',
+        fixture: { ...legacyTaskFixture('node --test --test-reporter=tap tests/status.test.cjs', ['tests/status.test.cjs']),
+            caseCommand: 'node --test --test-reporter=tap tests/status.test.cjs',
+            cases: [{ source: 'tests/status.test.cjs', case_id: 'status implementation', selector: 'tests/status.test.cjs' }] },
+        selectionTargets: ['tests/status.test.cjs'],
         edits: [{ path: 'tests/status.test.cjs', append: [
             'const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs");',
             'test("status implementation", () => assert.match(fs.readFileSync("src/app.ts", "utf8"), /improved/));', ''
         ].join('\n') }],
         setup: root => queue(root, text => text.replace('Synthetic navigator walk.', 'Test-first: expected-red.')),
+        execute: async (_root, step) => executeLegacyRed(step,
+            [{ source: 'tests/status.test.cjs', case_id: 'status implementation', selector: 'tests/status.test.cjs' }]),
         act: async (root, gate, steps, run) => {
             if (gate === 'test-first-expected-failure') {
                 await run(['run-intermediate-command', '--task-id', TASK, '--command-source', 'targeted-test',

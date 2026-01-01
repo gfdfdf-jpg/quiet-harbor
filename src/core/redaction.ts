@@ -1,3 +1,4 @@
+import { restoreNativeTaskEntryIdentityMaps } from './task-entry-json';
 import * as os from 'node:os';
 import * as crypto from 'node:crypto';
 
@@ -313,7 +314,7 @@ export function redactSensitiveData(value: unknown, keyHint?: string): unknown {
 }
 
 export function serializeRedactedJson(value: unknown, indent = 2): string {
-    return `${JSON.stringify(redactSensitiveData(value), null, indent)}\n`;
+    return `${JSON.stringify(restoreNativeTaskEntryIdentityMaps(value, redactSensitiveData(value)), null, indent)}\n`;
 }
 
 export function sha256RedactedJsonPayload(value: unknown): string {

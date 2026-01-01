@@ -74,11 +74,12 @@ it('rejects recipe command output timeout and scope overrides before any executi
         assert.equal(f.events().filter(e => e.event_type === 'PROJECT_VALIDATION_STARTED').length, 0);
     } finally { f.clean(); }
 });
-it('retains real failed attempts without accepting malformed zero missing or skipped targets', () => {
+it('retains process outcomes and exposes malformed zero missing or skipped adapter observations for review', () => {
     for (const mode of ['fail', 'malformed', 'zero', 'missing', 'skip']) {
         const f = fixture(mode);
         try {
-            const run = f.run(); assert.equal(run.error, undefined); assert.notEqual(run.status, 0); assert.match(run.stdout, /PROJECT_VALIDATION_(FAILED|UNRESOLVED)/u);
+            const run = f.run(); assert.equal(run.error, undefined); assert.equal(run.status, mode === 'fail' ? 3 : 0);
+            assert.match(run.stdout, mode === 'fail' ? /PROJECT_VALIDATION_FAILED/u : /PROJECT_VALIDATION_PROCESS_PASSED/u);
             const completed = f.events().find(e => e.event_type === 'PROJECT_VALIDATION_COMPLETED'); assert.ok(completed);
             assert.equal(JSON.parse(fs.readFileSync(path.join(f.root, completed.details.artifact_path), 'utf8')).exit_code, mode === 'fail' ? 7 : 0);
         } finally { f.clean(); }

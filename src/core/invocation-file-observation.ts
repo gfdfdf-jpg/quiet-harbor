@@ -86,16 +86,21 @@ function capturePath(filePath: string): InvocationPathObservation {
         const linkTarget = attempt(() => observedInvocationValue(stat).isSymbolicLink() ? fs.readlinkSync(filePath) : null);
         const targetStat = attempt(() => {
             observedInvocationValue(realPath);
-            return Object.freeze(fs.statSync(filePath));
+            const entry = observedInvocationValue(stat);
+            // Without a link, the directory entry is also the followed target. Keep
+            // symlink probes separate and recheck both identities at invocation exit.
+            return entry.isSymbolicLink() ? Object.freeze(fs.statSync(filePath)) : entry;
         });
         const completeTargetStat = attempt(() => {
             const target = observedInvocationValue(targetStat);
             return process.platform === 'win32' && target.dev === 0 && (target.isFile() || target.isDirectory())
-                ? Object.freeze(statFileIdentitySync(filePath)) : target;
+                ? Object.freeze(observedInvocationValue(stat).isSymbolicLink()
+                    ? statFileIdentitySync(filePath) : lstatFileIdentitySync(filePath)) : target;
         });
         const targetIdentity = attempt(() => {
             observedInvocationValue(targetStat);
-            return Object.freeze(statFileIdentitySync(filePath, { bigint: true }));
+            return observedInvocationValue(stat).isSymbolicLink()
+                ? Object.freeze(statFileIdentitySync(filePath, { bigint: true })) : observedInvocationValue(identity);
         });
         return Object.freeze({ path: filePath, stat, identity, realPath, linkTarget, targetStat, completeTargetStat, targetIdentity });
     });
@@ -175,9 +180,8 @@ function captureContent(observation: InvocationPathObservation): InvocationFileC
         const filePath = observation.path;
         const before = observedInvocationValue(observation.targetIdentity);
         if (!before.isFile()) throw new Error('Invocation input is not a regular file: ' + filePath);
-        const currentPath = statFileIdentitySync(filePath, { bigint: true });
-        if (!sameStat(before, currentPath)) throw new Error('Invocation file changed before read: ' + filePath);
-        const descriptor = fs.openSync(filePath, 'r');
+        const descriptor = fs.openSync(filePath,
+            fs.constants.O_RDONLY | (fs.constants.O_NONBLOCK || 0) | (fs.constants.O_NOFOLLOW || 0));
         try {
             const descriptorBefore = fs.fstatSync(descriptor, { bigint: true });
             if (!descriptorBefore.isFile() || !sameStat(before, descriptorBefore)) {
@@ -187,6 +191,7 @@ function captureContent(observation: InvocationPathObservation): InvocationFileC
             const digest = createHash('sha256'), buffer = Buffer.allocUnsafe(FILE_HASH_BUFFER_BYTES);
             let total = 0n;
             while (true) {
+                countNextStepWork('visit:invocation_file_read_chunk:' + filePath);
                 const count = fs.readSync(descriptor, buffer, 0, buffer.length, null);
                 if (count === 0) break;
                 if (retained) {

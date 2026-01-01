@@ -1,8 +1,9 @@
-import { describe, it, beforeEach, afterEach } from 'node:test';
+import { describe, it, beforeEach, afterEach, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import * as childProcess from 'node:child_process';
 
 import {
     buildShellSmokePreflight,
@@ -96,6 +97,88 @@ describe('gates/shell-smoke-preflight', () => {
     });
 
     describe('buildShellSmokePreflight', () => {
+        function injectLaunches(t: TestContext, outcomes: string[]): () => number {
+            scaffoldWorkspace(tempDir, { sourceCheckout: true });
+            initGitRepo(tempDir);
+            fs.mkdirSync(path.join(tempDir, 'bin'), { recursive: true });
+            fs.writeFileSync(path.join(tempDir, 'bin/garda.js'), 'console.log("2.4.2");', 'utf8');
+            const native: typeof childProcess = require('node:child_process');
+            const spawn = native.spawnSync;
+            let calls = 0;
+            t.mock.method(native, 'spawnSync', (...args: Parameters<typeof spawn>) => {
+                const argv = args[1];
+                if (args[0] !== process.execPath || !Array.isArray(argv) || argv[1] !== '--version') {
+                    return spawn(...args);
+                }
+                const outcome = outcomes[calls++];
+                assert.ok(outcome, 'no unexpected launch retries');
+                assert.equal(args[2]?.timeout, 10_000, 'each attempt retains the original limit');
+                if (['ETIMEDOUT', 'ENOENT', 'EACCES'].includes(outcome)) {
+                    return { pid: 0, status: null, signal: outcome === 'ETIMEDOUT' ? 'SIGTERM' : null,
+                        stdout: '', stderr: '', output: [null, '', ''],
+                        error: Object.assign(new Error(`spawnSync node ${outcome}`), { code: outcome }) };
+                }
+                return { pid: 123, status: outcome === 'exit' ? 7 : 0, signal: null,
+                    stdout: outcome === 'ok' ? '2.4.2\n' : 'wrong output\n', stderr: '', output: [null, '', ''] };
+            });
+            return () => calls;
+        }
+
+        it('retries one launch timeout then passes and retains both attempts', (t) => {
+            const calls = injectLaunches(t, ['ETIMEDOUT', 'ok']);
+            const artifact = buildShellSmokePreflight({ taskId: 'T-900', repoRoot: tempDir });
+            assert.equal(artifact.outcome, 'PASS');
+            assert.equal(calls(), 2);
+            const probe = artifact.probes.find(p => p.check === 'cli_launchability');
+            assert.ok(probe && 'attempts' in probe && Array.isArray(probe.attempts));
+            assert.deepEqual(probe.attempts.map(a => a.status), ['timeout', 'ok']);
+            assert.deepEqual(probe.attempts.map(a => a.attempt), [1, 2]);
+            for (const attempt of probe.attempts) {
+                assert.equal(attempt.timeout_ms, 10_000);
+                assert.ok(attempt.elapsed_ms >= 0);
+            }
+            assert.match(formatShellSmokePreflightResult(artifact).join('\n'), /attempt 1.*timeout.*ETIMEDOUT/u);
+        });
+
+        it('fails after three launch timeouts with the cause, exact retry command and all attempts', (t) => {
+            const calls = injectLaunches(t, ['ETIMEDOUT', 'ETIMEDOUT', 'ETIMEDOUT']);
+            const artifact = buildShellSmokePreflight({ taskId: 'T-900', repoRoot: tempDir });
+            assert.equal(artifact.outcome, 'FAIL');
+            assert.equal(calls(), 3);
+            const probe = artifact.probes.find(p => p.check === 'cli_launchability');
+            assert.ok(probe && 'attempts' in probe && Array.isArray(probe.attempts));
+            assert.deepEqual(probe.attempts.map(a => a.status), ['timeout', 'timeout', 'timeout']);
+            const output = formatShellSmokePreflightResult(artifact).join('\n');
+            assert.match(output, /launch timed out 3 times/u);
+            const quote = (v: string): string => process.platform === 'win32'
+                ? `'${v.replace(/'/gu, "''")}'` : `'${v.replace(/'/gu, "'\\''")}'`;
+            const retry = `${process.platform === 'win32' ? '& ' : ''}${quote(process.execPath)} `
+                + `${quote(path.join(tempDir, 'bin/garda.js'))} gate shell-smoke-preflight `
+                + `--task-id 'T-900' --repo-root ${quote(tempDir)}`;
+            assert.ok(output.includes(`Retry command: ${retry}`), output);
+        });
+
+        for (const failure of ['exit', 'wrong', 'ENOENT', 'EACCES']) {
+            it(`fails immediately without retry on launch ${failure}`, (t) => {
+                const calls = injectLaunches(t, [failure]);
+                const artifact = buildShellSmokePreflight({ taskId: 'T-900', repoRoot: tempDir });
+                assert.equal(artifact.outcome, 'FAIL');
+                assert.equal(calls(), 1);
+                const probe = artifact.probes.find(p => p.check === 'cli_launchability');
+                assert.ok(probe && 'attempts' in probe && Array.isArray(probe.attempts));
+                assert.deepEqual(probe.attempts.map(a => a.status), ['error']);
+                assert.match(probe.detail, /Exit code 7|Unexpected CLI version output|ENOENT|EACCES/u);
+            });
+        }
+
+        it('stops immediately if a real failure follows a timeout', (t) => {
+            const calls = injectLaunches(t, ['ETIMEDOUT', 'exit']);
+            const artifact = buildShellSmokePreflight({ taskId: 'T-900', repoRoot: tempDir });
+            assert.equal(artifact.outcome, 'FAIL');
+            assert.equal(calls(), 2);
+            assert.match(artifact.violations.join('\n'), /Exit code 7/u);
+        });
+
         it('produces a passing artifact for a valid source-checkout workspace', () => {
             scaffoldWorkspace(tempDir, { sourceCheckout: true });
             initGitRepo(tempDir);

@@ -266,7 +266,8 @@ export function runShellSmokePreflightCommand(options: ShellSmokePreflightComman
             provider,
             effectiveCwd: options.effectiveCwd ? String(options.effectiveCwd) : undefined,
             probeTimeoutMs: (probeTimeoutMs && probeTimeoutMs > 0) ? probeTimeoutMs : undefined,
-            precheckViolations: handshakeViolations
+            precheckViolations: handshakeViolations,
+            taskModePath: options.taskModePath
         });
 
         writeJsonArtifact(artifactPath, artifact);

@@ -192,7 +192,7 @@ test('workflow show prints repo-local full-suite settings', () => {
         for (const hint of mutationHints) {
             assert.ok(hint.includes('--operator-confirmed yes --operator-confirmed-at-utc "<ISO-8601 timestamp>"'), hint);
         }
-        assert.ok(output.includes('Mandatory full-suite: false'));
+        assert.ok(output.includes('Mandatory task test validation: false'));
         assert.ok(output.includes('Review execution policy: code_first_optional'));
         assert.ok(output.includes('FullSuiteCommand: npm test'));
         assert.ok(output.includes('FullSuitePerformance: mode=standard; optimized=false; boundary=mandatory_full_suite_not_smoke_or_fast'));
@@ -1402,10 +1402,10 @@ test('workflow help describes project-memory update as the default policy', () =
     assert.ok(helpText.includes('compile_gate.command is the executable compile-gate source'));
     assert.ok(helpText.includes('unconfigured workspaces fail closed instead of falling back to 40-commands.md'));
     assert.ok(helpText.includes('workflow set --review-cycle-enabled true --review-cycle-max-total-non-test-reviews 30'));
-    assert.ok(helpText.includes('workflow set --full-suite on --operator-confirmed yes --operator-confirmed-at-utc'));
-    assert.ok(helpText.includes('workflow set --full-suite-timeout-blocker true --full-suite-timeout-retry-count 1'));
-    assert.ok(helpText.includes('workflow set --full-suite-placement before_test_review'));
-    assert.ok(helpText.includes('--full-suite-timeout-blocker true|false'));
+    assert.ok(helpText.includes('workflow set --task-tests on --operator-confirmed yes --operator-confirmed-at-utc'));
+    assert.ok(helpText.includes('workflow set --task-test-timeout-blocker true --task-test-timeout-retry-count 1'));
+    assert.ok(helpText.includes('workflow set --task-test-placement before_test_review'));
+    assert.ok(helpText.includes('--task-test-timeout-blocker true|false'));
     assert.ok(helpText.includes('--scope-budget on|off|--scope-budget-enabled true|false'));
     assert.ok(helpText.includes('--review-cycle on|off|--review-cycle-enabled true|false'));
     assert.ok(helpText.includes('--review-cycle-auto-split on|off|--review-cycle-auto-split-enabled true|false'));
@@ -1425,7 +1425,7 @@ test('workflow help describes project-memory update as the default policy', () =
     assert.ok(helpText.includes('workflow set changes require --operator-confirmed yes and --operator-confirmed-at-utc'));
     assert.ok(helpText.includes('Task reset mutations are disabled by default'));
     assert.ok(helpText.includes('Optional quality checks are advisory, default-enabled'));
-    assert.ok(helpText.includes('Full-suite timeout blocker controls whether repeated timeout evidence blocks task progress'));
+    assert.ok(helpText.includes('Task test timeout blocker controls whether repeated timeout evidence blocks task progress'));
     assert.ok(!helpText.includes('Project memory maintenance is disabled by default'));
 });
 
@@ -1470,7 +1470,7 @@ test('workflow defaults to show when the subcommand is omitted', () => {
         const { result, output } = captureConsole(() => handleWorkflow(['--bundle-root', bundleRoot], PACKAGE_JSON));
         assert.ok(result && result.action === 'show');
         assert.ok(output.includes('Action: show'));
-        assert.ok(output.includes('Mandatory full-suite: true'));
+        assert.ok(output.includes('Mandatory task test validation: true'));
     } finally {
         fs.rmSync(bundleRoot, { recursive: true, force: true });
     }
@@ -1509,7 +1509,7 @@ test('workflow show --json returns valid JSON with compact full-suite line', () 
         assert.equal(parsed.optional_skill_selection_policy.mode, 'optional');
         assert.equal(parsed.optional_skill_selection_policy.effective_mode, 'optional');
         assert.equal(parsed.optional_skill_selection_policy.status, 'missing');
-        assert.equal(parsed.visible_summary_line, 'Mandatory full-suite: true placement=before_test_review mode=standard');
+        assert.equal(parsed.visible_summary_line, 'Mandatory task test validation: true placement=before_test_review mode=standard');
         assert.equal(parsed.review_execution_policy_summary_line, 'Review execution policy: code_first_optional');
         assert.equal(parsed.review_cycle_guard_summary_line, 'Review cycle guard: BLOCK_FOR_OPERATOR_DECISION max_failed_non_test_reviews=10 max_total_non_test_reviews=30 excluded=test auto_split_enabled=true');
         assert.equal(parsed.project_memory_maintenance_summary_line, 'Project memory maintenance: update read_strategy=index_first max_compact_summary_chars=12000 require_user_approval_for_writes=true');
@@ -1542,7 +1542,7 @@ test('workflow set --json returns valid JSON for machine-readable automation', (
         assert.equal(parsed.full_suite_validation.placement, 'before_test_review');
         assert.equal(parsed.review_execution_policy.mode, 'strict_sequential');
         assert.equal(parsed.task_reset.enabled, false);
-        assert.equal(parsed.visible_summary_line, 'Mandatory full-suite: true placement=before_test_review mode=standard');
+        assert.equal(parsed.visible_summary_line, 'Mandatory task test validation: true placement=before_test_review mode=standard');
         assert.equal(parsed.review_execution_policy_summary_line, 'Review execution policy: strict_sequential');
         assert.ok(parsed.changed_fields.includes('full_suite_validation.enabled'));
         assert.ok(parsed.changed_fields.includes('review_execution_policy.mode'));
@@ -1584,7 +1584,7 @@ test('workflow set updates repo-local full-suite config deterministically', () =
         assert.ok(result && result.action === 'set');
         assert.equal(result.status, 'CHANGED');
         assert.ok(output.includes('Status: CHANGED'));
-        assert.ok(output.includes('Mandatory full-suite: true'));
+        assert.ok(output.includes('Mandatory task test validation: true'));
         assert.ok(output.includes('Review execution policy: parallel_all'));
 
         const parsedConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));

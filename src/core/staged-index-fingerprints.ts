@@ -18,35 +18,34 @@ export function readStagedBlobFingerprints(
         return fingerprints;
     }
 
-    let output: Buffer;
-    try {
-        output = runGitBinary(repoRoot, ['ls-files', '--stage', '-z'], {
-            allowFailure: true,
-            maxBuffer: STAGED_INDEX_MAX_BUFFER_BYTES,
-            timeoutMs: STAGED_INDEX_TIMEOUT_MS
-        });
-    } catch {
-        return fingerprints;
+    const output = runGitBinary(repoRoot, ['ls-files', '--stage', '-z'], {
+        maxBuffer: STAGED_INDEX_MAX_BUFFER_BYTES,
+        timeoutMs: STAGED_INDEX_TIMEOUT_MS
+    });
+    for (const entry of parseStageIndexAuthority(output.toString('utf8'))) {
+        if (!wantedPaths.has(entry.path)) continue;
+        if (entry.stage !== '0' || fingerprints.has(entry.path)) {
+            throw new Error('Staged index authority contains an unmerged or duplicate requested entry.');
+        }
+        fingerprints.set(entry.path, `staged:${entry.mode}:${entry.objectId}`);
     }
-
-    for (const record of output.toString('utf8').split('\0')) {
-        if (!record) {
-            continue;
-        }
-        const tabIndex = record.indexOf('\t');
-        if (tabIndex < 0) {
-            continue;
-        }
-        const relativePath = normalizePath(record.slice(tabIndex + 1));
-        if (!wantedPaths.has(relativePath) || fingerprints.has(relativePath)) {
-            continue;
-        }
-        const match = /^(\d+)\s+([0-9a-f]{40,64})\s+\d+$/u.exec(record.slice(0, tabIndex));
-        if (!match?.[1] || !match[2]) {
-            continue;
-        }
-        fingerprints.set(relativePath, `staged:${match[1]}:${match[2].toLowerCase()}`);
-    }
-
     return fingerprints;
+}
+
+/** Strict framing and exact path identity shared by native index consumers. */
+export function parseStageIndexAuthority(output: string): Array<{ path: string; mode: string; objectId: string; stage: string }> {
+    if (output === '') return [];
+    if (!output.endsWith('\0')) throw new Error('Staged index authority has an unterminated record.');
+    const seen = new Set<string>();
+    return output.slice(0, -1).split('\0').map(record => {
+        const match = /^([0-7]{6}) ([a-f0-9]{40}|[a-f0-9]{64}) ([0-3])\t(.+)$/su.exec(record);
+        if (!match || !match[4] || match[4].startsWith('/') || (process.platform === 'win32' && match[4].includes('\\'))
+            || match[4].split('/').some(part => !part || part === '.' || part === '..'))
+            throw new Error('Staged index authority has a malformed record.');
+        const [, mode, objectId, stage, file] = match;
+        const key = stage + ':' + file;
+        if (seen.has(key)) throw new Error('Staged index authority has a duplicate entry.');
+        seen.add(key);
+        return { path: file, mode, objectId, stage };
+    });
 }

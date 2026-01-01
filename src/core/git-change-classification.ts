@@ -1,3 +1,5 @@
+import { captureWorkspacePlannedFiles, type WorkspacePlannedFiles } from './workspace-planned-files';
+import { parseStageIndexAuthority } from './staged-index-fingerprints';
 import { readInvocationFileBytes } from './invocation-file-observation';
 import { filterUntrackedBuildOutputPaths } from './build-output-paths';
 import * as fs from 'node:fs';
@@ -69,6 +71,7 @@ export interface GitChangeClassificationResult {
 
 export interface GitChangeClassificationOptions {
     timeoutMs?: number;
+    plannedFiles?: WorkspacePlannedFiles;
     explicitUntrackedPaths?: readonly string[];
 }
 
@@ -323,18 +326,10 @@ function parseIndexBlobReferences(output: Buffer, wantedPaths: ReadonlySet<strin
     const references = new Map<string, GitBlobReference>();
     const trackedPaths = new Set<string>();
     const stagedBlobFingerprints = new Map<string, string>();
-    for (const record of splitNulRecords(output)) {
-        if (!record) continue;
-        const tabIndex = record.indexOf('\t');
-        if (tabIndex < 0) continue;
-        const filePath = record.slice(tabIndex + 1);
-        const [mode, objectId, stage] = record.slice(0, tabIndex).split(/\s+/u);
+    for (const { path: filePath, mode, objectId, stage } of parseStageIndexAuthority(output.toString('utf8'))) {
         trackedPaths.add(filePath);
-        if (!stagedBlobFingerprints.has(filePath) && /^\d+$/u.test(mode) && /^[0-9a-f]{40,64}$/iu.test(objectId)) {
-            stagedBlobFingerprints.set(filePath, `staged:${mode}:${objectId.toLowerCase()}`);
-        }
-        if (!wantedPaths.has(filePath)) continue;
-        if (stage !== '0') continue;
+        if (stage === '0') stagedBlobFingerprints.set(filePath, `staged:${mode}:${objectId}`);
+        if (!wantedPaths.has(filePath) || stage !== '0') continue;
         const kind = mode === '120000' ? 'symlink' : mode.startsWith('100') ? 'file' : 'other';
         references.set(filePath, {
             kind,
@@ -811,7 +806,7 @@ function buildGitChangeClassificationResult(
 
 export function collectGitChangeClassificationSnapshot(
     repoRoot: string,
-    options: Pick<GitChangeClassificationOptions, 'timeoutMs'> = {}
+    options: Pick<GitChangeClassificationOptions, 'timeoutMs' | 'plannedFiles'> = {}
 ): GitChangeClassificationSnapshot {
     const budget = createGitCommandBudget(options);
     const porcelain = readPorcelainStatus(repoRoot, budget);
@@ -820,7 +815,7 @@ export function collectGitChangeClassificationSnapshot(
         .map((change) => classifyLayerChange(repoRoot, 'staged', change, snapshots));
     const unstaged = porcelain.unstaged
         .map((change) => classifyLayerChange(repoRoot, 'unstaged', change, snapshots));
-    const untracked = filterUntrackedBuildOutputPaths(repoRoot, porcelain.untracked)
+    const untracked = filterUntrackedBuildOutputPaths(repoRoot, porcelain.untracked, options.plannedFiles)
         .map((filePath) => classifyUntrackedPath(repoRoot, filePath));
     const changes = [...staged, ...unstaged, ...untracked].sort((left, right) =>
         compareOrdinal(left.path, right.path) || LAYER_ORDER[left.layer] - LAYER_ORDER[right.layer]
@@ -837,12 +832,13 @@ export function collectGitChangeClassificationSnapshot(
 export function deriveGitChangeClassification(
     repoRoot: string,
     snapshot: GitChangeClassificationSnapshot,
-    explicitPaths: readonly string[] = []
+    explicitPaths: readonly string[] = [],
+    plannedFiles: WorkspacePlannedFiles = captureWorkspacePlannedFiles(repoRoot)
 ): GitChangeClassificationResult {
     const explicitUntrackedPaths = uniqueSorted(
         filterUntrackedBuildOutputPaths(repoRoot, explicitPaths
             .map(normalizeGitRepoRelativePath)
-            .filter((filePath): filePath is string => filePath !== null))
+            .filter((filePath): filePath is string => filePath !== null), plannedFiles)
     );
     if (explicitUntrackedPaths.length === 0) {
         return snapshot.classification;
@@ -881,9 +877,9 @@ export function classifyGitChanges(
     options: GitChangeClassificationOptions = {}
 ): GitChangeClassificationResult {
     const snapshot = collectGitChangeClassificationSnapshot(repoRoot, {
-        timeoutMs: options.timeoutMs
+        timeoutMs: options.timeoutMs, plannedFiles: options.plannedFiles
     });
-    return deriveGitChangeClassification(repoRoot, snapshot, options.explicitUntrackedPaths);
+    return deriveGitChangeClassification(repoRoot, snapshot, options.explicitUntrackedPaths, options.plannedFiles);
 }
 
 export function selectGitChangeClassificationLayers(

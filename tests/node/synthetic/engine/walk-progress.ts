@@ -45,8 +45,8 @@ export class WalkProgressGuard {
         this.adoptedPolicies.add(key);
         this.policyEpochs.set(taskId, digest);
     }
-    observe(workspace: string, gate: string | null, lane: string, action: string, taskId = ''): boolean {
-        const key = JSON.stringify([taskId, this.policyEpochs.get(taskId), workspace, gate, lane, action]);
+    observe(workspace: string, gate: string | null, lane: string, action: string, taskId = '', classification = ''): boolean {
+        const key = JSON.stringify([taskId, this.policyEpochs.get(taskId), workspace, classification, gate, lane, action]);
         const count = (this.visits.get(key) ?? 0) + 1;
         this.visits.set(key, count);
         return count > this.limit;

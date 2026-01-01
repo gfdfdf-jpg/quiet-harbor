@@ -5,6 +5,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import { initGitRepo } from '../git-fixtures';
+import { readCoherentCycleReadiness } from '../../../../src/gates/next-step/next-step-preflight-recovery';
 
 import { formatNextStepText, resolveNextStep } from './next-step-test-support';
 import { getWorkspaceSnapshot } from './next-step-test-support';
@@ -991,8 +992,9 @@ describe('gates/next-step preflight compile recovery', () => {
 
         assert.equal(result.next_gate, 'restart-coherent-cycle');
         assert.ok(command.includes('gate restart-coherent-cycle'));
-        assert.ok(command.includes("--task-intent 'Classified coherent-cycle task'"), command);
-        assert.ok(!command.includes("--task-intent 'Restart protected coherent cycle'"));
+        // The confirmation is for protected re-entry only. Beside it, --task-intent would state an operator-confirmed
+        // criteria change, so the command leaves the intent to the restart, which keeps the classified wording.
+        assert.ok(!command.includes('--task-intent'), command);
         assert.ok(command.includes('--operator-confirmed yes'));
         assert.ok(command.includes("--operator-confirmed-at-utc '<ISO-8601 timestamp>'"));
     });
@@ -1212,6 +1214,34 @@ describe('gates/next-step preflight compile recovery', () => {
 
         assert.equal(result.next_gate, 'restart-coherent-cycle');
         assert.ok(result.reason.includes('no persisted restart-completed event'), result.reason);
+    });
+
+    it('resumes the same review restart after compile failure and an independent compile pass', () => {
+        const repoRoot = makeTempRepo();
+        seedStartedTask(repoRoot, TASK_ID);
+        writePreflight(repoRoot, TASK_ID, { ...ALL_REVIEW_FLAGS, test: true });
+        seedCompilePass(repoRoot, TASK_ID);
+        appendEvent(repoRoot, TASK_ID, 'REVIEW_PHASE_STARTED', 'INFO', { review_type: 'test' });
+        appendEvent(repoRoot, TASK_ID, 'HANDSHAKE_DIAGNOSTICS_RECORDED');
+        appendEvent(repoRoot, TASK_ID, 'SHELL_SMOKE_PREFLIGHT_RECORDED');
+        const preflightPath = writePreflight(repoRoot, TASK_ID, { ...ALL_REVIEW_FLAGS, test: true });
+        const taskModePath = path.join(reviewsRoot(repoRoot), `${TASK_ID}-task-mode.json`);
+        appendEvent(repoRoot, TASK_ID, 'PREFLIGHT_CLASSIFIED', 'INFO', {
+            output_path: preflightPath.replace(/\\/gu, '/'),
+            output_sha256: fileSha256(preflightPath),
+            review_restart_origin: { review_type: 'test', task_mode_sha256: fileSha256(taskModePath) }
+        });
+        appendEvent(repoRoot, TASK_ID, 'COMPILE_GATE_FAILED', 'FAIL');
+
+        const readiness = () => readCoherentCycleReadiness(
+            repoRoot, eventsRoot(repoRoot), reviewsRoot(repoRoot), TASK_ID, preflightPath, taskModePath
+        );
+        assert.equal(readiness().reviewRestartOrigin, 'test');
+        seedCompilePass(repoRoot, TASK_ID);
+        assert.equal(readiness().reviewRestartOrigin, 'test', 'A separate successful compile cannot complete the review restart');
+
+        fs.appendFileSync(preflightPath, '\n');
+        assert.equal(readiness().reviewRestartOrigin, undefined, 'The route cannot use changed preflight bytes');
     });
 
     it('blocks restarted compile recovery when the persisted restart-completed event is missing', () => {

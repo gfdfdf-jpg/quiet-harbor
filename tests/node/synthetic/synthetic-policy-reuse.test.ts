@@ -12,20 +12,20 @@ import { handleGate } from '../../../src/cli/commands/gate-command';
 import { captureWalkOutput } from './engine/walk-output';
 import type { SweepInjection } from './engine/walk-sweep';
 
-test('coverage policy-change checkpoints each keep one code and one test review', { timeout: 7200000 }, async () => {
-    const scenarios = WALK_SCENARIOS.filter(scenario => scenario.id.startsWith('coverage-policy-change-'));
-    assert.equal(scenarios.length, 3);
+const coveragePolicyChangeScenarios = WALK_SCENARIOS.filter(scenario => scenario.id.startsWith('coverage-policy-change-'));
+assert.equal(coveragePolicyChangeScenarios.length, 3);
+for (const scenario of coveragePolicyChangeScenarios) {
+test(`coverage policy-change checkpoint ${scenario.id} keeps one code and one test review`, { timeout: 7200000 }, async () => {
     const template = await createWalkTemplate(path.resolve('.'));
     try {
-        for (const scenario of scenarios) {
-            const result = await walkTask(template, scenario);
-            assert.equal(result.outcome, 'done', scenario.id + ': ' + result.detail);
-            assert.deepEqual(result.reviewsByLane, { code: 1, test: 1 }, scenario.id);
-            assert.deepEqual(result.reviews.map(review => review.lane + ':' + review.mode), ['code:FULL', 'test:FULL'], scenario.id);
-            assert.ok(!result.steps.some(step => step.gate === 'completion-gate' && step.exitCode), scenario.id);
-        }
+        const result = await walkTask(template, scenario);
+        assert.equal(result.outcome, 'done', scenario.id + ': ' + result.detail);
+        assert.deepEqual(result.reviewsByLane, { code: 1, test: 1 }, scenario.id);
+        assert.deepEqual(result.reviews.map(review => review.lane + ':' + review.mode), ['code:FULL', 'test:FULL'], scenario.id);
+        assert.ok(!result.steps.some(step => step.gate === 'completion-gate' && step.exitCode), scenario.id);
     } finally { fs.rmSync(template, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
 });
+}
 
 async function inspectGate(argv: string[]) {
     const output: string[] = [], previousExitCode = process.exitCode;

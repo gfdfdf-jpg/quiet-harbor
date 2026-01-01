@@ -9,7 +9,8 @@ import {
 } from '../../../../../../src/cli/exit-codes';
 import {
     executeCommand,
-    executeCommandAsync
+    executeCommandAsync,
+    runShellSmokePreflightCommand
 } from '../../../../../../src/cli/commands/gates';
 import {
     runCliMainWithHandling
@@ -248,7 +249,7 @@ describe('gates command timeout and execution wrappers', () => {
         }
     });
 
-    it('CLI dependent-preflight handlers accept --task-mode-path and honor a custom task-mode artifact location', async () => {
+    it('CLI dependent-preflight handlers accept --task-mode-path and honor a custom task-mode artifact location', async (t) => {
         const repoRoot = createTempRepo();
         const taskId = 'T-904b-cli-dependent-preflight-custom-task-mode';
         const customTaskModePath = path.join(repoRoot, 'custom-artifacts', `${taskId}-task-mode.json`);
@@ -260,7 +261,7 @@ describe('gates command timeout and execution wrappers', () => {
         fs.mkdirSync(path.join(repoRoot, '.agents', 'workflows'), { recursive: true });
         fs.writeFileSync(path.join(repoRoot, '.agents', 'workflows', 'start-task.md'), '# start-task\n', 'utf8');
         fs.mkdirSync(path.join(repoRoot, 'garda-agent-orchestrator', 'bin'), { recursive: true });
-        fs.writeFileSync(path.join(repoRoot, 'garda-agent-orchestrator', 'bin', 'garda.js'), '#!/usr/bin/env node\n', 'utf8');
+        fs.writeFileSync(path.join(repoRoot, 'garda-agent-orchestrator', 'bin', 'garda.js'), '#!/usr/bin/env node\nconsole.log("0.0.0-test");\n', 'utf8');
         initializeGitRepo(repoRoot);
 
         runEnterTaskMode({
@@ -316,6 +317,25 @@ describe('gates command timeout and execution wrappers', () => {
         assert.equal(handshakeExitCode, 0);
         assert.equal(shellSmokeExitCode, 0);
         assert.equal(commandTimeoutExitCode, 0);
+
+        const native: typeof import('node:child_process') = require('node:child_process');
+        const spawn = native.spawnSync;
+        let launches = 0;
+        const injected = t.mock.method(native, 'spawnSync', (...args: Parameters<typeof spawn>) => {
+            if (args[0] === process.execPath && Array.isArray(args[1]) && args[1][1] === '--version') {
+                launches += 1;
+                return { pid: 0, status: null, signal: 'SIGTERM', stdout: '', stderr: '', output: [null, '', ''],
+                    error: Object.assign(new Error('injected CLI timeout'), { code: 'ETIMEDOUT' }) };
+            }
+            return spawn(...args);
+        });
+        const failed = runShellSmokePreflightCommand({ repoRoot, taskId, taskModePath: customTaskModePath });
+        assert.notEqual(failed.exitCode, 0);
+        assert.equal(launches, 3);
+        assert.ok(failed.outputLines.some(line => line.includes(`--task-mode-path '${customTaskModePath}'`)));
+        injected.mock.restore();
+        const recovered = runShellSmokePreflightCommand({ repoRoot, taskId, taskModePath: customTaskModePath });
+        assert.equal(recovered.exitCode, 0, recovered.outputLines.join('\n'));
 
         fs.rmSync(repoRoot, { recursive: true, force: true });
     });

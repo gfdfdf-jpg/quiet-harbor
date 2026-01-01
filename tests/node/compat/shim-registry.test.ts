@@ -22,8 +22,10 @@ test('available gates cover the dispatcher and every gate has public help', () =
     assert.deepEqual([...GATE_COMMANDS].sort(), [...new Set(dispatched)].sort());
     for (const name of GATE_COMMANDS) {
         const help = getGateHelpEntry(name, root);
+        const publicName = name === 'full-suite-validation' ? 'task-test-validation' : name;
         assert.ok(help.summary.trim(), name);
-        assert.ok(help.usage.some(usage => usage.includes(`gate ${name}`)), name);
+        assert.ok(help.usage.some(usage => usage.includes(`gate ${publicName}`)), name);
+        assert.deepEqual(getGateHelpEntry(publicName, root), help, name);
     }
 });
 

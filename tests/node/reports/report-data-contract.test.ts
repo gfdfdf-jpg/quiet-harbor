@@ -2005,7 +2005,7 @@ test('buildReportDataContract exposes tasks, workflow config, and instruction ta
     assert.equal(report.system_state.workflow.full_suite_command, 'npm test');
     assert.equal(report.system_state.workflow.full_suite_timeout_blocker, true);
     assert.equal(report.system_state.workflow.full_suite_timeout_retry_count, 1);
-    assert.match(report.system_state.workflow.full_suite_timeout_forecast_label || '', /Recommended full-suite command timeout/u);
+    assert.match(report.system_state.workflow.full_suite_timeout_forecast_label || '', /Recommended task test command timeout/u);
     assert.equal(report.system_state.workflow.task_reset_ready, false);
     assert.equal(report.system_state.scope_budget.status, 'error');
     assert.equal(report.system_state.scope_budget.evaluation.status, 'BLOCK');
@@ -2420,7 +2420,7 @@ test('buildReportDataContract reads latest full-suite pointer in System State', 
     assert.equal(report.system_state.workflow.full_suite_timeout_attempts_exhausted, true);
     assert.equal(report.system_state.workflow.full_suite_timeout_warning_only_continuation, true);
     assert.equal(report.system_state.workflow.full_suite_timeout_latest_warning, 'latest timeout warning');
-    assert.match(report.system_state.workflow.full_suite_timeout_forecast_label || '', /Recommended full-suite command timeout/u);
+    assert.match(report.system_state.workflow.full_suite_timeout_forecast_label || '', /Recommended task test command timeout/u);
 });
 
 test('buildReportTaskDetail exposes current full-suite pass duration and forecast', () => {

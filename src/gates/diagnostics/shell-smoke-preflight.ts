@@ -37,6 +37,16 @@ export interface ShellSmokeProbe {
     status: 'ok' | 'warning' | 'error';
     detail: string;
     elapsed_ms?: number;
+    attempts?: ShellSmokeLaunchAttempt[];
+    retry_command?: string;
+}
+
+export interface ShellSmokeLaunchAttempt {
+    attempt: number;
+    timeout_ms: number;
+    elapsed_ms: number;
+    status: 'ok' | 'timeout' | 'error';
+    detail: string;
 }
 
 export interface ShellSmokePreflightArtifact {
@@ -73,9 +83,11 @@ export interface BuildShellSmokePreflightOptions {
     effectiveCwd?: string | null;
     probeTimeoutMs?: number;
     precheckViolations?: string[];
+    taskModePath?: string;
 }
 
 const DEFAULT_PROBE_TIMEOUT_MS = 10_000;
+const CLI_LAUNCH_MAX_ATTEMPTS = 3;
 
 interface TimelineEventEntry {
     event_type: string;
@@ -261,8 +273,10 @@ function probeTempFileWriteDelete(repoRoot: string): ShellSmokeProbe {
     });
 }
 
-function probeCliLaunchability(repoRoot: string, isSourceCheckout: boolean, timeoutMs: number): ShellSmokeProbe {
-    return runProbe('cli_launchability', () => {
+function probeCliLaunchability(repoRoot: string, taskId: string, isSourceCheckout: boolean, timeoutMs: number, taskModePath?: string): ShellSmokeProbe {
+    const attempts: ShellSmokeLaunchAttempt[] = [];
+    let retryCommand: string | undefined;
+    const probe = runProbe('cli_launchability', () => {
         const cliScriptCandidates = CLI_ENTRYPOINT_CANDIDATES.map((entrypoint) => (
             isSourceCheckout
                 ? path.join(repoRoot, entrypoint)
@@ -274,9 +288,35 @@ function probeCliLaunchability(repoRoot: string, isSourceCheckout: boolean, time
             throw new Error(`CLI script not found: ${toPosix(path.relative(repoRoot, cliScript))}`);
         }
 
-        const output = spawnProbe(process.execPath, [cliScript, '--version'], repoRoot, timeoutMs);
-        return `cli=ok, version=${output}`;
+        const quote = (value: string): string => process.platform === 'win32'
+            ? `'${value.replace(/'/gu, "''")}'` : `'${value.replace(/'/gu, "'\\''")}'`;
+        for (let attempt = 1; attempt <= CLI_LAUNCH_MAX_ATTEMPTS; attempt += 1) {
+            const start = Date.now();
+            try {
+                const output = spawnProbe(process.execPath, [cliScript, '--version'], repoRoot, timeoutMs);
+                if (!/^\d+\.\d+\.\d+(?:-[\da-z.-]+)?(?:\+[\da-z.-]+)?$/iu.test(output)) {
+                    throw new Error(`Unexpected CLI version output: ${JSON.stringify(output)}`);
+                }
+                const detail = `cli=ok, version=${output}`;
+                attempts.push({ attempt, timeout_ms: timeoutMs, elapsed_ms: Date.now() - start, status: 'ok', detail });
+                return detail;
+            } catch (error: unknown) {
+                const timedOut = error instanceof Error && 'code' in error && error.code === 'ETIMEDOUT';
+                const detail = error instanceof Error ? error.message : String(error);
+                attempts.push({ attempt, timeout_ms: timeoutMs, elapsed_ms: Date.now() - start,
+                    status: timedOut ? 'timeout' : 'error', detail });
+                if (!timedOut) throw error;
+                if (attempt === CLI_LAUNCH_MAX_ATTEMPTS) {
+                    retryCommand = `${process.platform === 'win32' ? '& ' : ''}${quote(process.execPath)} `
+                        + `${quote(cliScript)} gate shell-smoke-preflight --task-id ${quote(taskId)} --repo-root ${quote(repoRoot)}`;
+                    if (taskModePath) retryCommand += ` --task-mode-path ${quote(path.resolve(repoRoot, taskModePath))}`;
+                    throw new Error(`launch timed out ${attempt} times (${timeoutMs}ms per attempt): ${detail}`);
+                }
+            }
+        }
+        throw new Error('CLI launch attempts exhausted');
     });
+    return { ...probe, attempts, ...(retryCommand ? { retry_command: retryCommand } : {}) };
 }
 
 export function resolveShellSmokeArtifactPath(repoRoot: string, taskId: string, artifactPath = ''): string {
@@ -316,7 +356,7 @@ export function buildShellSmokePreflight(options: BuildShellSmokePreflightOption
         gitChangeClassification = gitState.evidence;
         probes.push(probeFileRead(repoRoot, isSourceCheckout));
         probes.push(probeTempFileWriteDelete(repoRoot));
-        probes.push(probeCliLaunchability(repoRoot, isSourceCheckout, timeoutMs));
+        probes.push(probeCliLaunchability(repoRoot, taskId, isSourceCheckout, timeoutMs, options.taskModePath));
 
         for (const probe of probes) {
             if (probe.status === 'error') {
@@ -577,6 +617,11 @@ export function formatShellSmokePreflightResult(artifact: ShellSmokePreflightArt
             const icon = p.status === 'ok' ? '+' : p.status === 'warning' ? '~' : '-';
             const timing = p.elapsed_ms != null ? ` (${p.elapsed_ms}ms)` : '';
             lines.push(`  [${icon}] ${p.check}: ${p.detail}${timing}`);
+            for (const attempt of p.attempts || []) {
+                lines.push(`    attempt ${attempt.attempt}: ${attempt.status}, limit=${attempt.timeout_ms}ms, `
+                    + `elapsed=${attempt.elapsed_ms}ms: ${attempt.detail}`);
+            }
+            if (p.retry_command) lines.push(`Retry command: ${p.retry_command}`);
         }
     }
 

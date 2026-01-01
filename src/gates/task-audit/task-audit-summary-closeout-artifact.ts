@@ -89,6 +89,7 @@ export interface BuildFinalCloseoutArtifactInput {
     commitCommandTemplate: string;
     commitCommandSuggestion: string;
     workspaceSnapshotRequest?: WorkspaceSnapshotRequest;
+    recoveredContentHash?: string | null;
 }
 
 function readTaskModePlannedChangedFiles(taskMode: Record<string, unknown> | null): string[] {
@@ -424,6 +425,10 @@ export function buildFinalCloseoutArtifact(input: BuildFinalCloseoutArtifactInpu
     const closeoutScopeSnapshot = readAuditedCloseoutScopeSnapshot(
         input.repoRoot, input.changedFiles, authenticatedWorkspaceSnapshotRequest
     );
+    if (input.auditStatus === 'PASS' && input.recoveredContentHash
+        && closeoutScopeSnapshot?.scope_content_sha256 !== input.recoveredContentHash) {
+        throw new Error('Accepted scope could not be verified while rebuilding final closeout. Retry the task audit.');
+    }
     const plannedChangedFiles = readTaskModePlannedChangedFiles(input.taskMode);
     const dirtyWorkspaceBaselineChangedFiles = readTaskModeDirtyWorkspaceBaselineChangedFiles(input.taskMode);
     const preflightChangedFiles = readPreflightChangedFiles(input.preflight);

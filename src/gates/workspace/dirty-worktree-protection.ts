@@ -1,3 +1,5 @@
+import { captureWorkspacePlannedFiles, extendWorkspacePlannedFiles } from '../../core/workspace-planned-files';
+import { parseStageIndexAuthority } from '../../core/staged-index-fingerprints';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
@@ -10,7 +12,7 @@ import { taskModeInvocationRepoKey } from '../task-mode/task-mode-invocation-obs
 
 import {
     buildGitChangeClassificationEvidence,
-    classifyGitChanges,
+    collectGitChangeClassificationSnapshot,
     normalizeGitChangeClassificationEvidence,
     type GitChangeClassificationEvidence
 } from '../../core/git-change-classification';
@@ -168,107 +170,106 @@ export function normalizeWorkspaceRelativePaths(repoRoot: string, values: unknow
     )].sort();
 }
 
-function getGitTrackedPaths(repoRoot: string, relativePaths: string[]): Set<string> {
-    const normalizedPaths = normalizeWorkspaceRelativePaths(repoRoot, relativePaths);
-    if (normalizedPaths.length === 0) {
-        return new Set();
-    }
+function gitAuthority<T>(repoRoot: string, query: string, args: string[], parse: (output: string) => T): T {
+    const quote = (value: string) => /^[a-zA-Z0-9_./=-]+$/u.test(value) ? value : "'" + value.replace(/'/gu, process.platform === 'win32' ? "''" : "'\"'\"'") + "'";
+    const command = ['git', '-C', quote(repoRoot), ...args.map(quote)].join(' ');
     try {
-        const result = spawnSyncWithTimeout('git', [
-            '-C',
-            repoRoot,
-            'ls-files',
-            '-z',
-            '--',
-            ...normalizedPaths.map((relativePath) => `:(literal)${relativePath}`)
-        ], {
-            encoding: 'utf8',
-            stdio: ['ignore', 'pipe', 'pipe'],
-            timeoutMs: DEFAULT_GIT_TIMEOUT_MS,
-            maxBuffer: 1024 * 1024
+        const result = spawnSyncWithTimeout('git', ['-C', repoRoot, ...args], {
+            encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+            timeoutMs: DEFAULT_GIT_TIMEOUT_MS, maxBuffer: 1024 * 1024
         });
-        if (result.status !== 0) {
-            return new Set();
+        if (result.status !== 0 || result.timedOut || result.error || result.signal || typeof result.stdout !== 'string') {
+            throw new Error([result.error?.message, result.stderr, `exit=${result.status}`, result.signal,
+                result.timedOut ? 'timeout' : ''].filter(Boolean).join(' '));
         }
-        return new Set(normalizeWorkspaceRelativePaths(repoRoot, String(result.stdout || '').split('\0')));
-    } catch {
-        return new Set();
+        return parse(result.stdout);
+    } catch (cause) {
+        throw new Error(`Git ${query} authority query failed: ${cause instanceof Error ? cause.message : String(cause)}. ` +
+            `Diagnose with: ${command}\nAfter repairing Git authority, retry the original gate.`, { cause });
     }
+}
+
+function authorityRecords(output: string): string[] {
+    if (!output) return [];
+    if (!output.endsWith('\0')) throw new Error('Unterminated authority record.');
+    const records = output.slice(0, -1).split('\0');
+    if (records.some(record => !record)) throw new Error('Empty authority record.');
+    return records;
+}
+
+function authorityPath(repoRoot: string, value: string): string {
+    if (normalizeWorkspaceRelativePath(repoRoot, value) !== value) throw new Error('Invalid or escaping authority path.');
+    return value;
+}
+
+function exactAuthorityPaths(repoRoot: string, records: string[], wanted: ReadonlySet<string>): string[] {
+    const seen = new Set<string>();
+    for (const record of records) {
+        const file = authorityPath(repoRoot, record);
+        if (!wanted.has(file) || seen.has(file)) throw new Error('Foreign or duplicate authority path.');
+        seen.add(file);
+    }
+    return [...seen];
+}
+
+function pathIdentity(file: string): string {
+    try {
+        const stat = fs.lstatSync(file, { bigint: true });
+        return [stat.dev, stat.ino, stat.birthtimeNs, stat.mode].join(':');
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'missing';
+        throw error;
+    }
+}
+
+function getGitTrackedPaths(repoRoot: string, relativePaths: string[], stageZeroPaths: ReadonlyMap<string, string>): Set<string> {
+    const normalizedPaths = normalizeWorkspaceRelativePaths(repoRoot, relativePaths);
+    if (!normalizedPaths.length) return new Set();
+    const identities = new Map(normalizedPaths.map(file => [file, pathIdentity(path.join(repoRoot, file))]));
+    const directoryPaths = new Set(normalizedPaths.filter(file => {
+        if (identities.get(file) === 'missing') return [...stageZeroPaths.keys()].some(entry => entry.startsWith(file + '/'));
+        const stat = fs.lstatSync(path.join(repoRoot, file));
+        return stat.isDirectory() && !stat.isSymbolicLink();
+    }));
+    return gitAuthority(repoRoot, 'tracked', ['ls-files', '-z', '--', ...normalizedPaths.map(file => `:(literal)${file}`)], output => {
+        const seen = new Set<string>();
+        for (const raw of authorityRecords(output)) {
+            const file = authorityPath(repoRoot, raw);
+            if (seen.has(file) || !normalizedPaths.some(selected => file === selected || (
+                directoryPaths.has(selected) && file.startsWith(selected + '/') && stageZeroPaths.has(file)
+            ))) throw new Error('Foreign, unmerged or duplicate tracked authority path.');
+            seen.add(file);
+        }
+        for (const selected of normalizedPaths) {
+            if (pathIdentity(path.join(repoRoot, selected)) !== identities.get(selected))
+                throw new Error('Directory identity changed during authority query.');
+        }
+        return seen;
+    });
 }
 
 function getStagedRenameSourcePaths(repoRoot: string, currentScopeChangedFiles: string[]): string[] {
-    const currentFileSet = new Set(normalizeWorkspaceRelativePaths(repoRoot, currentScopeChangedFiles));
-    if (currentFileSet.size === 0) {
-        return [];
-    }
-    try {
-        const result = spawnSyncWithTimeout('git', [
-            '-C',
-            repoRoot,
-            'diff',
-            '--cached',
-            '--name-status',
-            '-z',
-            '--find-renames',
-            '--diff-filter=R'
-        ], {
-            encoding: 'utf8',
-            stdio: ['ignore', 'pipe', 'pipe'],
-            timeoutMs: DEFAULT_GIT_TIMEOUT_MS,
-            maxBuffer: 1024 * 1024
-        });
-        if (result.status !== 0) {
-            return [];
+    const wanted = new Set(normalizeWorkspaceRelativePaths(repoRoot, currentScopeChangedFiles));
+    if (!wanted.size) return [];
+    return gitAuthority(repoRoot, 'rename', ['diff', '--cached', '--name-status', '-z', '--find-renames', '--diff-filter=R'], output => {
+        const records = authorityRecords(output), seen = new Set<string>(), sources: string[] = [];
+        if (records.length % 3) throw new Error('Incomplete rename authority.');
+        for (let i = 0; i < records.length; i += 3) {
+            if (!/^R(?:100|[0-9]{1,2})$/u.test(records[i])) throw new Error('Invalid rename status.');
+            const source = authorityPath(repoRoot, records[i + 1]), target = authorityPath(repoRoot, records[i + 2]);
+            if (seen.has(source) || seen.has(target)) throw new Error('Duplicate rename authority.');
+            seen.add(source); seen.add(target);
+            if (wanted.has(target)) sources.push(source);
         }
-        const entries = String(result.stdout || '').split('\0');
-        const renamedSources: string[] = [];
-        for (let index = 0; index < entries.length;) {
-            const status = String(entries[index++] || '').trim();
-            if (!/^R\d*$/.test(status)) {
-                continue;
-            }
-            const sourcePath = normalizeWorkspaceRelativePath(repoRoot, entries[index++] || '');
-            const targetPath = normalizeWorkspaceRelativePath(repoRoot, entries[index++] || '');
-            if (sourcePath && targetPath && currentFileSet.has(targetPath)) {
-                renamedSources.push(sourcePath);
-            }
-        }
-        return normalizeWorkspaceRelativePaths(repoRoot, renamedSources);
-    } catch {
-        return [];
-    }
+        return sources.sort();
+    });
 }
 
 function getStagedChangedFiles(repoRoot: string, relativePaths: string[]): string[] {
-    const normalizedPathSet = new Set(normalizeWorkspaceRelativePaths(repoRoot, relativePaths));
-    if (normalizedPathSet.size === 0) {
-        return [];
-    }
-    try {
-        const result = spawnSyncWithTimeout('git', [
-            '-C',
-            repoRoot,
-            'diff',
-            '--cached',
-            '--name-only',
-            '-z',
-            '--diff-filter=ACDMRTUXB',
-            '--',
-            ...[...normalizedPathSet].map((relativePath) => `:(literal)${relativePath}`)
-        ], {
-            encoding: 'utf8',
-            stdio: ['ignore', 'pipe', 'pipe'],
-            timeoutMs: DEFAULT_GIT_TIMEOUT_MS,
-            maxBuffer: 1024 * 1024
-        });
-        if (result.status !== 0) {
-            return [];
-        }
-        return normalizeWorkspaceRelativePaths(repoRoot, String(result.stdout || '').split('\0'))
-            .filter((relativePath) => normalizedPathSet.has(relativePath));
-    } catch {
-        return [];
-    }
+    const wanted = new Set(normalizeWorkspaceRelativePaths(repoRoot, relativePaths));
+    if (!wanted.size) return [];
+    return gitAuthority(repoRoot, 'changed', ['diff', '--cached', '--name-only', '-z', '--diff-filter=ACDMRTUXB', '--',
+        ...[...wanted].map(file => `:(literal)${file}`)], output => exactAuthorityPaths(repoRoot, authorityRecords(output), wanted));
 }
 
 interface StagedIndexEntry {
@@ -279,173 +280,58 @@ interface StagedIndexEntry {
 }
 
 function getStagedDeletedFiles(repoRoot: string, relativePaths: string[]): string[] {
-    const normalizedPathSet = new Set(normalizeWorkspaceRelativePaths(repoRoot, relativePaths));
-    if (normalizedPathSet.size === 0) {
-        return [];
-    }
-    try {
-        const result = spawnSyncWithTimeout('git', [
-            '-C',
-            repoRoot,
-            'diff',
-            '--cached',
-            '--name-status',
-            '-z',
-            '--diff-filter=D',
-            '--',
-            ...[...normalizedPathSet].map((relativePath) => `:(literal)${relativePath}`)
-        ], {
-            encoding: 'utf8',
-            stdio: ['ignore', 'pipe', 'pipe'],
-            timeoutMs: DEFAULT_GIT_TIMEOUT_MS,
-            maxBuffer: 1024 * 1024
-        });
-        if (result.status !== 0) {
-            return [];
+    const wanted = new Set(normalizeWorkspaceRelativePaths(repoRoot, relativePaths));
+    if (!wanted.size) return [];
+    return gitAuthority(repoRoot, 'deleted', ['diff', '--cached', '--name-status', '-z', '--diff-filter=D', '--',
+        ...[...wanted].map(file => `:(literal)${file}`)], output => {
+        const records = authorityRecords(output), paths: string[] = [];
+        if (records.length % 2) throw new Error('Incomplete deleted authority.');
+        for (let i = 0; i < records.length; i += 2) {
+            if (records[i] !== 'D') throw new Error('Invalid deleted authority status.');
+            paths.push(records[i + 1]);
         }
-        const entries = String(result.stdout || '').split('\0');
-        const deletedFiles: string[] = [];
-        for (let index = 0; index < entries.length;) {
-            const status = String(entries[index++] || '').trim();
-            const deletedPath = normalizeWorkspaceRelativePath(repoRoot, entries[index++] || '');
-            if (status === 'D' && deletedPath && normalizedPathSet.has(deletedPath)) {
-                deletedFiles.push(deletedPath);
-            }
-        }
-        return normalizeWorkspaceRelativePaths(repoRoot, deletedFiles);
-    } catch {
-        return [];
-    }
+        return exactAuthorityPaths(repoRoot, paths, wanted);
+    });
 }
 
 function getHeadTreeEntry(repoRoot: string, relativePath: string): StagedIndexEntry | null {
-    const normalizedPath = normalizeWorkspaceRelativePath(repoRoot, relativePath);
-    if (!normalizedPath) {
-        return null;
-    }
-    try {
-        const result = spawnSyncWithTimeout('git', [
-            '-C',
-            repoRoot,
-            'ls-tree',
-            '-z',
-            'HEAD',
-            '--',
-            `:(literal)${normalizedPath}`
-        ], {
-            encoding: 'utf8',
-            stdio: ['ignore', 'pipe', 'pipe'],
-            timeoutMs: DEFAULT_GIT_TIMEOUT_MS,
-            maxBuffer: 1024 * 1024
-        });
-        if (result.status !== 0) {
-            return null;
-        }
-        const rawEntry = String(result.stdout || '').split('\0').find((entry) => entry.trim());
-        const match = rawEntry ? /^(\d+)\s+\S+\s+([0-9a-f]{40,64})\t(.+)$/.exec(rawEntry.trim()) : null;
-        const entryPath = normalizeWorkspaceRelativePath(repoRoot, match?.[3] || '');
-        if (!match || entryPath !== normalizedPath) {
-            return null;
-        }
-        return {
-            path: normalizedPath,
-            status: 'deleted',
-            mode: match[1],
-            objectId: String(match[2] || '').toLowerCase()
-        };
-    } catch {
-        return null;
-    }
+    return gitAuthority(repoRoot, 'HEAD tree', ['ls-tree', '-z', 'HEAD', '--', `:(literal)${relativePath}`], output => {
+        const records = authorityRecords(output);
+        if (!records.length) return null;
+        const match = records.length === 1 && /^([0-7]{6}) (?:blob|commit) ([a-f0-9]{40}|[a-f0-9]{64})\t(.+)$/su.exec(records[0]);
+        if (!match || authorityPath(repoRoot, match[3]) !== relativePath) throw new Error('Invalid HEAD tree authority entry.');
+        return { path: relativePath, status: 'deleted', mode: match[1], objectId: match[2] };
+    });
 }
 
 function getStagedIndexEntries(repoRoot: string, relativePaths: string[]): Map<string, StagedIndexEntry> {
-    const normalizedPaths = normalizeWorkspaceRelativePaths(repoRoot, relativePaths);
-    const stagedChangedPathSet = new Set(getStagedChangedFiles(repoRoot, normalizedPaths));
-    const stagedDeletedFiles = getStagedDeletedFiles(repoRoot, normalizedPaths);
+    const normalizedPaths = normalizeWorkspaceRelativePaths(repoRoot, relativePaths), wanted = new Set(normalizedPaths);
+    const changed = new Set(getStagedChangedFiles(repoRoot, normalizedPaths));
+    const deleted = getStagedDeletedFiles(repoRoot, normalizedPaths);
     const entries = new Map<string, StagedIndexEntry>();
-    if (normalizedPaths.length === 0 || stagedChangedPathSet.size === 0) {
-        return entries;
+    if (!normalizedPaths.length || !changed.size) return entries;
+    gitAuthority(repoRoot, 'index', ['ls-files', '-s', '-z', '--', ...normalizedPaths.map(file => `:(literal)${file}`)], output => {
+        const seen = new Set<string>();
+        for (const entry of parseStageIndexAuthority(output)) {
+            const file = authorityPath(repoRoot, entry.path);
+            if (entry.stage !== '0' || seen.has(file) || !wanted.has(file)) throw new Error('Unmerged, foreign or duplicate index authority.');
+            seen.add(file);
+            if (changed.has(file)) entries.set(file, { path: file, status: 'present', mode: entry.mode, objectId: entry.objectId });
+        }
+    });
+    for (const file of deleted) {
+        if (entries.has(file)) throw new Error('Git index authority query failed: deleted entry also present.');
+        const entry = getHeadTreeEntry(repoRoot, file);
+        if (!entry) throw new Error('Git HEAD tree authority query failed: missing deleted entry.');
+        entries.set(file, entry);
     }
-    try {
-        const result = spawnSyncWithTimeout('git', [
-            '-C',
-            repoRoot,
-            'ls-files',
-            '-s',
-            '-z',
-            '--',
-            ...normalizedPaths.map((relativePath) => `:(literal)${relativePath}`)
-        ], {
-            encoding: 'utf8',
-            stdio: ['ignore', 'pipe', 'pipe'],
-            timeoutMs: DEFAULT_GIT_TIMEOUT_MS,
-            maxBuffer: 1024 * 1024
-        });
-        if (result.status !== 0) {
-            return entries;
-        }
-        for (const rawEntry of String(result.stdout || '').split('\0')) {
-            const entry = rawEntry.trim();
-            if (!entry) {
-                continue;
-            }
-            const match = /^(\d+)\s+([0-9a-f]{40,64})\s+\d+\t(.+)$/.exec(entry);
-            if (!match) {
-                continue;
-            }
-            const normalizedPath = normalizeWorkspaceRelativePath(repoRoot, match[3] || '');
-            if (!normalizedPath) {
-                continue;
-            }
-            if (!stagedChangedPathSet.has(normalizedPath)) {
-                continue;
-            }
-            entries.set(normalizedPath, {
-                path: normalizedPath,
-                status: 'present',
-                mode: match[1],
-                objectId: String(match[2] || '').toLowerCase()
-            });
-        }
-    } catch {
-        return entries;
-    }
-    for (const deletedFile of stagedDeletedFiles) {
-        if (entries.has(deletedFile)) {
-            continue;
-        }
-        const headEntry = getHeadTreeEntry(repoRoot, deletedFile);
-        if (headEntry) {
-            entries.set(deletedFile, headEntry);
-        }
-    }
+    if ([...changed].some(file => !entries.has(file))) throw new Error('Git index authority query failed: missing changed entry.');
     return entries;
 }
 
-function readStagedBlobText(repoRoot: string, objectId: string): string | null {
-    if (!/^[0-9a-f]{40,64}$/i.test(objectId)) {
-        return null;
-    }
-    try {
-        const result = spawnSyncWithTimeout('git', [
-            '-C',
-            repoRoot,
-            'cat-file',
-            '-p',
-            objectId
-        ], {
-            encoding: 'utf8',
-            stdio: ['ignore', 'pipe', 'pipe'],
-            timeoutMs: DEFAULT_GIT_TIMEOUT_MS,
-            maxBuffer: 1024 * 1024
-        });
-        if (result.status !== 0 || result.timedOut || result.error) {
-            return null;
-        }
-        return String(result.stdout || '');
-    } catch {
-        return null;
-    }
+function readStagedBlobText(repoRoot: string, objectId: string): string {
+    if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(objectId)) throw new Error('Git blob authority query failed: invalid object ID.');
+    return gitAuthority(repoRoot, 'blob', ['cat-file', '-p', objectId], output => output);
 }
 
 function buildStagedTrustFileEvidence(
@@ -588,11 +474,12 @@ function verifyStagedBaselineTrust(
 function collectExplicitlyAuthorizedDirtyPaths(
     repoRoot: string,
     changedFiles: string[],
-    plannedChangedFiles: string[]
+    plannedChangedFiles: string[],
+    stageZeroPaths: ReadonlyMap<string, string>
 ): string[] {
     const changedFileSet = new Set(normalizeWorkspaceRelativePaths(repoRoot, changedFiles));
     const normalizedPlannedFiles = normalizeWorkspaceRelativePaths(repoRoot, plannedChangedFiles);
-    const trackedFileSet = getGitTrackedPaths(repoRoot, normalizedPlannedFiles);
+    const trackedFileSet = getGitTrackedPaths(repoRoot, normalizedPlannedFiles, stageZeroPaths);
     const result: string[] = [];
     for (const relativePath of normalizedPlannedFiles) {
         if (changedFileSet.has(relativePath) || trackedFileSet.has(relativePath)) {
@@ -642,16 +529,17 @@ export function captureDirtyWorkspaceBaseline(
     repoRoot: string,
     plannedChangedFiles: string[] = [],
     ownershipLock?: LockHandle,
-    taskPlanLock?: { taskId: string; handle: LockHandle }
+    taskPlanLock?: { taskId: string; handle: LockHandle },
+    approvedPlanSourceFiles: readonly string[] = []
 ): DirtyWorkspaceBaseline {
     const ownedLocks = [
         ...(ownershipLock ? [{ handle: ownershipLock, path: joinOrchestratorPath(repoRoot, 'runtime/task-queue-locks/active-implementation.lock') }] : []),
         ...(taskPlanLock ? [{ handle: taskPlanLock.handle, path: resolveCanonicalTaskPlanLockPath(repoRoot, taskPlanLock.taskId) }] : [])
     ];
     const ownedLockMetadataPaths = ownedLocks.map(lock => resolveOwnedEntryLockMetadataPath(repoRoot, lock.handle, lock.path));
-    const gitChangeClassification = buildGitChangeClassificationEvidence(classifyGitChanges(repoRoot, {
-        timeoutMs: DEFAULT_GIT_TIMEOUT_MS
-    }));
+    const plannedFiles = extendWorkspacePlannedFiles(captureWorkspacePlannedFiles(repoRoot), approvedPlanSourceFiles);
+    const gitSnapshot = collectGitChangeClassificationSnapshot(repoRoot, { timeoutMs: DEFAULT_GIT_TIMEOUT_MS, plannedFiles });
+    const gitChangeClassification = buildGitChangeClassificationEvidence(gitSnapshot.classification);
     const snapshotChangedFiles = normalizeWorkspaceRelativePaths(
         repoRoot,
         gitChangeClassification.effective_changed_files
@@ -663,7 +551,8 @@ export function captureDirtyWorkspaceBaseline(
         && !gitChangeClassification.staged_files.includes(relativePath)));
     const changedFiles = [...new Set([
         ...snapshotChangedFiles,
-        ...collectExplicitlyAuthorizedDirtyPaths(repoRoot, snapshotChangedFiles, plannedChangedFiles)
+        ...collectExplicitlyAuthorizedDirtyPaths(repoRoot, snapshotChangedFiles,
+            [...plannedChangedFiles, ...approvedPlanSourceFiles], gitSnapshot.stagedBlobFingerprints)
     ])].filter(relativePath => !temporaryLockMetadataPaths.has(relativePath)).sort();
     for (const lock of ownedLocks) resolveOwnedEntryLockMetadataPath(repoRoot, lock.handle, lock.path);
     const changedFileSet = new Set(changedFiles);

@@ -419,7 +419,17 @@ const JOURNAL_OWNER_PATTERN = /(?:withLifecycleRuntimeMutationGeneration(?:ForPa
 // items that the sync backup replaces right afterwards (createRollbackSnapshot stays inside its generation journal).
 // 2026-11-06 read-reuse audit: review-artifacts.ts only shares already admitted bytes and their hash with other readers
 // of the same identity-checked file; no writer, journal owner or mutation edge changes.
-const BOUNDED_MUTATION_SURFACE_SHA256 = 'ec7daddd4fbb627064da7c3ede7c2fb1cf274fc3a61925545f984111574e7791';
+// 2026-11-07 CI audit since aa4243f5: the only bounded delta is migration snippet matching.
+// It reads current/legacy wording through a new uncached helper; all 28 writer edges and journals remain unchanged.
+// 2026-11-08 audit since 63f6b36f: 118 bounded files / 28 edges; only review-artifacts.ts changed. Read scopes in one
+// invocation share one captured review generation and defer its final check to invocation exit. The write guard now
+// checks that generation and any active barrier against a live realpath of the reviews directory. No writer, journal
+// owner or mutation edge changes.
+// 2026-11-14 fix-ci1 audit since e3269edf: 119 bounded files / 28 journal edges. Frozen review projections
+// only brand checked reads; migration warnings keep report/backup writes in rule-refresh-report-store;
+// both update callers add a read-only manual-selector preflight. Review, update-apply, rollback and report
+// writers retain their existing journal owners. All changed files and owner paths were reviewed.
+const BOUNDED_MUTATION_SURFACE_SHA256 = 'ae6edc1bc3ffe1dc34eb89b0fc2707235bb9859e5ffd40f90729d0da4619ed69';
 const READ_ONLY_FS_OPERATIONS = new Set([
     'access', 'accessSync', 'close', 'closeSync', 'exists', 'existsSync',
     'fstat', 'fstatSync', 'lstat', 'lstatSync', 'open', 'opendir', 'opendirSync',

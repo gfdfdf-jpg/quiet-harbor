@@ -1,6 +1,6 @@
 import { it } from 'node:test';
 import assert from 'node:assert/strict';
-import { eligibleExpectedRedRecipes, parseProjectValidationContract } from '../../../src/core/project-validation-recipes';
+import { applicableExpectedRedRecipes, eligibleExpectedRedRecipes, parseProjectValidationContract } from '../../../src/core/project-validation-recipes';
 
 function declaration(overrides: Record<string, unknown> = {}) {
     return { schema_version: 1, recipes: [{ id: 'controle', purpose: 'test', executable: 'unfamiliar-compiler',
@@ -10,6 +10,12 @@ function declaration(overrides: Record<string, unknown> = {}) {
         timeout_ms: 5000, max_attempts: 3, max_output_bytes: 65536, max_input_bytes: 65536,
         required_capabilities: [], result_format: 'tap', ...overrides }] };
 }
+
+it('an unrelated optional recipe leaves RED/GREEN to the generic task command', () => {
+    const recipes = parseProjectValidationContract(declaration()).recipes;
+    assert.deepEqual(applicableExpectedRedRecipes(recipes, ['other/payment.orbit', 'other/refund.quasar']), []);
+    assert.deepEqual(applicableExpectedRedRecipes(recipes, ['specifications/case.unfamiliar']), recipes);
+});
 
 for (const executable of ['unfamiliar-compiler', 'constructor', '__proto__', 'toString']) it(`binds ${executable}, unfamiliar layouts and Unicode selectors as literal data`, () => {
     const recipe = parseProjectValidationContract(declaration({ executable })).recipes[0];

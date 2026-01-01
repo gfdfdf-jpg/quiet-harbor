@@ -1,5 +1,6 @@
 import { readInvocationTextFile } from '../../core/invocation-file-observation';
 import { readTaskTimelineCadenceWindow } from '../../gate-runtime/timeline/task-events-integrity';
+import { verifiedIndexForEvents, selectVerifiedEvents, verifiedEventPosition } from '../../gate-runtime/timeline/task-verified-event-index';
 import { selectReviewCadence } from '../review-attempts/review-cadence-window';
 import { countNextStepWork } from '../../core/next-step-measurement';
 import { resolveValidationSemanticReviewLanes, type EffectiveReviewSnapshot } from '../../policy/effective-review-snapshot';
@@ -189,7 +190,7 @@ function qualityChecklistAnswersMaterializationRequired(options: {
         return true;
     }
     try {
-        const binding = JSON.parse(fs.readFileSync(bindingPath, 'utf8')) as Record<string, unknown>;
+        const binding = JSON.parse(readInvocationTextFile(bindingPath)) as Record<string, unknown>;
         const template = assessment.template as unknown as Record<string, unknown>;
         const expectedPolicySha256 = currentAnswersTemplatePolicySha256({ binding, template });
         const scalarKeys = [
@@ -477,10 +478,13 @@ function reviewFailureCadence(repoRoot: string, taskId: string, reviewFailureCad
     }
     countNextStepWork('cadence_legacy_fallback');
     const events = readImmutableTaskTimelineEventLikes(eventsRoot, taskId);
+    const indexed = verifiedIndexForEvents(events);
+    const candidates = indexed ? selectVerifiedEvents(indexed, ['QUALITY_CHECKLIST_RECORDED', 'REVIEW_RECORDED']) : events;
     const checklistPasses: number[] = [];
     const reviewFailures: Array<{ index: number; reviewType: string }> = [];
-    events.forEach((event, index) => {
+    candidates.forEach((event, candidateIndex) => {
         countNextStepWork('visit:next-step-quality-checklist-readiness:467');
+        const index = indexed ? verifiedEventPosition(event)! : candidateIndex;
         const details = isPlainRecord(event.details) ? event.details : {};
         if (String(event.event_type || '') === 'QUALITY_CHECKLIST_RECORDED') {
             const status = String(details.status || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
@@ -1270,7 +1274,7 @@ export function readQualityChecklistReadiness(options: {
                         reason:
                             `Quality checklist answers were updated after ${status} remediation` +
                             (updatedBlockingAnswers ? ' and retain unresolved action items. ' : ' and now produce a non-blocking candidate. ') +
-                            'Rerun the quality checklist to replace the blocking artifact before compile, review, full-suite, or completion gates.',
+                            'Rerun the quality checklist to replace the blocking artifact before compile, review, task test validation, or completion gates.',
                         artifactPath,
                         artifact,
                         changedFilesCount,

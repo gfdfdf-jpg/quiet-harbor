@@ -87,10 +87,14 @@ function authenticated(record: ProtectedTaskContinuation, ctx: ContinuationConte
         && timingSafeEqual(signature(unsigned, secret), Buffer.from(hmac_sha256, 'hex'));
 }
 
+export const PROTECTED_TASK_CONTINUATION_END_TYPES: readonly string[] = Object.freeze([
+    'TASK_DONE', 'TASK_RESET', 'TASK_DISCARDED', 'STATUS_CHANGED'
+]);
+
 export function endsProtectedTaskContinuation(eventType: string, details: unknown): boolean {
-    return ['TASK_DONE', 'TASK_RESET', 'TASK_DISCARDED'].includes(eventType)
-        || (eventType === 'STATUS_CHANGED' && isPlainRecord(details)
-            && !['IN_PROGRESS', 'IN_REVIEW'].includes(String(details.new_status)));
+    return PROTECTED_TASK_CONTINUATION_END_TYPES.includes(eventType)
+        && (eventType !== 'STATUS_CHANGED' || (isPlainRecord(details)
+            && !['IN_PROGRESS', 'IN_REVIEW'].includes(String(details.new_status))));
 }
 
 export function revokeProtectedTaskContinuationForEvent(

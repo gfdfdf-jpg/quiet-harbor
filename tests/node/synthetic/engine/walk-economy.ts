@@ -1,4 +1,5 @@
 import { CONTRACT } from '../../../../scripts/node-foundation/synthetic/oracle';
+import { observeStandOracle } from './stand-check-observation';
 import type { WalkResult, WalkReview, WalkScenario, WalkStep } from './navigator-walk';
 
 /**
@@ -335,6 +336,7 @@ function describeAllowed(bound: LaneBound): string {
  * Judges launches in every terminal variant. Only a DONE walk can be missing a future required launch.
  */
 export function judgeReviewEconomy(result: Pick<WalkResult, 'outcome' | 'reviews' | 'sweep'> & Partial<Pick<WalkResult, 'events'>>): EconomyVerdict | null {
+    observeStandOracle('review-economy');
     const sweep = result.sweep;
     if (!sweep?.economy) return null;
     const observed = result.reviews.filter(review => (review.step ?? -1) >= sweep.step);

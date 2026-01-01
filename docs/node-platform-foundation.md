@@ -73,7 +73,7 @@ This command enables `GARDA_NPM_NETWORK_TESTS=1` in its child runner and selects
 Clean-checkout integration for bundle ownership, deterministic process snapshots, runner-environment cleanup, and local npm acquisition uses the following exact selection after provisioning the locked development dependencies:
 
 ```text
-node scripts/node-foundation/build-scripts.cjs test.js tests/node/bundle-source-fixtures.test.ts tests/node/validators/workspace-layout.test.ts tests/node/validators/status.test.ts tests/node/cli/commands/setup.test.ts tests/node/process-environment-fixtures.test.ts tests/node/gates/compile/full-suite-validation-run-marker.test.ts tests/node/gates/compile/full-suite-validation-cli-transaction.test.ts tests/node/repo/node-foundation-test-wrapper.test.ts tests/node/lifecycle/check-update-runtime-policy.test.ts
+node scripts/node-foundation/build-scripts.cjs test.js tests/node/bundle-source-fixtures.test.ts tests/node/validators/workspace-layout.test.ts tests/node/validators/status.test.ts tests/node/cli/commands/setup.test.ts tests/node/process-environment-fixtures.test.ts tests/node/gates/compile/task test-validation-run-marker.test.ts tests/node/gates/compile/task test-validation-cli-transaction.test.ts tests/node/repo/node-foundation-test-wrapper.test.ts tests/node/lifecycle/check-update-runtime-policy.test.ts
 ```
 
 Start from a tracked checkout without `garda-agent-orchestrator/`, `dist/`, `.node-build/`, or `.scripts-build/`. Git, npm, and the supported Node runtime must be available; TypeScript and Node typings come from the locked development dependency installation. Dependency provisioning is separate from test package acquisition. The runner builds the required generated graphs before executing tests; test npm cache/config roots and bundle roots belong to individual fixtures.
@@ -200,14 +200,16 @@ Local release proof remains stricter than the CI fast release matrix:
 3. `npm run test:release-smoke`
 4. `npm run validate:release`
 
-Full-suite optimization compatibility guardrails:
+### Full-suite optimization compatibility guardrails
 
-- Do not replace mandatory full-suite validation with focused shards, smoke tests, or `validate:release:fast`; optimized modes may only change how equivalent full-suite evidence is produced and aggregated.
-- The optimized local command is copy-paste safe as `npm run test:sharded`; it still runs the mandatory full-suite selection, emits shard logs, duration telemetry, and a fail-closed aggregate result. Use `npm test` as the standard fallback when validating without the optimized runner.
-- Workflow output and `next-step` label optimized commands as `optimized_sharded` or reuse-aware full-suite modes; those labels describe execution strategy only, not weaker validation.
+For Garda source development, full-suite refers to the repository's release-validation test coverage. In installed projects, task-test validation remains bound to the selected task tests. Runner optimizations preserve that selection and every required evidence check.
+
+- Do not replace mandatory task test validation with focused shards, smoke tests, or `validate:release:fast`; optimized modes may only change how equivalent task test evidence is produced and aggregated.
+- The optimized local command is copy-paste safe as `npm run test:sharded`; it still runs the mandatory task test selection, emits shard logs, duration telemetry, and a fail-closed aggregate result. Use `npm test` as the standard fallback when validating without the optimized runner.
+- Workflow output and `next-step` label optimized commands as `optimized_sharded` or reuse-aware task test modes; those labels describe execution strategy only, not weaker validation.
 - Do not depend on ignored local runtime state, `.node-build/` leftovers, duration history, or machine-local cache state for CI/release correctness. Every official CI job starts from checkout, `npm ci`, and an explicit build/test command.
 - Keep optimized test execution cross-platform for Linux, Windows, and macOS. Shell snippets used in CI must stay portable or be explicitly scoped with a compatible shell.
-- Keep failure forensics useful: shard runners and full-suite validation must preserve enough logs, failing test identity, duration, command, and aggregate exit status for release triage.
+- Keep failure forensics useful: shard runners and task test validation must preserve enough logs, failing test identity, duration, command, and aggregate exit status for release triage.
 - Any command migration must leave `npm run release:preflight` and `npm run validate:release` as the operator-facing final proof path unless release-readiness validation and docs are updated in the same change.
 
 The lifecycle smoke installs from a `file://` clone of the current workflow branch, not implicitly from the repository default branch. That keeps pull-request and branch runs aligned with the code under test.

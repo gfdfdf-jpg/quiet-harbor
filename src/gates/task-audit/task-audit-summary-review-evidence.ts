@@ -193,7 +193,8 @@ export function collectEvidenceArtifacts(
     reviewsRoot: string,
     taskId: string,
     taskEventFile: string,
-    projectMemoryImpact: ProjectMemoryImpactLifecycleEvidence,
+    projectMemoryImpact: Pick<ProjectMemoryImpactLifecycleEvidence, 'required' | 'artifact_path' | 'update_artifact_path'>
+        & Partial<Pick<ProjectMemoryImpactLifecycleEvidence, 'evidence_status'>>,
     currentPreflight?: Record<string, unknown> | null
 ): EvidenceArtifact[] {
     const evidence = withReviewArtifactReadBarrier(reviewsRoot, () => (
@@ -209,7 +210,7 @@ export function collectEvidenceArtifacts(
         })
     ));
 
-    if (projectMemoryImpact.required || projectMemoryImpact.evidence_status !== 'NOT_REQUIRED') {
+    if (projectMemoryImpact.required || (projectMemoryImpact.evidence_status !== undefined && projectMemoryImpact.evidence_status !== 'NOT_REQUIRED')) {
         for (const [kind, artifactPath] of [
             ['project-memory-impact', projectMemoryImpact.artifact_path],
             ['project-memory-update', projectMemoryImpact.update_artifact_path]

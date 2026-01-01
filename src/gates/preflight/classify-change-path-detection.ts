@@ -25,6 +25,7 @@ export interface PathDetectionInput {
     normalizedFiles: string[];
     repoRoot?: string;
     taskIntent: string;
+    taskIntents?: readonly string[];
     classificationConfig: ResolvedClassificationConfig;
     callbacks: PathDetectionCallbacks;
 }
@@ -135,7 +136,8 @@ export function detectPathTriggers(input: PathDetectionInput): PathDetectionResu
 
     const performancePathMatchedFiles = normalizedFiles.filter((p: string) => callbacks.testMatch(p, classificationConfig.performance_trigger_regexes));
     const ordinaryCacheMaintenanceFiles = performancePathMatchedFiles.filter(callbacks.isOrdinaryOrchestratorCacheMaintenancePath);
-    const performanceCacheIntent = ordinaryCacheMaintenanceFiles.length > 0 && hasPerformanceSensitiveCacheIntent(input.taskIntent);
+    const performanceCacheIntent = ordinaryCacheMaintenanceFiles.length > 0
+        && (input.taskIntents ?? [input.taskIntent]).some(hasPerformanceSensitiveCacheIntent);
     const performancePathTriggeredFiles = performancePathMatchedFiles.filter((p: string) => (
         !callbacks.isOrdinaryOrchestratorCacheMaintenancePath(p) || performanceCacheIntent
     ));

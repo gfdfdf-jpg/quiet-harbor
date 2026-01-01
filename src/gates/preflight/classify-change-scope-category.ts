@@ -1,6 +1,7 @@
 import { matchAnyRegex } from '../../gate-runtime/text-utils';
 import { testPathPrefix } from '../shared/helpers';
 import { declaredFileRole, type FileRoleBindings } from '../../core/file-role-bindings';
+import { matchesConfiguredRoot, type ResolvedClassificationConfig } from './classify-change-config';
 import {
     isAuditOnlyPath,
     isConfigLikePath,
@@ -23,6 +24,26 @@ interface ScopeCategoryOptions {
     securityTriggerRegexes?: string[];
     apiTriggerRegexes?: string[];
     dependencyTriggerRegexes?: string[];
+}
+
+/** Task roles can add tests, but cannot erase positively classified product code. */
+export function isClassifiedProductCodePath(file: string, config: ResolvedClassificationConfig): boolean {
+    return isClassifiedProductCodeScopePath(file, config.code_like_regexes, config.runtime_roots, {
+        fileRoles: config.file_roles, testTriggerRegexes: config.test_trigger_regexes,
+        ordinaryDocPaths: config.ordinary_doc_paths, protectedControlPlaneRoots: config.protected_control_plane_roots,
+        sqlOrMigrationRegexes: config.sql_or_migration_regexes, dbTriggerRegexes: config.db_trigger_regexes,
+        securityTriggerRegexes: config.security_trigger_regexes, apiTriggerRegexes: config.api_trigger_regexes,
+        dependencyTriggerRegexes: config.dependency_trigger_regexes
+    });
+}
+
+function isClassifiedProductCodeScopePath(file: string, codeLikeRegexes: string[], runtimeRoots: string[],
+    options: ScopeCategoryOptions): boolean {
+    if (declaredFileRole(file, options.fileRoles) === 'source') return true;
+    const recognized = matchAnyRegex(file, codeLikeRegexes, { skipInvalidRegex: true, caseInsensitive: true })
+        || matchesConfiguredRoot(file, runtimeRoots, { allowNestedRoot: true });
+    return recognized && classifyScopeCategory([file], codeLikeRegexes, runtimeRoots,
+        { ...options, declaredTestPaths: [] }).category === 'code';
 }
 
 /**
@@ -61,6 +82,14 @@ export function classifyScopeCategory(
             continue;
         }
         const isCode = isRuntimeCodeLikePath(file, codeLikeRegexes, runtimeRoots);
+        // Compare with the classifier before adding a task-local test role. Unknown
+        // test formats outside recognized product scope still use the generic path.
+        const recognizedProduct = options.declaredTestPaths?.includes(file)
+            && isClassifiedProductCodeScopePath(file, codeLikeRegexes, runtimeRoots, options);
+        if (recognizedProduct) {
+            codeCount++;
+            continue;
+        }
         const isDeclaredTest = options.declaredTestPaths?.includes(file);
         const isTest = isDeclaredTest || matchAnyRegex(file, options.testTriggerRegexes || [], {
             skipInvalidRegex: true,

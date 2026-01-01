@@ -115,6 +115,7 @@ export interface ClassifyChangeOptions {
     repoRoot?: string;
     isSourceCheckout?: boolean;
     taskIntent?: string;
+    taskId?: string;
     fastPathMaxFiles?: number;
     fastPathMaxChangedLines?: number;
     performanceHeuristicMinLines?: number;

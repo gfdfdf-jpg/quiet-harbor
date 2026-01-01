@@ -16,6 +16,7 @@ import { getWorkflowConfigPath, isConfiguredCompileGateCommand } from '../core/w
 import { getManagedGitignoreEntries } from '../materialization/common';
 import { validateSkillPacks, validateSkillsIndex } from '../runtime/skills';
 import { getTaskModeRuleSectionMigrations } from '../materialization/rule-contracts';
+import { getRuleContractSnippetAlternatives } from '../materialization/rule-contract-snippets';
 import { getCompileCommands } from '../gates/compile/compile-gate';
 import {
     PROJECT_COMMAND_PLACEHOLDERS,
@@ -369,6 +370,8 @@ export function detectTaskModeRuleContractViolations(targetRoot: string): string
 
 function getCommandSnippetAlternatives(snippet: string): string[] {
     const normalizedSnippet = String(snippet || '');
+    const wordingAlternatives = getRuleContractSnippetAlternatives(normalizedSnippet);
+    if (wordingAlternatives.length > 1) return [...wordingAlternatives];
     const effectiveBundlePath = getBundleCliCommand();
     if (!normalizedSnippet.includes(effectiveBundlePath)) {
         const legacyBundlePath = getLegacyBundleCliCommand();

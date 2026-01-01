@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { prepareFixtureTaskTestSelection } from '../../../../task-test-selection-fixtures';
+import { prepareFixtureTaskTestSelection, recordFixtureFullSuiteArtifact } from '../../../../task-test-selection-fixtures';
 import { buildDefaultWorkflowConfig } from '../../../../../../src/core/workflow-config';
 import {
     assert,
@@ -421,6 +421,7 @@ function enableAfterCompileFullSuiteEvidence(repoRoot: string, taskId: string, p
         cycle_binding: cycleBinding,
         output_artifact_path: path.join(reviewsRoot, `${taskId}-full-suite-output.log`).replace(/\\/g, '/')
     }, null, 2) + '\n', 'utf8');
+    recordFixtureFullSuiteArtifact(repoRoot, taskId);
 }
 
 describe('cli/commands/gates review launch prepared metadata', () => {
@@ -1209,7 +1210,7 @@ describe('cli/commands/gates review launch prepared metadata', () => {
 
         assert.notEqual(prepare.exitCode, 0);
         assert.ok(
-            prepare.errors.some((line) => line.includes('review context full-suite validation binding is missing')),
+            prepare.errors.some((line) => line.includes('review context task test validation binding is missing')),
             prepare.errors.join('\n')
         );
         const events = readTaskTimelineEvents(repoRoot, taskId);
@@ -1240,7 +1241,7 @@ describe('cli/commands/gates review launch prepared metadata', () => {
 
         assert.notEqual(routing.exitCode, 0);
         assert.ok(
-            routing.errors.some((line) => line.includes('review context full-suite validation binding is missing')),
+            routing.errors.some((line) => line.includes('review context task test validation binding is missing')),
             routing.errors.join('\n')
         );
         const events = readTaskTimelineEvents(repoRoot, taskId);

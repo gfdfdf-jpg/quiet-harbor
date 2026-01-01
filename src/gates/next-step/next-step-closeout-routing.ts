@@ -141,7 +141,7 @@ export function resolvePostReviewCloseoutRouteFromState(
             testSelectionRoute: state.fullSuiteTestSelectionRoute,
             timeoutForecastLine: state.fullSuiteTimeoutForecastLine,
             command: closeoutCommand(
-                state.fullSuiteNotRequiredForDocsOnly ? 'Record full-suite not required' : 'Run full-suite validation',
+                state.fullSuiteNotRequiredForDocsOnly ? 'Record task test not required' : 'Run task test validation',
                 state.fullSuiteCommand
             )
         },
@@ -194,10 +194,10 @@ export function resolvePostReviewCloseoutRoute(
                     return {
                         status: 'BLOCKED',
                         nextGate: 'full-suite-validation',
-                        title: 'Record full-suite validation as not required.',
+                        title: 'Record task test validation as not required.',
                         reason:
-                            `Effective workflow config enables full-suite validation at ${options.fullSuite.configPath}, ` +
-                            'but the current scope is docs-only. Record a SKIPPED/NOT_REQUIRED artifact instead of running the configured full-suite command.',
+                            `Effective workflow config enables task test validation at ${options.fullSuite.configPath}, ` +
+                            'but the current scope is docs-only. Record a SKIPPED/NOT_REQUIRED artifact instead of running the selected task test command.',
                         commands: [options.fullSuite.command]
                     };
                 }
@@ -205,10 +205,10 @@ export function resolvePostReviewCloseoutRoute(
                     status: 'BLOCKED',
                     nextGate: 'full-suite-validation',
                     title: options.fullSuite.placement === 'before_completion'
-                        ? 'Run full-suite validation before completion.'
-                        : 'Run full-suite validation.',
+                        ? 'Run task test validation before completion.'
+                        : 'Run task test validation.',
                     reason:
-                        `Effective workflow config enables full-suite validation at ${options.fullSuite.configPath} with placement '${options.fullSuite.placement}'. ` +
+                        `Effective workflow config enables task test validation at ${options.fullSuite.configPath} with placement '${options.fullSuite.placement}'. ` +
                         `Selected task test command: ${options.fullSuite.commandText}. ${options.fullSuite.timeoutForecastLine || ''}`.trim(),
                     commands: [options.fullSuite.command]
                 };

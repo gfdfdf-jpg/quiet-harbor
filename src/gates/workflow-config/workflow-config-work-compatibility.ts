@@ -1,3 +1,4 @@
+import { normalizeTaskValidationConfigNames } from '../../core/task-validation-names';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -93,6 +94,7 @@ function isExactDefaultOptionalQualityChecksCompatibilityBaseline(input: unknown
 }
 
 function isSafeIgnoredWorkflowConfigCompatibilityBaseline(config: Record<string, unknown>): boolean {
+    config = normalizeTaskValidationConfigNames(config);
     if (
         !hasExactOwnKeys(SAFE_WORKFLOW_CONFIG_COMPATIBILITY_BASELINE as unknown as Record<string, unknown>, COMPATIBILITY_TOP_LEVEL_KEYS)
         || !COMPATIBILITY_ALLOWED_TOP_LEVEL_KEY_SETS.some((keySet) => hasExactOwnKeys(config, keySet))

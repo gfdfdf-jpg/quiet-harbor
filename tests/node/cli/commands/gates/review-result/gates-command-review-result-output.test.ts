@@ -30,11 +30,13 @@ import {
     seedPromptBoundReviewFixture
 } from './gates-command-review-result-fixtures';
 import { createHash } from 'node:crypto';
+import { buildEventIntegrityHash, inspectTaskEventFile } from '../../../../../../src/gate-runtime/task-events';
 
 describe('gates command review result - review output', () => {
 
     function removeInvocationDelegationTimestamps(repoRoot: string, taskId: string): void {
         const timelinePath = path.join(getOrchestratorRoot(repoRoot), 'runtime', 'task-events', `${taskId}.jsonl`);
+        let previousEventSha256: string | null = null;
         const lines = fs.readFileSync(timelinePath, 'utf8')
             .split(/\r?\n/)
             .filter(Boolean)
@@ -48,9 +50,15 @@ describe('gates command review result - review output', () => {
                     delete details.launched_at_utc;
                     event.details = details;
                 }
+                // This fixture tests missing timing in an intact history, independently of hash corruption.
+                const integrity = event.integrity as Record<string, unknown>;
+                integrity.prev_event_sha256 = previousEventSha256;
+                integrity.event_sha256 = buildEventIntegrityHash(event);
+                previousEventSha256 = integrity.event_sha256 as string;
                 return JSON.stringify(event);
             });
         fs.writeFileSync(timelinePath, `${lines.join('\n')}\n`, 'utf8');
+        assert.equal(inspectTaskEventFile(timelinePath, taskId).status, 'PASS');
     }
 
     it('record-review-result rejects review output paths that escape through symlinked directories', async (t) => {

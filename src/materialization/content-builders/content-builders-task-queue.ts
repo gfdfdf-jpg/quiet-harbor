@@ -1,5 +1,10 @@
 import { normalizeLineEndings } from '../../core/line-endings';
-import { formatActiveTaskQueueTable } from '../../core/task-md-table';
+import {
+    assertCanonicalActiveTaskQueueIntegrity,
+    findFirstCanonicalQueueTableIndexes,
+    formatActiveTaskQueueTable,
+    parseCanonicalActiveTaskQueue
+} from '../../core/task-md-table';
 import {
     extractManagedBlockFromContent,
     MANAGED_END,
@@ -19,7 +24,17 @@ export function getTaskQueueTableRange(managedBlock: string | null | undefined):
             break;
         }
     }
-    if (activeQueueIndex < 0) return null;
+    if (activeQueueIndex < 0) {
+        // Use exactly the legacy table accepted by the authoritative task reader.
+        const queue = parseCanonicalActiveTaskQueue(normalized);
+        if (!queue.found) return null;
+        assertCanonicalActiveTaskQueueIntegrity(queue);
+        const range = findFirstCanonicalQueueTableIndexes(lines)!;
+        if (findFirstCanonicalQueueTableIndexes(lines.slice(range.rowsEndIndex))) {
+            throw new Error('TASK.md queue is ambiguous: multiple legacy queue tables. Keep one authoritative queue, then retry update.');
+        }
+        return { lines, activeQueueIndex: range.headerIndex, ...range };
+    }
 
     let headerIndex = -1;
     for (let i = activeQueueIndex + 1; i < lines.length; i++) {

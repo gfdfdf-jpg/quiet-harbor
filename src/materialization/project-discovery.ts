@@ -850,9 +850,9 @@ export function buildProjectDiscoveryLines(discovery: ProjectDiscovery, timestam
 
     lines.push('', '## Suggested Compile Gate Commands (Heuristic)');
     if (!Array.isArray(discovery.suggestedCompileGateCommands) || discovery.suggestedCompileGateCommands.length === 0) {
-        lines.push(`- No compile-gate candidate detected. The agent must determine and configure the project-specific compile/build/type-check command; keep \`${UNCONFIGURED_COMPILE_GATE_COMMAND}\` until that step is complete.`);
+        lines.push(`- No compile-gate candidate detected; keep \`${UNCONFIGURED_COMPILE_GATE_COMMAND}\` in shared configuration. Declare the task command with \`gate compile-gate --compile-command "<task-compile-command>"\`, or explain the absence of a separate compile phase with \`--compile-not-applicable-reason "<reason>"\`.`);
     } else {
-        lines.push('- Use these only for `workflow-config.compile_gate.command`; `40-commands.md` is human guidance. If the first command composes multiple build surfaces with `&&`, keep the whole command together. Full test suites belong in full-suite validation.');
+        lines.push('- Use these only for `workflow-config.compile_gate.command`; `40-commands.md` is human guidance. If the first command composes multiple build surfaces with `&&`, keep the whole command together. Task test commands belong in task test validation.');
         for (const cmd of discovery.suggestedCompileGateCommands) {
             lines.push(`- ${tick}${cmd}${tick}`);
         }
@@ -867,7 +867,7 @@ export function buildProjectDiscoveryLines(discovery: ProjectDiscovery, timestam
         }
     }
 
-    lines.push('', '## Suggested Full-Suite Validation Commands (Candidates)');
+    lines.push('', '## Suggested Task Test Validation Commands (Candidates)');
     for (const candidate of discovery.suggestedFullSuiteValidationCommands || []) {
         lines.push(`- ${tick}${candidate}${tick}`);
     }
@@ -903,7 +903,7 @@ export function buildDiscoveryOverlaySection(discovery: ProjectDiscovery): strin
     const compileGateCommandText = Array.isArray(discovery.suggestedCompileGateCommands)
         && discovery.suggestedCompileGateCommands.length > 0
         ? `\`${discovery.suggestedCompileGateCommands[0]}\``
-        : 'none detected; the agent must inspect and configure a project-specific compile/build/type-check command';
+        : 'none detected; use a task-local compile command or a justified compile-not-applicable-reason';
 
     return [
         '## Project Discovery Snapshot',
@@ -913,7 +913,7 @@ export function buildDiscoveryOverlaySection(discovery: ProjectDiscovery): strin
         `- Detected stacks: ${stacksText}`,
         `- Top-level directories: ${dirsText}`,
         `- Suggested compile-gate command: ${compileGateCommandText}`,
-        `- Suggested full-suite validation command: ${fullSuiteCommandText}`,
+        `- Suggested task test validation command: ${fullSuiteCommandText}`,
         `- Full report: \`${resolveBundleName()}/live/project-discovery.md\``
     ].join('\r\n');
 }

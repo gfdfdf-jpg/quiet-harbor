@@ -1,3 +1,4 @@
+import { readTaskCriteriaBinding } from '../../../../src/gates/review-context/review-context-task-criteria-binding';
 import { seedAuthenticatedReviewerLaunchFixture } from '../../gates/next-step/next-step-reviewer-launch-fixtures';
 /**
  * Test helpers: rule/config seeding, artifact writers, evidence builders,
@@ -1775,6 +1776,7 @@ export function writeReceiptBackedReviewArtifact(
         reviewExecutionFindingReconciliationSha256:
             reviewExecutionBindings.review_execution_finding_reconciliation_sha256,
         reviewContextReuseSha256,
+        taskCriteriaBindingSha256: readTaskCriteriaBinding(reviewContext.task_criteria_binding)?.sha256,
         reviewCoverageContractSha256: reviewContextContractBindings.coverageContractSha256,
         reviewRuleContextSha256: reviewContextContractBindings.ruleContextSha256,
         reviewArtifactSha256: artifactHash,
@@ -1924,6 +1926,7 @@ export function seedReusableReviewEvidence(
         omitReceiptExecutionBindings?: boolean;
         reviewFindingsValidationExecutionBindingOverrides?: Partial<ReviewExecutionEvidenceBindings>;
         reviewContextSchemaVersion?: 3 | 4;
+        omitTaskCriteriaBinding?: boolean;
         sourceOfTruth?: string;
         invocationTimingOverride?: {
             launchPreparedAtUtc?: string;
@@ -2131,6 +2134,7 @@ export function seedReusableReviewEvidence(
         reviewExecutionFindingReconciliationSha256:
             reviewExecutionBindings?.review_execution_finding_reconciliation_sha256,
         reviewContextReuseSha256: computeReviewContextReuseHash(reviewContext),
+        taskCriteriaBindingSha256: options.omitTaskCriteriaBinding ? null : readTaskCriteriaBinding(reviewContext.task_criteria_binding)?.sha256,
         reviewCoverageContractSha256,
         reviewRuleContextSha256,
         reviewArtifactSha256: artifactHash,

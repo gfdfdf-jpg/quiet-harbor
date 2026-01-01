@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { FIXTURE_TASK_TEST_COMMAND } from '../../task-test-selection-fixtures';
 import {
     buildDefaultWorkflowConfig,
     buildEventIntegrityHash,
@@ -63,8 +64,8 @@ function appendRepairTaskRow(repoRoot: string, taskId = `${TASK_ID}-F1`): void {
         })
         .join('\n');
     const rows = [
-        `| ${taskId} | TODO | P1 | workflow/full-suite-timeout-diagnostics | Diagnose full-suite timeout | gpt-5.5 | 2026-06-30 | strict | Child of \`${TASK_ID}\`. |`,
-        `| ${secondTaskId} | TODO | P1 | workflow/full-suite-timeout-repair | Repair full-suite timeout | gpt-5.5 | 2026-06-30 | strict | Child of \`${TASK_ID}\`. |`
+        `| ${taskId} | TODO | P1 | workflow/full-suite-timeout-diagnostics | Diagnose task test timeout | gpt-5.5 | 2026-06-30 | strict | Child of \`${TASK_ID}\`. |`,
+        `| ${secondTaskId} | TODO | P1 | workflow/full-suite-timeout-repair | Repair task test timeout | gpt-5.5 | 2026-06-30 | strict | Child of \`${TASK_ID}\`. |`
     ];
     fs.writeFileSync(taskPath, `${linkedParent}${rows.join('\n')}\n`, 'utf8');
 }
@@ -76,9 +77,9 @@ function writeCompletedRepairTaskRows(repoRoot: string, childTaskId = `${TASK_ID
         '',
         '| ID | Status | Priority | Area | Title | Owner | Updated | Profile | Notes |',
         '|---|---|---|---|---|---|---|---|---|',
-        `| ${TASK_ID} | SPLIT_REQUIRED | P1 | workflow/full-suite-repair-split-suspend | Parent repair task | gpt-5.5 | 2026-06-30 | strict | Decomposition source: orchestrator (2026-06-30); child tasks: \`${childTaskId}\`, \`${secondChildTaskId}\`; parent WIP suspended for full-suite repair. |`,
-        `| ${childTaskId} | DONE | P1 | workflow/full-suite-timeout-diagnostics | Diagnose full-suite timeout | gpt-5.5 | 2026-06-30 | strict | Child of \`${TASK_ID}\`. Repair completed. |`,
-        `| ${secondChildTaskId} | DONE | P1 | workflow/full-suite-timeout-repair | Repair full-suite timeout | gpt-5.5 | 2026-06-30 | strict | Child of \`${TASK_ID}\`. Repair completed. |`,
+        `| ${TASK_ID} | SPLIT_REQUIRED | P1 | workflow/full-suite-repair-split-suspend | Parent repair task | gpt-5.5 | 2026-06-30 | strict | Decomposition source: orchestrator (2026-06-30); child tasks: \`${childTaskId}\`, \`${secondChildTaskId}\`; parent WIP suspended for task test repair. |`,
+        `| ${childTaskId} | DONE | P1 | workflow/full-suite-timeout-diagnostics | Diagnose task test timeout | gpt-5.5 | 2026-06-30 | strict | Child of \`${TASK_ID}\`. Repair completed. |`,
+        `| ${secondChildTaskId} | DONE | P1 | workflow/full-suite-timeout-repair | Repair task test timeout | gpt-5.5 | 2026-06-30 | strict | Child of \`${TASK_ID}\`. Repair completed. |`,
         ''
     ].join('\n'), 'utf8');
 }
@@ -243,7 +244,7 @@ describe('gates/next-step', () => {
 
         assert.match(result.title, /before test review/);
 
-        assert.ok(result.commands[0].command.includes('gate full-suite-validation'));
+        assert.ok(result.commands[0].command.includes('gate task-test-validation'));
 
         assert.ok(!result.commands[0].command.includes('--review-type "test"'));
 
@@ -305,12 +306,12 @@ describe('gates/next-step', () => {
 
         assert.match(result.title, /after compile before reviews/);
 
-        assert.ok(result.commands[0].command.includes('gate full-suite-validation'));
+        assert.ok(result.commands[0].command.includes('gate task-test-validation'));
 
         assert.ok(!result.commands[0].command.includes('build-review-context'));
 
-        assert.ok(text.includes('FullSuite: enabled=true; placement=after_compile_before_reviews;'));
-        assert.ok(text.includes('FullSuitePerformance: mode=optimized_sharded; optimized=true; boundary=mandatory_full_suite_not_smoke_or_fast; optimized_command="npm run test:sharded"'));
+        assert.ok(text.includes('TaskTestValidation: enabled=true; placement=after_compile_before_reviews;'));
+        assert.ok(text.includes('TaskTestPerformance: mode=optimized_sharded; optimized=true; boundary=mandatory_full_suite_not_smoke_or_fast; optimized_command="npm run test:sharded"'));
         assert.doesNotMatch(text, /fallback_command=/u);
 
     });
@@ -351,7 +352,7 @@ describe('gates/next-step', () => {
 
         assert.equal(result.review.next_review_type, 'code');
 
-        assert.match(result.reason, /review context full-suite validation binding is stale/);
+        assert.match(result.reason, /review context task test validation binding is stale/);
 
         assert.match(result.reason, /full-suite-validation\.json/);
 
@@ -407,7 +408,7 @@ describe('gates/next-step', () => {
 
         assert.match(result.reason, /review-context artifact is stale/);
 
-        assert.match(result.reason, /full-suite validation binding is missing/);
+        assert.match(result.reason, /task test validation binding is missing/);
 
         assert.ok(result.commands[0].command.includes('gate build-review-context'));
 
@@ -449,7 +450,7 @@ describe('gates/next-step', () => {
 
         assert.equal(result.review.next_review_type, 'code');
 
-        assert.doesNotMatch(result.reason, /full-suite validation binding is stale/);
+        assert.doesNotMatch(result.reason, /task test validation binding is stale/);
 
         assert.ok(result.commands[0].command.includes('gate record-review-routing'));
 
@@ -497,7 +498,7 @@ describe('gates/next-step', () => {
 
         assert.match(result.title, /after compile before reviews/);
 
-        assert.ok(result.commands[0].command.includes('gate full-suite-validation'));
+        assert.ok(result.commands[0].command.includes('gate task-test-validation'));
 
         assert.ok(result.commands[0].command.includes('--preflight-path'));
 
@@ -611,7 +612,7 @@ describe('gates/next-step', () => {
 
         assert.ok(result.commands[0].command.includes('--review-type "code"'));
 
-        assert.ok(!result.commands[0].command.includes('gate full-suite-validation'));
+        assert.ok(!result.commands[0].command.includes('gate task-test-validation'));
 
     });
 
@@ -673,7 +674,7 @@ describe('gates/next-step', () => {
 
         assert.equal(result.review.next_review_type, 'code');
 
-        assert.match(result.reason, /full-suite validation binding is stale/);
+        assert.match(result.reason, /task test validation binding is stale/);
 
         assert.match(result.reason, /workflow-config placement 'before_completion'/);
 
@@ -752,13 +753,13 @@ describe('gates/next-step', () => {
         const result = resolveNextStep({ taskId: TASK_ID, repoRoot });
 
         assert.equal(result.next_gate, 'full-suite-validation');
-        assert.match(result.title, /Recover interrupted full-suite validation run/);
+        assert.match(result.title, /Recover interrupted task test validation run/);
         assert.match(result.reason, /marker is stale for the current cycle/);
         assert.match(result.reason, /preflight_sha256 mismatch/);
         assert.ok(result.commands[0].command.includes('gate full-suite-run-marker-recovery'));
         assert.ok(!result.commands[0].command.includes('--clear-dead-marker'));
         assert.ok(!result.commands[0].command.includes('--operator-confirmed yes'));
-        assert.ok(!result.commands[0].command.includes('gate full-suite-validation'));
+        assert.ok(!result.commands[0].command.includes('gate task-test-validation'));
     });
 
 
@@ -876,9 +877,9 @@ describe('gates/next-step', () => {
             warning_only_continuation: false,
             repair_task_proposal: {
                 suggested_task_id: `${TASK_ID}-F1`,
-                title: 'Fix full-suite timeout blocker',
+                title: 'Fix task test timeout blocker',
                 area: 'workflow/full-suite-timeout',
-                rationale: 'Full-suite validation timed out after configured retries.'
+                rationale: 'Task test validation timed out after configured retries.'
             }
         };
         writeJson(fullSuitePath, artifact);
@@ -964,9 +965,9 @@ describe('gates/next-step', () => {
             warning_only_continuation: false,
             repair_task_proposal: {
                 suggested_task_id: `${TASK_ID}-F1`,
-                title: 'Fix full-suite timeout blocker',
+                title: 'Fix task test timeout blocker',
                 area: 'workflow/full-suite-timeout',
-                rationale: 'Full-suite validation timed out after configured retries.'
+                rationale: 'Task test validation timed out after configured retries.'
             }
         };
         writeJson(path.join(reviewsRoot(repoRoot), `${TASK_ID}-full-suite-validation.json`), {
@@ -1012,10 +1013,10 @@ describe('gates/next-step', () => {
 
         const afterMaterializationArtifact = resolveNextStep({ taskId: TASK_ID, repoRoot });
 
-        // A repair handoff assigns the work; it does not replace passing full-suite evidence.
+        // A repair handoff assigns the work; it does not replace passing task test evidence.
         assert.equal(afterMaterializationArtifact.next_gate, 'full-suite-validation', afterMaterializationArtifact.reason);
 
-        assert.ok(afterMaterializationArtifact.commands[0].command.includes('gate full-suite-validation'), afterMaterializationArtifact.commands[0].command);
+        assert.ok(afterMaterializationArtifact.commands[0].command.includes('gate task-test-validation'), afterMaterializationArtifact.commands[0].command);
         assert.ok(afterMaterializationArtifact.commands.every(entry => !entry.command.includes('build-review-context')));
 
     });
@@ -1049,7 +1050,7 @@ describe('gates/next-step', () => {
 
         assert.equal(result.status, 'BLOCKED');
         assert.equal(result.next_gate, 'restore-full-suite-repair-wip', result.reason);
-        assert.match(result.reason, /All linked full-suite repair children are DONE/);
+        assert.match(result.reason, /All linked task test repair children are DONE/);
         assert.ok(result.commands.some((command) => command.command.includes('restore-full-suite-repair-wip')));
         assert.ok(result.commands.some((command) => command.command.includes('--dry-run')));
         assert.ok(result.commands.every((command) => command.command.includes(`--task-id "${TASK_ID}"`)));
@@ -1064,8 +1065,8 @@ describe('gates/next-step', () => {
         const secondChildTaskId = `${TASK_ID}-F2`;
         const taskPath = path.join(repoRoot, 'TASK.md');
         const duplicateScopeTaskQueue = fs.readFileSync(taskPath, 'utf8').replace(
-            `| ${secondChildTaskId} | DONE | P1 | workflow/full-suite-timeout-repair | Repair full-suite timeout |`,
-            `| ${secondChildTaskId} | DONE | P1 | workflow/full-suite-timeout-diagnostics | Diagnose full-suite timeout |`
+            `| ${secondChildTaskId} | DONE | P1 | workflow/full-suite-timeout-repair | Repair task test timeout |`,
+            `| ${secondChildTaskId} | DONE | P1 | workflow/full-suite-timeout-diagnostics | Diagnose task test timeout |`
         );
         fs.writeFileSync(taskPath, duplicateScopeTaskQueue, 'utf8');
 
@@ -1079,7 +1080,7 @@ describe('gates/next-step', () => {
         );
     });
 
-    it('accepts current warning-only full-suite timeout evidence and continues to reviewer launch', () => {
+    it('requires completed own-test execution even when a timeout policy permits warning-only continuation', () => {
 
         const repoRoot = makeTempRepo();
 
@@ -1164,11 +1165,12 @@ describe('gates/next-step', () => {
 
         const result = resolveNextStep({ taskId: TASK_ID, repoRoot });
 
-        assert.notEqual(result.next_gate, 'full-suite-validation', result.reason);
+        assert.equal(result.next_gate, 'full-suite-validation', result.reason);
+        assert.match(result.reason, /Task test process integrity/u);
+        assert.ok(result.commands[0].command.includes('gate task-test-validation'), result.reason);
+        assert.ok(result.commands.every(entry => !entry.command.includes('build-review-context')));
 
-        assert.ok(result.commands[0].command.includes('build-review-context'), result.reason);
-
-        assert.ok(result.commands[0].command.includes('--review-type "code"'), result.commands[0].command);
+        assert.equal(result.review.next_review_type, 'code');
 
     });
 
@@ -1252,9 +1254,9 @@ describe('gates/next-step', () => {
 
         assert.equal(result.next_gate, 'full-suite-validation');
 
-        assert.match(result.title, /Run full-suite validation/);
+        assert.match(result.title, /Run task test validation/);
 
-        assert.ok(result.commands[0].command.includes('gate full-suite-validation'));
+        assert.ok(result.commands[0].command.includes('gate task-test-validation'));
 
         assert.ok(!result.commands[0].command.includes('build-review-context'));
 
@@ -1343,9 +1345,9 @@ describe('gates/next-step', () => {
 
         assert.equal(result.next_gate, 'full-suite-validation');
 
-        assert.match(result.title, /Run full-suite validation/);
+        assert.match(result.title, /Run task test validation/);
 
-        assert.ok(result.commands[0].command.includes('gate full-suite-validation'));
+        assert.ok(result.commands[0].command.includes('gate task-test-validation'));
 
         assert.ok(!result.commands[0].command.includes('build-review-context'));
 
@@ -1423,9 +1425,9 @@ describe('gates/next-step', () => {
 
         assert.equal(result.next_gate, 'full-suite-validation');
 
-        assert.match(result.title, /Run full-suite validation/);
+        assert.match(result.title, /Run task test validation/);
 
-        assert.ok(result.commands[0].command.includes('gate full-suite-validation'));
+        assert.ok(result.commands[0].command.includes('gate task-test-validation'));
 
         assert.ok(!result.commands[0].command.includes('build-review-context'));
 
@@ -1904,7 +1906,7 @@ describe('gates/next-step', () => {
 
         assert.ok(result.commands[0].command.includes('--review-type "test"'));
 
-        assert.ok(!result.commands[0].command.includes('gate full-suite-validation'));
+        assert.ok(!result.commands[0].command.includes('gate task-test-validation'));
 
     });
 
@@ -1976,13 +1978,13 @@ describe('gates/next-step', () => {
 
         assert.equal(result.next_gate, 'full-suite-validation');
 
-        assert.match(result.reason, /Recommended full-suite command timeout: 130s/);
+        assert.match(result.reason, /Recommended task test command timeout: 130s/);
 
         assert.match(result.reason, /target sample 5 recent run\(s\); eligible 1 run\(s\) avg 100s/);
 
         assert.match(result.reason, /max 100s/);
 
-        assert.ok(text.includes('FullSuiteTimeout: Recommended full-suite command timeout: 130s'));
+        assert.ok(text.includes('TaskTestTimeout: Recommended task test command timeout: 130s'));
 
     });
 
@@ -2052,7 +2054,7 @@ describe('gates/next-step', () => {
 
                 blocked_by: ['full-suite-validation'],
 
-                reason: 'Waiting for current full-suite validation evidence before launching test review.'
+                reason: 'Waiting for current task test validation evidence before launching test review.'
 
             }
 
@@ -2062,7 +2064,7 @@ describe('gates/next-step', () => {
 
         assert.ok(text.includes('BlockedReviewLanes: test blocked by full-suite-validation'));
 
-        assert.ok(!result.commands[0].command.includes('gate full-suite-validation'));
+        assert.ok(!result.commands[0].command.includes('gate task-test-validation'));
 
         assert.ok(result.commands[0].command.includes('--review-type "code"'));
 
@@ -2487,7 +2489,7 @@ describe('gates/next-step', () => {
 
         assert.match(result.title, /before test review/);
 
-        assert.ok(result.commands[0].command.includes('gate full-suite-validation'));
+        assert.ok(result.commands[0].command.includes('gate task-test-validation'));
 
         assert.ok(!result.commands[0].command.includes('--review-type "test"'));
 
@@ -2603,7 +2605,7 @@ describe('gates/next-step', () => {
         assert.equal(result.next_gate, 'record-review-routing');
         assert.equal(result.review.next_review_type, 'code', result.reason);
         assert.ok(result.commands[0].command.includes('record-review-routing'));
-        assert.ok(!result.commands[0].command.includes('gate full-suite-validation'));
+        assert.ok(!result.commands[0].command.includes('gate task-test-validation'));
 
     });
 
@@ -2665,7 +2667,7 @@ describe('gates/next-step', () => {
 
         assert.doesNotMatch(result.reason, /full-suite-retry-evidence/);
 
-        assert.ok(result.commands[0].command.includes('gate full-suite-validation'));
+        assert.ok(result.commands[0].command.includes('gate task-test-validation'));
 
         assert.ok(!result.commands[0].command.includes('--review-type "test"'));
 
@@ -2685,7 +2687,7 @@ describe('gates/next-step', () => {
 
                 enabled: true,
 
-                command: 'npm test',
+                command: FIXTURE_TASK_TEST_COMMAND,
 
                 placement: 'before_completion'
 
@@ -2723,7 +2725,7 @@ describe('gates/next-step', () => {
 
         assert.equal(result.full_suite_validation.enabled, true);
 
-        assert.equal(result.full_suite_validation.command, 'npm test');
+        assert.equal(result.full_suite_validation.command, FIXTURE_TASK_TEST_COMMAND);
 
         assert.equal(result.full_suite_validation.placement, 'before_completion');
 
@@ -2885,9 +2887,9 @@ describe('gates/next-step', () => {
 
         assert.match(beforeSkip.title, /not required/i);
 
-        assert.ok(beforeSkip.commands[0].command.includes('gate full-suite-validation'));
+        assert.ok(beforeSkip.commands[0].command.includes('gate task-test-validation'));
 
-        assert.equal(beforeSkip.commands[0].label, 'Record full-suite not required');
+        assert.equal(beforeSkip.commands[0].label, 'Record task test not required');
 
 
 
@@ -3031,7 +3033,7 @@ describe('gates/next-step', () => {
 
         assert.match(result.title, /not required/i);
 
-        assert.equal(result.commands[0].label, 'Record full-suite not required');
+        assert.equal(result.commands[0].label, 'Record task test not required');
 
     });
 

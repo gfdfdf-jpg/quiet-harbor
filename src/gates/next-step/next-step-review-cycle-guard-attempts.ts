@@ -10,6 +10,8 @@ import {
 } from '../../gate-runtime/review-context';
 import { resolveValidatedReviewCycleArtifactForVerdict, getReviewCycleValidationArtifactVerdict } from '../review-attempts/review-history-integrity';
 import { inspectTaskEventFile } from '../../gate-runtime/task-events';
+import { readInvocationVerifiedEventIndex } from '../../gate-runtime/timeline/task-events-integrity';
+import { normalizedEventsOfType } from '../../gate-runtime/timeline/task-verified-event-index';
 import { isAuthenticatedReviewRestartEvent } from '../../gate-runtime/review/review-restart-boundary';
 import {
     type TimelineEventEntry
@@ -36,7 +38,8 @@ import {
 import { withReviewArtifactReadBarrier } from '../../gate-runtime/review-artifacts';
 import {
     createReviewAttemptArtifactIndex,
-    type ReviewAttemptArtifactIndex
+    createCurrentReviewAttemptArtifactIndex,
+    type ReviewAttemptSnapshotReader
 } from '../review-attempts/review-attempt-artifact-index';
 
 type ReviewCycleGuardConfig = ReturnType<typeof normalizeReviewCycleGuardConfig>;
@@ -136,7 +139,7 @@ function resolveReviewCycleReviewsRoot(repoRoot: string): string {
 }
 
 function getReviewCycleArtifactVerdict(
-    artifactIndex: ReviewAttemptArtifactIndex,
+    artifactIndex: ReviewAttemptSnapshotReader,
     repoRoot: string,
     taskId: string,
     reviewType: string,
@@ -271,7 +274,7 @@ function readReviewCycleGuardAttemptsUnlocked(
     taskId: string,
     reviewCycleGuardConfig: ReviewCycleGuardConfig,
     currentPreflightFingerprints: DomainScopeFingerprints | null,
-    artifactIndex: ReviewAttemptArtifactIndex
+    artifactIndex: ReviewAttemptSnapshotReader
 ): ReviewCycleGuardReadResult {
     const resolvedPath = path.resolve(String(timelinePath || ''));
     if (!fs.existsSync(resolvedPath) || !fs.statSync(resolvedPath).isFile()) {
@@ -304,8 +307,6 @@ function readReviewCycleGuardAttemptsUnlocked(
     const latestLaneRestartSequence = new Map<string, number>();
     let sequence = 0;
     let pending = '';
-    const file = fs.openSync(resolvedPath, 'r');
-    const buffer = Buffer.alloc(64 * 1024);
 
     // Lanes whose latest recorded result lost its snapshot and that no later restart has already sent back to review.
     const lostCurrentResultReviewTypes = (): string[] => [...latestRecordedByLane.entries()]
@@ -355,6 +356,17 @@ function readReviewCycleGuardAttemptsUnlocked(
             }
         });
     };
+    const handleEvent = (event: TimelineEventEntry | null): boolean => {
+        if (event && REVIEW_HISTORY_RESTART_BOUNDARIES.has(event.event_type)) {
+            const invalidated = event.event_type === 'REVIEW_CYCLE_RESTARTED' ? event.details?.invalidated_review_types : null;
+            if (Array.isArray(invalidated)) {
+                for (const lane of invalidated) {
+                    if (typeof lane === 'string' && lane.trim()) latestLaneRestartSequence.set(lane.trim().toLowerCase(), event.sequence);
+                }
+            } else latestAllLaneRestartSequence = event.sequence;
+        }
+        return handleReview(event);
+    };
     const handleLine = (rawLine: string): boolean => {
         const line = rawLine.trim();
         if (!line) {
@@ -369,18 +381,9 @@ function readReviewCycleGuardAttemptsUnlocked(
         } finally {
             sequence += 1;
         }
-        if (event && REVIEW_HISTORY_RESTART_BOUNDARIES.has(event.event_type)) {
-            // A review-cycle restart repeats only the lanes it invalidated; a restart without that list, a coherent
-            // restart, a task entry or a reset repeats every lane.
-            const invalidated = event.event_type === 'REVIEW_CYCLE_RESTARTED' ? event.details?.invalidated_review_types : null;
-            if (Array.isArray(invalidated)) {
-                for (const lane of invalidated) {
-                    if (typeof lane === 'string' && lane.trim()) latestLaneRestartSequence.set(lane.trim().toLowerCase(), event.sequence);
-                }
-            } else {
-                latestAllLaneRestartSequence = event.sequence;
-            }
-        }
+        return handleEvent(event);
+    };
+    const handleReview = (event: TimelineEventEntry | null): boolean => {
         if (!event || event.event_type !== 'REVIEW_RECORDED') {
             return false;
         }
@@ -450,6 +453,24 @@ function readReviewCycleGuardAttemptsUnlocked(
         return false;
     };
 
+    const indexed = readInvocationVerifiedEventIndex(resolvedPath, taskId);
+    if (indexed) {
+        // Consume canonical immutable records, only for the guard's own event types.
+        const relevant = ['REVIEW_RECORDED', ...REVIEW_HISTORY_RESTART_BOUNDARIES]
+            .flatMap(type => normalizedEventsOfType(indexed.normalizedEvents, type) ?? [])
+            .sort((a, b) => a.sequence - b.sequence);
+        for (const event of relevant) {
+            countNextStepWork('visit:review_cycle_guard_candidate');
+            if (handleEvent(event)) break;
+        }
+        return {
+            attempts: [...attemptsByKey.values()].sort((a, b) => a.lastSequence - b.lastSequence),
+            timelineValid: timelineIsValid(), latestFailedReview,
+            lostCurrentResultReviewTypes: lostCurrentResultReviewTypes()
+        };
+    }
+    const file = fs.openSync(resolvedPath, 'r');
+    const buffer = Buffer.alloc(64 * 1024);
     try {
         let bytesRead = 0;
         do {
@@ -501,12 +522,21 @@ export function readReviewCycleGuardAttempts(
     currentPreflightFingerprints: DomainScopeFingerprints | null
 ): ReviewCycleGuardReadResult {
     const reviewsRoot = resolveReviewCycleReviewsRoot(repoRoot);
+    // Most routes have no artifact-bearing attempt. Acquire authority only on the first exact read.
+    let reader: ReviewAttemptSnapshotReader | undefined;
+    const getReader = () => reader ??= createCurrentReviewAttemptArtifactIndex(reviewsRoot, taskId)
+        ?? createReviewAttemptArtifactIndex(reviewsRoot, taskId);
+    const lazyReader: ReviewAttemptSnapshotReader = {
+        reviews_root: reviewsRoot, task_id: taskId,
+        readTextSnapshot: (...args) => getReader().readTextSnapshot(...args),
+        readJsonSnapshot: (...args) => getReader().readJsonSnapshot(...args)
+    };
     return withReviewArtifactReadBarrier(reviewsRoot, () => readReviewCycleGuardAttemptsUnlocked(
         repoRoot,
         timelinePath,
         taskId,
         reviewCycleGuardConfig,
         currentPreflightFingerprints,
-        createReviewAttemptArtifactIndex(reviewsRoot, taskId)
+        lazyReader
     ));
 }

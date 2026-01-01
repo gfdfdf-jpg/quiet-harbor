@@ -282,7 +282,7 @@ export function runRepairRebuildIndexes(targetRoot: string, confirm: boolean): R
     if (confirm) {
         for (const taskId of taskIds) {
             try {
-                reconcileTimelineSummaryForTask(eventsRoot, taskId);
+                reconcileTimelineSummaryForTask(eventsRoot, taskId, undefined, { recoverMalformedIndex: true });
                 rebuiltTasks.push(taskId);
             } catch (error: unknown) {
                 failedTasks.push(taskId);

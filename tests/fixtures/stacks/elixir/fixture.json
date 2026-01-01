@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "id": "elixir",
+  "title": "Elixir umbrella / ExUnit",
+  "adapter": null,
+  "technologies": [
+    {
+      "id": "elixir",
+      "executable": "tools/mix",
+      "compileArgv": [
+        "compile"
+      ],
+      "firstArgv": [
+        "test",
+        "apps/orders/test/orders_test.exs"
+      ],
+      "allArgv": [
+        "test",
+        "apps/orders/test/orders_test.exs",
+        "apps/partners/test/partners_test.exs"
+      ],
+      "broadArgv": [
+        "test"
+      ],
+      "report": "text",
+      "secondArgv": [
+        "test",
+        "apps/partners/test/partners_test.exs"
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "orders",
+      "technology": "elixir",
+      "source": "apps/orders/lib/orders.ex",
+      "target": "apps/orders/test/orders_test.exs",
+      "case": "task-contract",
+      "comment": "#"
+    },
+    {
+      "id": "partners",
+      "technology": "elixir",
+      "source": "apps/partners/lib/partners.ex",
+      "target": "apps/partners/test/partners_test.exs",
+      "case": "task-contract",
+      "comment": "#"
+    }
+  ],
+  "helpers": []
+}

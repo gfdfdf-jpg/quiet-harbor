@@ -79,7 +79,7 @@ describe('cli/commands/gates — preflight diagnostics', () => {
         fs.mkdirSync(path.join(repoRoot, '.agents', 'workflows'), { recursive: true });
         fs.writeFileSync(path.join(repoRoot, '.agents', 'workflows', 'start-task.md'), '# start-task\n', 'utf8');
         fs.mkdirSync(path.join(repoRoot, 'garda-agent-orchestrator', 'bin'), { recursive: true });
-        fs.writeFileSync(path.join(repoRoot, 'garda-agent-orchestrator', 'bin', 'garda.js'), '#!/usr/bin/env node\n', 'utf8');
+        fs.writeFileSync(path.join(repoRoot, 'garda-agent-orchestrator', 'bin', 'garda.js'), '#!/usr/bin/env node\nconsole.log("0.0.0-test");\n', 'utf8');
         initializeGitRepo(repoRoot);
 
         runEnterTaskMode({
@@ -179,7 +179,7 @@ describe('cli/commands/gates — preflight diagnostics', () => {
         fs.mkdirSync(path.join(repoRoot, '.agents', 'workflows'), { recursive: true });
         fs.writeFileSync(path.join(repoRoot, '.agents', 'workflows', 'start-task.md'), '# start-task\n', 'utf8');
         fs.mkdirSync(path.join(repoRoot, 'garda-agent-orchestrator', 'bin'), { recursive: true });
-        fs.writeFileSync(path.join(repoRoot, 'garda-agent-orchestrator', 'bin', 'garda.js'), '#!/usr/bin/env node\n', 'utf8');
+        fs.writeFileSync(path.join(repoRoot, 'garda-agent-orchestrator', 'bin', 'garda.js'), '#!/usr/bin/env node\nconsole.log("0.0.0-test");\n', 'utf8');
         initializeGitRepo(repoRoot);
         runEnterTaskMode({
             repoRoot,

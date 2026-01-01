@@ -4,6 +4,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { createWorkspaceSnapshotRequest } from '../../../../src/gates/workspace/workspace-snapshot-cache';
 
 import {
     buildOrchestratorWorkRestartCommand,
@@ -94,6 +95,15 @@ describe('gates/next-step lifecycle command builders', () => {
             }), /abort/u);
             build(roots[0]);
             assert.equal(commands.filter((args) => args.includes('--others')).length, 5);
+            const request = createWorkspaceSnapshotRequest(roots[0]);
+            request.read('git_auto', true, []);
+            const beforeReuse = commands.length;
+            withNextStepCommandWorkspaceReadSnapshot(() => {
+                assert.match(build(roots[0]), /--planned-changed-file "src\/second.ts"/u);
+                // A branded request for another repository cannot supply its scope.
+                assert.doesNotMatch(build(roots[1]), /--planned-changed-file "src\/second.ts"/u);
+            }, request);
+            assert.equal(commands.slice(beforeReuse).filter(args => args.includes('--name-only') || args.includes('--others')).length, 0);
         } finally {
             childProcess.execFileSync = original;
             for (const root of roots) fs.rmSync(root, { recursive: true, force: true });

@@ -49,7 +49,7 @@ describe('expected-RED operator guidance', () => {
             assert.match(rule, /Changing a test after its RED was recorded.*invalidates that RED/u);
             assert.match(rule, /fresh RED for the current test bytes/u);
             assert.match(rule, /with operator approval remove.*Test-first: expected-red/u);
-            assert.match(rule, /tests, compile, full suite and every required review remain mandatory/u);
+            assert.match(rule, /tests, compile, task tests and every required review remain mandatory/u);
             assert.match(rule, /Do not use.*task-reset.*for this/u);
         }
     });

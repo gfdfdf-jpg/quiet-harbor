@@ -18,6 +18,7 @@ import * as gateHelpers from '../shared/helpers';
 import {
     computeReviewReuseCodeScopeFingerprint,
     computeReviewRelevantScopeFingerprint,
+    computeReviewContextReuseHash,
     getReviewContextReuseContractBindingMismatch,
     resolveReviewReceiptReuseContractBindings,
     type ReviewContextReuseContractBindings
@@ -47,6 +48,8 @@ import {
     isCustomReviewLaneInSnapshot
 } from '../review-context/review-context-lane';
 import { matchesReviewPolicyLaneReuse } from './review-reuse-policy-lane';
+import { stringSha256 } from '../../gate-runtime/hash';
+import { readTaskCriteriaBinding } from '../review-context/review-context-task-criteria-binding';
 
 export interface HistoricalReviewReuseCandidate {
     telemetryReceiptPath: string;
@@ -506,6 +509,35 @@ export function validateHistoricalReviewReuseCandidate(options: {
     }
 
     const receipt = verifiedReceipt.receipt;
+    // A mutable context saved by an earlier build is not reviewed evidence. Only receipt-bound bytes
+    // or their recorded criteria digest can authenticate the criteria of an accepted review.
+    let receiptBoundPreviousContext: Record<string, unknown> | null = null;
+    const previousText = options.previousReviewContextText;
+    if (previousText && [receipt.review_context_sha256, receipt.reused_from_review_context_sha256]
+        .some(hash => normalizeReceiptSha256(hash) === stringSha256(previousText))) {
+        try {
+            const previous: unknown = JSON.parse(previousText);
+            if (isRecord(previous)) receiptBoundPreviousContext = previous;
+        } catch { /* Invalid historical context cannot authorize reuse. */ }
+    }
+    const receiptBoundPreviousReuseSha256 = receiptBoundPreviousContext
+        ? computeReviewContextReuseHash(receiptBoundPreviousContext) : null;
+    const currentCriteria = readTaskCriteriaBinding(options.currentReviewContext?.task_criteria_binding);
+    if (!currentCriteria) return { accepted: false, reason: 'current task criteria binding is missing or invalid' };
+    const receiptCriteriaSha256 = normalizeReceiptSha256(receipt.task_criteria_binding_sha256);
+    if (receipt.task_criteria_binding_sha256 != null && !receiptCriteriaSha256) {
+        return { accepted: false, reason: 'receipt-bound task criteria hash is invalid' };
+    }
+    const reviewedContextSha256 = normalizeReceiptSha256(receipt.reused_existing_review === true
+        ? receipt.reused_from_review_context_sha256 : receipt.review_context_sha256);
+    const previousCriteria = previousText && stringSha256(previousText) === reviewedContextSha256
+        ? readTaskCriteriaBinding(receiptBoundPreviousContext?.task_criteria_binding) : null;
+    const reviewedReuseSha256 = normalizeReceiptSha256(receipt.reused_existing_review === true
+        ? receipt.reused_from_review_context_reuse_sha256 : receipt.review_context_reuse_sha256);
+    const criteriaMatch = receiptCriteriaSha256
+        ? receiptCriteriaSha256 === currentCriteria.sha256
+        : previousCriteria ? previousCriteria.sha256 === currentCriteria.sha256
+            : !!reviewedReuseSha256 && [options.currentContextReuseSha256, options.currentSchema3ContextReuseSha256].includes(reviewedReuseSha256);
     const sourceReceiptSha256 = normalizeReceiptSha256(
         verifiedReceipt.receiptSha256 || options.candidate.sourceReceiptSha256
     );
@@ -517,7 +549,7 @@ export function validateHistoricalReviewReuseCandidate(options: {
     const historicalTrustLevel = String(receipt.trust_level || '').trim().toUpperCase();
     const sourceReceiptContextSha256 = normalizeReceiptSha256(receipt.review_context_sha256);
     const sourceReceiptContextReuseSha256 = normalizeReceiptSha256(receipt.review_context_reuse_sha256)
-        || normalizeReceiptSha256(options.previousReviewContextReuseSha256);
+        || receiptBoundPreviousReuseSha256;
     const sourceReceiptReviewScopeSha256 = normalizeReceiptSha256(receipt.review_scope_sha256);
     const sourceReceiptCodeScopeSha256 = normalizeReceiptSha256(receipt.code_scope_sha256);
     const historicalProvenanceContextSha256 = historicalReviewerProvenance?.attestation_type === 'reviewer_invocation_attestation'
@@ -557,7 +589,7 @@ export function validateHistoricalReviewReuseCandidate(options: {
         // Regenerated documentation contexts are mutable; receipt-bound hashes authenticate the reviewed bytes.
         documentationReview
             ? null
-            : String(options.previousReviewContextReuseSha256 || '').trim().toLowerCase() || null
+            : normalizeReceiptSha256(options.previousReviewContextReuseSha256)
     ].filter((value): value is string => !!value);
     const historicalSchema3ContextReuseHashMatches = !!options.currentSchema3ContextReuseSha256
         && acceptableContextReuseHashes.includes(options.currentSchema3ContextReuseSha256);
@@ -887,6 +919,11 @@ export function validateHistoricalReviewReuseCandidate(options: {
                 reason: contractBindingMismatch
             };
         }
+    }
+    // Compatibility hashes reconcile regenerated inputs only after the reviewed criteria are authenticated.
+    // Apply this to every acceptance path, including preserved-scope and test-only repairs.
+    if (!criteriaMatch) {
+        return { accepted: false, reason: 'receipt-bound task criteria do not match the current task criteria; every mandatory review repeats in FULL' };
     }
     if (!contextHashMatches && !contextReuseHashMatches) {
         if (testOnlyDeltaContextMismatch || remediationPreservedScopeMismatch) {

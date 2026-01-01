@@ -107,8 +107,8 @@ test('dependency, test and infra retain only the generated narrow focused-valida
         const fixture = materializeSkill(context, skill);
         const { handoff } = generatedHandoff(fixture, skill);
         assert.match(fixture.instructions, /Missing prior focused execution evidence alone is not a finding or residual risk/u);
-        assert.match(fixture.instructions, /exactly one relevant authenticated repository target/u);
-        assert.match(fixture.instructions, /reserved F-000 only with the exact evidence-only marker and target required by the generated handoff/u);
+        assert.match(fixture.instructions, /generated focused-self-validation contract for relevant authenticated repository targets/u);
+        assert.match(fixture.instructions, /That contract owns the target mapping and evidence rules/u);
         assert.match(handoff.promptTemplateArtifactText, /F-000/u);
         assert.match(handoff.rolePromptArtifactText, /\[garda:evidence-only:missing-focused-validation\]/u);
     }

@@ -605,9 +605,12 @@ async function verifyConfiguredProjectChecks(projectRoot: string): Promise<void>
     }
     const selection = readNextStep(projectRoot);
     assert.equal(selection.next_gate, 'task-test-selection', selection.reason);
+    const plan = { targets: [{ path: setup.test,
+        entrypoint: parseCommandChain(setup.suite)[0][1],
+        reason: 'The configured project driver executes the purchase acceptance case.' }] };
     nativeCli(projectRoot, ['workflow', 'set', '--full-suite-command', setup.suite, '--task-id', TASK_ID,
         '--reason', `${TASK_ID} verifies the configured purchase validation and acceptance criteria`,
-        '--focused-required-test-path', setup.test, '--target-root', '.']);
+        '--focused-required-test-path', setup.test, '--task-test-plan', JSON.stringify(plan), '--target-root', '.']);
     nativeCli(projectRoot, ['gate', 'full-suite-validation', '--task-id', TASK_ID,
         '--preflight-path', preflightPath, '--repo-root', '.']);
     const suite = JSON.parse(fs.readFileSync(path.join(projectRoot,

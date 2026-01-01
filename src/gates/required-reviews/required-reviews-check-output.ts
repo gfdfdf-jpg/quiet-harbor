@@ -1,5 +1,8 @@
 // Extracted from required-reviews-check.ts; keep behavior changes in the facade tests.
 import * as path from 'node:path';
+import { taskValidationSemanticReviewViolations } from '../../core/task-validation-plan';
+import { loadTaskFullSuiteConfig } from '../full-suite/task-full-suite-config';
+import { resolveReviewReuseClassificationConfig } from '../review-reuse/review-reuse';
 import { isMatchingVerifiedTaskTimeline } from '../../gate-runtime/timeline/task-timeline-integrity-match';
 import { getValidationTerminalViolations } from '../review/validation-terminal';
 import { getReviewArtifactFindingsEvidence } from '../completion';
@@ -256,6 +259,14 @@ export function checkRequiredReviews(options: CheckRequiredReviewsOptions) {
         preflightPayload: options.preflightPayload,
         preflightPath: validatedPreflight.preflight_path
     });
+    if (preflightPayload && resolvedTaskId) {
+        const repoRoot = options.repoRoot || path.resolve(validatedPreflight.preflight_path, '../../../..');
+        const selection = loadTaskFullSuiteConfig(repoRoot, resolvedTaskId, validatedPreflight.preflight_hash).selection;
+        const plan = selection.plan ?? selection.reviewedPreflight?.plan;
+        if (plan) errors.push(...taskValidationSemanticReviewViolations(plan,
+            Array.isArray(preflightPayload.changed_files) ? preflightPayload.changed_files.map(String) : [],
+            resolveReviewReuseClassificationConfig(preflightPayload, repoRoot).test_trigger_regexes, requiredReviews, skipReviews));
+    }
     const timelinePath = resolvedTaskId
         ? path.join(
             path.dirname(path.dirname(validatedPreflight.preflight_path)),

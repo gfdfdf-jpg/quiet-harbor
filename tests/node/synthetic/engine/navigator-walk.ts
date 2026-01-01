@@ -1,4 +1,20 @@
+import NATIVE_COUNTER_SHAPES from '../native-counter-input-shapes.json';
+import { recordedWorkInput, recordedTaskWorkInput, inspectRecordedSkillInputs, type RecordedWorkInput } from './walk-recorded-work';
+import * as recordedMemo from '../../../../src/core/invocation-read-observation';
+import * as recordedMeasurement from '../../../../src/core/next-step-measurement';
+import * as recordedCode from '../../../../src/core/loaded-code-identity';
+import * as recordedFiles from '../../../../src/core/invocation-file-observation';
+import { hasPreservedDeltaCounterInputs, hasTwoSourceApiCounterInputs, PRESERVED_DELTA_COUNTER_STATE,
+    TWO_SOURCE_API_INITIAL_STATE, TWO_SOURCE_API_REMEDIATION_STATE } from './walk-preserved-delta-counter-state';
+import { WALK_CLOCK_OFFSET } from './walk-clock';
+import { nativeEffectNeedsReinspection, nativeWalkCommand, nativeWalkNavigation } from './walk-native';
+import { prepareEmptyWalkWindowsAcl } from './walk-windows-acl-fixture';
+import { resolveWalkReviewFix, walkRemediationEdits, type WalkRemediationStep } from './walk-remediation-script';
+import { isPlainRecord } from '../../../../src/core/records';
+import { observeStandOracle } from './stand-check-observation';
 import './walk-route-observer';
+import { NODE_WALK_FIXTURE, seedWalkFixture, COMPILE_FAILURE_FLAG, FULL_SUITE_FAILURE_FLAG, type WalkFixtureDescriptor } from './walk-fixture';
+import { STACK_COUNTER_STATE_IDS } from './walk-stack-fixtures';
 import { NextStepEffectPlanStaleError } from '../../../../src/gates/next-step/next-step-effects';
 import { createHash, randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
@@ -13,6 +29,7 @@ import { walkWorkspaceFingerprint, walkNonGitWorkspaceFingerprint, WalkProgressG
 import { artifactLane, economyExcessByLane, economyRecoveryStep, judgeReviewEconomy, ECONOMY_RULES, SWEEP_EDITS, type EconomyFacts } from './walk-economy';
 import { captureWalkOutput as hideConsole } from './walk-output';
 import { walkFixtureByteNormalizer } from './walk-byte-normalization';
+import { sampleTimingCheckpoint } from './step-timing-session';
 
 import { DEFAULT_BUNDLE_NAME } from '../../../../src/core/constants';
 import { PROJECT_MEMORY_REQUIRED_FILE_NAMES } from '../../../../src/core/project-memory';
@@ -20,6 +37,7 @@ import { handleSetup } from '../../../../src/cli/commands/setup';
 import { handleGate } from '../../../../src/cli/commands/gate-command';
 import { handleWorkflow } from '../../../../src/cli/commands/workflow-command';
 import { splitCommandLine } from '../../../../src/core/command-line';
+import { inspectValidationCommand } from '../../../../src/core/validation-command-contract';
 import { withNextStepMeasurement, type NextStepMeasurement } from '../../../../src/core/next-step-measurement';
 import { executeNextStepEffects, resolveNextStep } from '../../../../src/gates/next-step';
 import { buildNextStepInstruction } from '../../../../src/gates/next-step/next-step-command-formatters';
@@ -27,7 +45,7 @@ import { TRUST_BOUNDARY_ANALYSIS_RULE_ID } from '../../../../src/core/trust-boun
 import { runAgentInit } from '../../../../src/lifecycle/agent-init';
 import { UPDATE_CHECK_OPT_OUT_ENV } from '../../../../src/lifecycle/update-availability/update-availability-types';
 import { REVIEW_LANES, type StandFinding } from '../../../../scripts/node-foundation/synthetic/model';
-import { runDiagnostics, type DiagnosticRecord } from '../../../../scripts/node-foundation/diagnose-next-step';
+import type { DiagnosticRecord } from '../../../../scripts/node-foundation/diagnose-next-step';
 import { initializeGitRepo, runGit } from '../../cli/commands/gate-test-helpers';
 import { validationDigest } from '../../../../src/core/project-validation-identity';
 import { readProjectValidationAuthority } from '../../../../src/core/project-validation-authority';
@@ -38,22 +56,23 @@ import {
     buildNoFindingsJsonReviewReport
 } from '../../cli/commands/gates/review-result/gates-command-review-result-fixtures';
 
+const { installRecordedWorkObserver, installLoadedFileObserver } = require(path.resolve('tests/node/synthetic/engine/walk-recorded-work-observer.cjs'));
+installRecordedWorkObserver(recordedMemo, recordedMeasurement);
+installLoadedFileObserver(recordedCode, recordedFiles, recordedMeasurement);
+
 // Drives one synthetic task through the real navigator (tests/node/synthetic/README.md): the agent only runs
 // the command next-step gives it, edits files and answers what a real agent would answer.
 export const WALK_TASK_ID = 'T-WALK';
 const MAX_WALK_STEPS = 800;
 const MAX_SAME_COMMAND = 3;
 const REVIEWER_WORK_MS = 11_000;
-const COMPILE_COMMAND = 'node scripts/build-check.cjs';
-const FULL_SUITE_COMMAND = 'node scripts/full-suite-check.cjs';
 const WALK_PACKAGE_JSON = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8'));
-const COMPILE_FAILURE_FLAG = '.git/walk-fail-compile';
-const FULL_SUITE_FAILURE_FLAG = '.git/walk-fail-full-suite';
 const REVIEW_SKILLS = ['testing-strategy', 'performance-review', 'api-contract-review', 'architecture-review', 'refactor-playbook'];
 
 export interface WalkEdit {
     path: string;
     append: string;
+    replace?: { before: string; after: string };
 }
 
 /** What goes wrong during a walk; each one happens once. */
@@ -69,7 +88,19 @@ export type WalkDisturbance =
     | { kind: 'after-done-edit'; edit: WalkEdit };
 
 export interface WalkScenario {
+    /** Observe the real navigator before the synthetic agent fills placeholders or chooses an action. */
+    inspectNavigation?: (result: ReturnType<typeof resolveNextStep>, steps: readonly WalkStep[]) => void;
+    /** Fixed inherited trusted ACL input for a separately calibrated Windows performance fixture. */
+    windowsAclInput?: 'inherited-trusted';
+    fixture?: WalkFixtureDescriptor;
+    taskTitle?: string;
+    taskNotes?: string;
+    selectionTargets?: string[];
+    /** Extra independent oracle, evaluated before the disposable repository is removed. */
+    inspectResult?: (repoRoot: string, result: WalkResult) => void | Promise<void>;
     preferredOutOfScopeRepair?: boolean;
+    /** The agent knows its failed opaque command was broad and chooses the offered reselection. */
+    reselectAfterFailure?: boolean;
     id: string;
     testSelectionCommand?: string;
     /** Named fixture state with separately measured budgets; never an exemption from growth checks. */
@@ -91,11 +122,18 @@ export interface WalkScenario {
     reviewerAttestation?: 'provider' | 'controller' | 'provider-no-live-receipt';
     /** The fix written after each failed review. */
     fix?: WalkEdit[];
+    /** Explicit repairs keyed by the failed lane and attempt, including mixed production/test sequences. */
+    remediationSequence?: readonly WalkRemediationStep[];
     disturbances?: WalkDisturbance[];
     /** Fresh reviewer launches per lane the review contract requires. */
     expectedReviews: Record<string, number>;
     /** Launch order and mode derived from the review rule table. */
     expectedModes: string[];
+    /** Scripted stack faults also check exact rule-derived counts/modes after the general injection checks. */
+    enforceReviewExpectations?: boolean;
+    /** A finite scripted fault phase; only fixture injection changes it, never navigator timestamps or commands. */
+    progressBoundary?: () => string;
+    expectedTaskReviews?: Record<string, string[]>;
     /** Routes the agent must actually visit while continuing to the declared terminal outcome. */
     expectedGates?: string[];
     /** Selected source points, including transient decisions between real native publications. */
@@ -114,6 +152,8 @@ export interface WalkScenario {
     /** Inspect a linked child after native parent preparation; commands retain their printed task identity. */
     inspectTask?: (steps: readonly WalkStep[]) => string;
     act?: (repoRoot: string, gate: string | null, steps: readonly WalkStep[], run: (argv: string[]) => Promise<void>) => Promise<boolean>;
+    /** The scenario executes one RED gate per declared invocation instead of the suggested single-command placeholder. */
+    agentExecutesRed?: boolean;
     /** Run a printed command in an externally controlled native owner instead of awaiting it in-process. */
     execute?: (repoRoot: string, step: WalkStep) => Promise<boolean>;
     /** Always stop external owners before removing their disposable repository, including on failure. */
@@ -134,6 +174,8 @@ export interface WalkScenario {
     approveReviewRestart?: boolean;
     /** Before reverting, the agent runs that restart without the approval options (the gate must refuse). */
     tryRestartWithoutApproval?: boolean;
+    /** The modeled reviewer runs the required read-only self-check of its launch handoff before returning. */
+    reviewerSelfCheck?: boolean;
 }
 
 export interface WalkStep {
@@ -149,6 +191,10 @@ export interface WalkStep {
     output: string;
     reason: string;
     taskEvents: number;
+    /** Independently inspected, distinct timeline inputs; never derived from the counted passes. */
+    timelineInput?: { events: number; bytes: number; files: string[]; envelopeBytes?: number; envelopeFiles?: string[];
+        tasks?: Array<{ file: string; events: WalkResult['events']; error?: string }>; error?: string };
+    recordedWorkInput?: RecordedWorkInput;
     eventReadError?: string;
     effectReinspection?: true;
     workspaceSha256: string;
@@ -164,6 +210,8 @@ export interface WalkStep {
     disturbances?: string[];
     /** The agent reverted its write after REVIEW_GATE_PASSED, as next-step asked. */
     reverted?: boolean;
+    /** The modeled reviewer's required self-check before it returned its report. */
+    reviewerSelfCheck?: { lane: string; command: string; exitCode: number; stateUnchanged: boolean; output: string };
     /** The synthetic user approved a new review cycle after such a write. */
     userApproval?: boolean;
     /** The restart the agent tried without the user's approval, and the gate's answer. */
@@ -179,6 +227,7 @@ export interface WalkStep {
 export type WalkOutcome = 'done' | 'blocked' | 'dead_end' | 'loop' | 'step_limit' | 'agent_stuck' | 'exception';
 
 export interface WalkReview {
+    taskId?: string;
     lane: string;
     mode: string;
     /** Step that launched the reviewer. A launch at or after the injection step ran after the disturbance. */
@@ -188,6 +237,9 @@ export interface WalkReview {
 }
 
 export interface WalkResult {
+    /** Independent replay: coverage stays on this record; budget reduction uses this native trace. */
+    nativeBudget?: WalkResult;
+    pairedElapsedMs?: number;
     scenarioId: string;
     counterState?: string;
     outcome: WalkOutcome;
@@ -216,6 +268,7 @@ interface WalkContext {
     implemented: boolean;
     preservedImplementation?: boolean;
     fixPending: boolean;
+    pendingReviewFailure?: { reviewType: string; attempt: number };
     injected: boolean;
     approveInjectedRestart?: boolean;
     policyAdoptionsApproved?: number;
@@ -234,6 +287,7 @@ function writeTextFile(filePath: string, content: string): void {
 let clockOffsetMs = 0;
 const RealDate = Date;
 class ShiftedDate extends RealDate {
+    static get [WALK_CLOCK_OFFSET](): number { return clockOffsetMs; }
     constructor(...values: unknown[]) {
         if (values.length === 0) super(RealDate.now() + clockOffsetMs);
         else super(...values as [number]);
@@ -244,69 +298,18 @@ class ShiftedDate extends RealDate {
 }
 
 function withShiftedClock<T>(action: () => Promise<T>): Promise<T> {
-    globalThis.Date = ShiftedDate as DateConstructor;
+    globalThis.Date = ShiftedDate as unknown as DateConstructor;
     return action().finally(() => {
         globalThis.Date = RealDate;
         clockOffsetMs = 0;
     });
 }
 
-// The flag lives in .git, so failing a command changes nothing the task diff can see.
-function failingOnceScript(flag: string, label: string): string {
-    return [
-        'const fs = require("node:fs");',
-        'if (fs.existsSync("' + flag + '")) {',
-        '    fs.rmSync("' + flag + '");',
-        '    console.error("' + label + ' failed");',
-        '    process.exit(1);',
-        '}',
-        'console.log("' + label + ' ok");',
-        ''
-    ].join('\n');
-}
-
-// Security changes must name a test of a trust boundary; the quality checklist and the reviewers bind to it.
-const TRUST_BOUNDARY_SCENARIO = 'rejects replaced session evidence';
-const TRUST_BOUNDARY_TEST_FILE = 'tests/auth.test.cjs';
-const TRUST_BOUNDARY_MATRIX = [{
-    boundary_id: 'TB-WALK-001',
-    boundary: 'Synthetic session token to the status renderer',
-    authority_source: 'The session file in the task diff',
-    mutable_inputs: ['session token'],
-    integrity_evidence: ['session sha256'],
-    canonical_reconstruction: 'Rebuild the session from the current source file.',
-    toctou_replay: 'Reject a stale or replaced session.',
-    negative_paths: [{
-        kind: 'replaced',
-        scenario: TRUST_BOUNDARY_SCENARIO,
-        expected_behavior: 'Reject the replaced session.',
-        evidence_files: [TRUST_BOUNDARY_TEST_FILE + '#' + TRUST_BOUNDARY_SCENARIO]
-    }]
-}];
-
-function seedProject(workspaceRoot: string): void {
-    writeTextFile(path.join(workspaceRoot, TRUST_BOUNDARY_TEST_FILE), [
-        'const assert = require("node:assert/strict");',
-        'const test = require("node:test");',
-        '',
-        'test("' + TRUST_BOUNDARY_SCENARIO + '", () => {',
-        '    assert.equal(true, true);',
-        '});',
-        ''
-    ].join('\n'));
-    writeTextFile(path.join(workspaceRoot, 'package.json'), `${JSON.stringify({ name: 'walk-fixture', private: true }, null, 2)}\n`);
-    writeTextFile(path.join(workspaceRoot, 'docs', 'guide.md'), '# Guide\n');
-    writeTextFile(path.join(workspaceRoot, 'src', 'app.ts'), 'export function renderStatus() {\n    return "ready";\n}\n');
-    writeTextFile(path.join(workspaceRoot, 'tests', 'app.test.ts'), 'import test from "node:test";\n\ntest("status", () => undefined);\n');
-    writeTextFile(path.join(workspaceRoot, 'scripts', 'build-check.cjs'), failingOnceScript(COMPILE_FAILURE_FLAG, 'build'));
-    writeTextFile(path.join(workspaceRoot, 'scripts', 'full-suite-check.cjs'), failingOnceScript(FULL_SUITE_FAILURE_FLAG, 'full suite'));
-}
-
-function configureBundle(bundleRoot: string, sourceRoot: string): void {
+function configureBundle(bundleRoot: string, sourceRoot: string, fixture: WalkFixtureDescriptor): void {
     const configPath = path.join(bundleRoot, 'live', 'config', 'workflow-config.json');
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<string, Record<string, unknown>>;
-    Object.assign(config.full_suite_validation, { enabled: true, command: FULL_SUITE_COMMAND, timeout_ms: 120_000 });
-    config.compile_gate.command = COMPILE_COMMAND;
+    Object.assign(config.full_suite_validation, { enabled: true, command: fixture.projectTestCommand, timeout_ms: 120_000 });
+    config.compile_gate.command = fixture.configuredCompileCommand ?? fixture.compileCommand;
     fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
     writeTextFile(path.join(bundleRoot, 'live', 'config', 'review-capabilities.json'), `${JSON.stringify({
         code: true, db: true, security: true, refactor: true, api: true, test: true, performance: true, infra: true, dependency: true
@@ -324,14 +327,14 @@ function configureBundle(bundleRoot: string, sourceRoot: string): void {
     profiles.built_in_profiles.balanced.task_decomposition = { enabled: false };
     fs.writeFileSync(profilesPath, `${JSON.stringify(profiles, null, 2)}\n`, 'utf8');
     const commandsPath = path.join(bundleRoot, 'live', 'docs', 'agent-rules', '40-commands.md');
-    fs.writeFileSync(commandsPath, fs.readFileSync(commandsPath, 'utf8').replace(/<[a-z][a-z -]* command>/gu, COMPILE_COMMAND), 'utf8');
+    fs.writeFileSync(commandsPath, fs.readFileSync(commandsPath, 'utf8').replace(/<[a-z][a-z -]* command>/gu, fixture.compileCommand), 'utf8');
     for (const fileName of PROJECT_MEMORY_REQUIRED_FILE_NAMES) {
         writeTextFile(path.join(bundleRoot, 'live', 'docs', 'project-memory', fileName),
             `# ${fileName}\n\nSynthetic walk fixture memory for ${fileName}.\n`);
     }
 }
 
-export async function createWalkTemplate(sourceRoot: string): Promise<string> {
+export async function createWalkTemplate(sourceRoot: string, fixture = NODE_WALK_FIXTURE): Promise<string> {
     const packageJson = JSON.parse(fs.readFileSync(path.join(sourceRoot, 'package.json'), 'utf8')) as { name: string; version: string };
     const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'garda-walk-template-'));
     const bundleRoot = path.join(workspaceRoot, DEFAULT_BUNDLE_NAME);
@@ -341,11 +344,12 @@ export async function createWalkTemplate(sourceRoot: string): Promise<string> {
         ClaudeOrchestratorFullAccess: 'false', TokenEconomyEnabled: 'true', ProviderMinimalism: 'false',
         CollectedVia: 'CLI_NONINTERACTIVE', ActiveAgentFiles: 'AGENTS.md'
     }, null, 2)}\n`);
+    if (fixture.id !== NODE_WALK_FIXTURE.id) seedWalkFixture(workspaceRoot, fixture);
     await hideConsole([], () => handleSetup(
         ['--target-root', workspaceRoot, '--no-prompt', '--skip-verify', '--skip-manifest-validation', '--source-of-truth', 'Codex'],
         packageJson, sourceRoot));
-    seedProject(workspaceRoot);
-    configureBundle(bundleRoot, sourceRoot);
+    if (fixture.id === NODE_WALK_FIXTURE.id) seedWalkFixture(workspaceRoot, fixture);
+    configureBundle(bundleRoot, sourceRoot, fixture);
     runAgentInit({
         targetRoot: workspaceRoot, activeAgentFiles: 'AGENTS.md', projectRulesUpdated: 'yes', skillsPrompted: 'yes',
         ordinaryDocPaths: 'CHANGELOG.md', verifyRunner: () => ({ passed: true }), manifestRunner: () => ({ passed: true })
@@ -353,7 +357,7 @@ export async function createWalkTemplate(sourceRoot: string): Promise<string> {
     fs.writeFileSync(path.join(workspaceRoot, 'TASK.md'), [
         '| ID | Status | Priority | Area | Title | Owner | Updated | Profile | Notes |',
         '|---|---|---|---|---|---|---|---|---|',
-        `| ${WALK_TASK_ID} | 🟦 TODO | P1 | testing/synthetic-walk | Change the status renderer | fixture | 2026-10-30 | balanced | Synthetic navigator walk. |`,
+        `| ${WALK_TASK_ID} | 🟦 TODO | P1 | testing/synthetic-walk | ${fixture.taskTitle} | fixture | 2026-10-30 | balanced | Synthetic navigator walk. |`,
         ''
     ].join('\n'), 'utf8');
     initializeGitRepo(workspaceRoot);
@@ -387,12 +391,22 @@ function applyEdits(repoRoot: string, edits: readonly WalkEdit[]): void {
     for (const edit of edits) {
         const filePath = path.join(repoRoot, edit.path);
         fs.mkdirSync(path.dirname(filePath), { recursive: true });
+        if (edit.replace) {
+            const content = fs.readFileSync(filePath, 'utf8');
+            if (!content.includes(edit.replace.before)) throw new Error('Missing task edit input: ' + edit.path);
+            fs.writeFileSync(filePath, content.replace(edit.replace.before, edit.replace.after), 'utf8');
+        }
         fs.appendFileSync(filePath, edit.append, 'utf8');
     }
 }
 
 async function runCommand(command: string): Promise<{ exitCode: number; output: string; threw?: boolean }> {
     const argv = splitCommandLine(command);
+    if (process.env.GARDA_SYNTHETIC_WALK_DIAGNOSTICS) {
+        const index = argv.findIndex(value => ['workflow', 'gate', 'next-step'].includes(value));
+        if (index < 0) throw new Error('The stand cannot execute this native command: ' + command);
+        return nativeWalkCommand(argv.slice(index));
+    }
     if (argv.includes('workflow')) {
         const output: string[] = [];
         try {
@@ -415,6 +429,7 @@ async function runCommand(command: string): Promise<{ exitCode: number; output: 
 }
 
 async function runGate(gateArgv: string[]): Promise<{ exitCode: number; output: string; threw?: boolean }> {
+    if (process.env.GARDA_SYNTHETIC_WALK_DIAGNOSTICS) return nativeWalkCommand(['gate', ...gateArgv]);
     const output: string[] = [];
     const previousExitCode = process.exitCode;
     try {
@@ -428,11 +443,33 @@ async function runGate(gateArgv: string[]): Promise<{ exitCode: number; output: 
     }
 }
 
-function navigate(repoRoot: string, scenarioId: string, taskId = WALK_TASK_ID): { result: ReturnType<typeof resolveNextStep>; ms: number; measurement: NextStepMeasurement | null; diagnostic?: DiagnosticRecord } {
+/** Bind each target to the corresponding selected invocation, including a deliberate broad attempt. */
+export function walkTaskSelectionPlan(selected: string, targets: readonly string[], fixture: WalkFixtureDescriptor, taskId: string) {
+    const descriptor = inspectValidationCommand(selected, 'test', { allowConjunction: true }).descriptor;
+    if (!descriptor) throw new Error('Agent selected an invalid task command: ' + selected);
+    return { targets: targets.map(target => {
+        const own = fixture.taskTestInvocations?.findIndex(run => run.targets.includes(target)) ?? 0;
+        const invocation = own >= 0 && own < descriptor.invocations.length ? own : 0;
+        return { path: target, invocation, entrypoint: descriptor.invocations[invocation].executable,
+            reason: `${taskId}: this entrypoint verifies the declared task behavior for ${target}.` };
+    }), ...(fixture.taskTestSupport ? { support: fixture.taskTestSupport } : {}) };
+}
+
+/** Follow only the navigator's structured inspection retry, once, keeping both measured steps. */
+export function retryWalkNavigation(result: Pick<ReturnType<typeof resolveNextStep>,
+    'status' | 'next_gate' | 'retryable' | 'commands' | 'navigator_command' | 'reason'>, previousGate?: string | null): boolean {
+    if (result.status !== 'BLOCKED' || result.next_gate !== 'git-observation' || result.retryable !== true) return false;
+    if (result.commands.length !== 1 || result.commands[0].command !== result.navigator_command
+        || splitCommandLine(result.navigator_command).includes('--execute-effects'))
+        throw new Error('Invalid retryable navigator instruction: ' + result.reason);
+    if (previousGate === 'git-observation') throw new Error('Retryable navigator refusal repeated: ' + result.reason);
+    return true;
+}
+
+function navigate(repoRoot: string, scenarioId: string, taskId = WALK_TASK_ID, prior: WalkStep[] = []): { result: ReturnType<typeof resolveNextStep>; ms: number; measurement: NextStepMeasurement | null; diagnostic?: DiagnosticRecord } {
     const outputDir = process.env.GARDA_SYNTHETIC_WALK_DIAGNOSTICS;
     if (outputDir) {
-        const run = runDiagnostics({ repoRoot, taskId, outputDir, label: scenarioId,
-            cpuProfile: process.env.GARDA_SYNTHETIC_WALK_DIAGNOSTICS_CPU === '1' });
+        const run = nativeWalkNavigation(repoRoot, taskId, scenarioId);
         const diagnostic = run.records[0];
         if (run.exitCode || diagnostic.issues.length) throw new Error('Navigator diagnostics failed: ' + JSON.stringify(diagnostic.issues));
         return {
@@ -444,10 +481,19 @@ function navigate(repoRoot: string, scenarioId: string, taskId = WALK_TASK_ID): 
     const started = performance.now();
     const result = withNextStepMeasurement(() => resolveNextStep({ taskId, repoRoot }), (value) => { measurement = value; },
         { normalizeTimelineBytes: walkFixtureByteNormalizer(repoRoot) });
-    return { result, ms: performance.now() - started, measurement };
+    const elapsed = performance.now() - started;
+    // Counters above are a separate pass. Each direct call below creates its own native read observation.
+    if (process.env.GARDA_SYNTHETIC_STEP_TIMING === '1') sampleTimingCheckpoint(repoRoot, scenarioId, result,
+        () => resolveNextStep({ taskId, repoRoot }), measurement, taskId, () => {
+            let measured: NextStepMeasurement | null = null;
+            const observed = withNextStepMeasurement(() => resolveNextStep({ taskId, repoRoot }), value => { measured = value; },
+                { normalizeTimelineBytes: walkFixtureByteNormalizer(repoRoot) });
+            return { result: observed, measurement: measured };
+        }, prior);
+    return { result, ms: elapsed, measurement };
 }
 
-function fillQualityAnswers(answersPath: string, changedFiles: readonly string[]): void {
+function fillQualityAnswers(answersPath: string, changedFiles: readonly string[], fixture = NODE_WALK_FIXTURE): void {
     const template = JSON.parse(fs.readFileSync(answersPath, 'utf8')) as { answers: Array<Record<string, unknown>> };
     template.answers = template.answers.map((answer) => ({
         ...answer,
@@ -456,7 +502,7 @@ function fillQualityAnswers(answersPath: string, changedFiles: readonly string[]
         evidence_files: [...changedFiles],
         actions_taken: [],
         actions_required: [],
-        ...(answer.rule_id === TRUST_BOUNDARY_ANALYSIS_RULE_ID ? { trust_boundary_matrix: TRUST_BOUNDARY_MATRIX } : {})
+        ...(answer.rule_id === TRUST_BOUNDARY_ANALYSIS_RULE_ID ? { trust_boundary_matrix: fixture.trustBoundaryMatrix } : {})
     }));
     fs.writeFileSync(answersPath, `${JSON.stringify(template, null, 2)}\n`, 'utf8');
 }
@@ -503,7 +549,7 @@ function citeEvidenceDomain(report: Record<string, unknown>, contextPath: string
 }
 
 /** A reviewer confirms the focused test run itself: the ledger entry cites the test and quotes its output. */
-function resolveValidationCases(repoRoot: string, report: Record<string, unknown>, contextPath: string): void {
+function resolveValidationCases(repoRoot: string, report: Record<string, unknown>, contextPath: string, fixture: WalkFixtureDescriptor): void {
     const ledger = report.coverage_ledger as { entries: Array<{ obligation_id: string; evidence: Array<{ location: string }>; case_resolution?: unknown }> };
     const context = JSON.parse(fs.readFileSync(contextPath, 'utf8')) as { coverage_contract: ReviewCoverageContract };
     for (const obligation of context.coverage_contract.obligations) {
@@ -514,25 +560,28 @@ function resolveValidationCases(repoRoot: string, report: Record<string, unknown
         // Native task commands retain UTF-8; recipes retain authenticated base64 stream envelopes.
         // Both must quote their actual selected case, never infer PASS from process exit alone.
         const output = retainedNativeCaseOutput(repoRoot, execution).text;
-        const quote = output.split(/\r?\n/u).find(line => line.includes(binding.selector)
-            && /^(?:ok \d+ -|✔)/u.test(line.trim()));
-        if (!quote) throw new Error('No retained passed-case quotation for ' + binding.selector);
+        const quote = (execution.expected_failure ? fixture.failedCaseQuote : fixture.passedCaseQuote)?.(
+            repoRoot, binding.source_identity.path, binding.selector, output);
+        if (!quote) throw new Error('No retained assertion quotation for ' + binding.selector);
         const entry = ledger.entries.find(item => item.obligation_id === obligation.id);
         if (!entry) throw new Error('Modeled reviewer omitted ' + obligation.id);
         entry.case_resolution = { binding_sha256: validationDigest(binding), execution_sha256: execution.record_sha256,
-            output_sha256: execution.output_sha256, outcome: 'PASSED', evidence_quote: quote,
-            reasoning: 'The actual retained Node test output marks this selected temporary case as passed.' };
+            output_sha256: execution.output_sha256,
+            ...(execution.expected_failure ? { outcome: 'FAILED', failure_kind: 'ASSERTION' } : { outcome: 'PASSED' }), evidence_quote: quote,
+            reasoning: fixture.caseReasoning ?? 'The fixture source and retained execution establish the selected case result: ' + fixture.id + '.' };
         entry.evidence[0].location = binding.source_identity.path + ':1';
     }
 }
 
-function writeReviewerReport(repoRoot: string, command: string, lane: string, content: 'failed' | 'clean' | 'broken', scenario?: WalkScenario): void {
+export function writeReviewerReport(repoRoot: string, command: string, lane: string, content: 'failed' | 'clean' | 'broken', scenario?: WalkScenario): void {
     const launchPath = path.resolve(repoRoot, argumentValue(command, '--reviewer-launch-artifact-path'));
     const launch = JSON.parse(fs.readFileSync(launchPath, 'utf8')) as { review_output_path?: string };
     const taskId = argumentValue(command, '--task-id') || WALK_TASK_ID;
     const contextPath = reviewContextPath(repoRoot, lane, taskId);
+    const fixtureObservations = scenario?.fixture?.inspectReviewEvidence?.(repoRoot, taskId, lane) ?? [];
     const build = content === 'failed' ? buildFailedJsonReviewReport : buildNoFindingsJsonReviewReport;
     const report = build(contextPath, taskId, lane);
+    if (fixtureObservations.length) (report.validation_notes as Array<{ note: string }>)[0].note += ' ' + fixtureObservations.join('; ');
     if (content === 'failed') {
         const findings = report.findings as { high: Array<Record<string, unknown>>; low: Array<Record<string, unknown>> };
         if (scenario?.findingDescription) {
@@ -544,7 +593,7 @@ function writeReviewerReport(repoRoot: string, command: string, lane: string, co
         if (scenario?.findingSeverity === 'low') { findings.low = findings.high; findings.high = []; }
     }
     citeEvidenceDomain(report, contextPath);
-    resolveValidationCases(repoRoot, report, contextPath);
+    resolveValidationCases(repoRoot, report, contextPath, scenario?.fixture ?? NODE_WALK_FIXTURE);
     const outputPath = path.resolve(repoRoot, String(launch.review_output_path || ''));
     // Preserve the context's file obligations, including document targets in a mixed review domain.
     writeTextFile(outputPath, content === 'broken' ? 'not a review report\n' : JSON.stringify(report, null, 2) + '\n');
@@ -572,6 +621,44 @@ export function inspectWalkTaskEvents(repoRoot: string, taskId = WALK_TASK_ID): 
     catch (error) { return { events: [], error: 'Cannot inspect task events for ' + taskId + ': ' + String(error) }; }
 }
 
+/** Outside navigator measurement. Parent acceptance can authenticate several child timelines too. */
+export function inspectWalkTimelineInput(repoRoot: string, work: Record<string, number>): NonNullable<WalkStep['timelineInput']> {
+    const files = Object.keys(work).filter(key => key.startsWith('timeline_capture:') && key.endsWith('.jsonl'))
+        .map(key => key.slice('timeline_capture:'.length));
+    const envelopes = Object.keys(work).filter(key => key.startsWith('timeline_payload_read:') && key.endsWith('-task-mode.json'))
+        .map(key => key.slice('timeline_payload_read:'.length));
+    const input: NonNullable<WalkStep['timelineInput']> = { events: 0, bytes: 0, files: [], envelopeBytes: 0, envelopeFiles: [], tasks: [] };
+    const directory = path.resolve(repoRoot, DEFAULT_BUNDLE_NAME, 'runtime/task-events');
+    const reviews = path.resolve(repoRoot, DEFAULT_BUNDLE_NAME, 'runtime/reviews');
+    const normalize = walkFixtureByteNormalizer(repoRoot);
+    try {
+        for (const file of [...new Set([...files, ...envelopes])].sort()) {
+            const envelope = envelopes.includes(file);
+            if (path.dirname(path.resolve(file)) !== (envelope ? reviews : directory)) throw new Error('Timeline input outside fixture runtime: ' + file);
+            // An absent timeline is an observed input before task entry, not an unreadable payload.
+            if (!fs.existsSync(file) && !work['timeline_payload_read:' + file]) continue;
+            const bytes = fs.readFileSync(file);
+            const size = work.timeline_bytes_normalized !== undefined && !work.timeline_bytes_normalization_failed
+                ? normalize(bytes) : bytes.length;
+            const relative = path.relative(repoRoot, file).replace(/\\/gu, '/');
+            if (envelope) { input.envelopeFiles!.push(relative); input.envelopeBytes! += size; }
+            else {
+                input.files.push(relative);
+                const lines = bytes.toString('utf8').split('\n').filter(line => line.trim());
+                input.events += lines.length;
+                try {
+                    input.tasks!.push({ file: relative, events: lines.map(line => {
+                        const event = JSON.parse(line) as { event_type: string; details?: Record<string, unknown> };
+                        return { type: event.event_type, details: event.details ?? {} };
+                    }) });
+                } catch (error) { input.tasks!.push({ file: relative, events: [], error: String(error) }); }
+                input.bytes += size;
+            }
+        }
+    } catch (error) { input.error = String(error); }
+    return input;
+}
+
 export function scenarioDisturbanceLabels(scenario: WalkScenario): string[] {
     return [...scenario.disturbances?.map(entry => JSON.stringify(entry)) ?? [],
         ...scenario.disturbanceReason ? [scenario.disturbanceReason] : []];
@@ -581,16 +668,113 @@ export function isWalkEffectReinspection(error: unknown): boolean {
     return error instanceof NextStepEffectPlanStaleError;
 }
 
+/** Native v4 selectors/receipts add measured proof inputs. Existing budgets stay as the strict unadmitted fallback. */
+export function measuredNativeCounterState(admitted: string | undefined, events: WalkResult['events'], nativeBundlePrepared = false, taskId = WALK_TASK_ID): string | undefined {
+    if (admitted === 'native-api-selected-remediation' && hasPreservedDeltaCounterInputs(events, taskId)) return PRESERVED_DELTA_COUNTER_STATE;
+    if (admitted?.startsWith('native-api-selected-') && hasTwoSourceApiCounterInputs(events, taskId))
+        return admitted === 'native-api-selected-initial' ? TWO_SOURCE_API_INITIAL_STATE : TWO_SOURCE_API_REMEDIATION_STATE;
+    if (admitted?.startsWith('native-api-selected-')) return admitted;
+    const currentEntry = events.some(event => event.type === 'TASK_MODE_ENTERED'
+        && event.details.profile_policy_snapshot_required === true
+        && typeof event.details.profile_policy_snapshot_hash === 'string'
+        && /^[a-f0-9]{64}$/u.test(event.details.profile_policy_snapshot_hash));
+    let id: string;
+    if (admitted) id = 'native-v4-' + admitted;
+    else if (currentEntry) {
+        const preflight = [...events].reverse().find(event => event.type === 'PREFLIGHT_CLASSIFIED'
+            && isPlainRecord(event.details.required_reviews));
+        const lanes = preflight ? Object.entries(preflight.details.required_reviews as Record<string, unknown>)
+            .filter(([, value]) => value === true).map(([name]) => name).sort() : null;
+        id = 'native-v4-task--' + (lanes === null ? 'preflight-pending' : lanes.join('+') || 'no-reviews');
+    } else if (nativeBundlePrepared && !events.some(event => event.type === 'TASK_MODE_ENTERED')) id = 'native-v4-pre-entry';
+    else return admitted;
+    // The manifest lists independently measured input sets, never thresholds selected from observed work.
+    return NATIVE_COUNTER_SHAPES.shapes.some(shape => shape.id === id) ? id : admitted;
+}
+
 /** A fixture's calibration applies only after native admission, never from its scenario label alone. */
 export function admittedCounterState(state: string | undefined, events: WalkResult['events'], taskId = WALK_TASK_ID,
     parentEvents: WalkResult['events'] = [], declaredRecipeAdmitted = false): string | undefined {
+    if (state === 'native-api-selected-initial' || state === 'native-api-selected-remediation') {
+        const admitted = events.some(event => {
+            const required = event.details.required_reviews;
+            return event.type === 'PREFLIGHT_CLASSIFIED' && Number(event.details.changed_files_count) > 0
+                && isPlainRecord(required) && ['code', 'api', 'test'].every(lane => required[lane] === true)
+                && Object.values(required).filter(value => value === true).length === 3;
+        });
+        const restarted = events.some(event => event.type === 'REVIEW_CYCLE_RESTARTED');
+        return admitted ? restarted ? 'native-api-selected-remediation' : 'native-api-selected-initial' : undefined;
+    }
+    if (state === 'stack-decomposition-planning') return taskId === WALK_TASK_ID && events.some(event =>
+        event.type === 'TASK_MODE_ENTERED' && event.details.task_profile === 'strict'
+        && typeof event.details.planned_source_visibility_sha256 === 'string'
+        && /^[a-f0-9]{64}$/u.test(event.details.planned_source_visibility_sha256)) ? state : undefined;
+    if (state === 'matrix-test-review-reuse' && !events.some(event =>
+        event.type === 'PREFLIGHT_CLASSIFIED' && event.details.changed_files_count !== 0))
+        return events.some(event => event.type === 'TASK_MODE_ENTERED' && event.details.task_profile === 'balanced'
+            && event.details.profile_policy_snapshot_required === true
+            && typeof event.details.profile_policy_snapshot_hash === 'string'
+            && /^[a-f0-9]{64}$/u.test(event.details.profile_policy_snapshot_hash)
+            && typeof event.details.planned_source_visibility_sha256 === 'string'
+            && /^[a-f0-9]{64}$/u.test(event.details.planned_source_visibility_sha256)) ? state : undefined;
+    if (state === 'leaf-test-review-reuse' || state === 'matrix-test-review-reuse'
+        || state === 'stack-four-lane-task' || state === 'stack-four-lane-cmake-task') {
+        const admitted = events.some(event => {
+        const required = event.details.required_reviews;
+        return event.type === 'PREFLIGHT_CLASSIFIED' && isPlainRecord(required)
+            && ['code', 'security', 'refactor', 'test'].every(lane => required[lane] === true);
+        });
+        return admitted ? state === 'stack-four-lane-cmake-task' ? 'stack-four-lane-task' : state
+            : state === 'stack-four-lane-cmake-task' && events.some(event => event.type === 'TASK_MODE_ENTERED')
+                ? 'stack-fixture-cmake-planning' : undefined;
+    }
+    if (state === 'task-test-failure-repair') {
+        const failure = events.findIndex(event => event.type === 'FULL_SUITE_VALIDATION_FAILED'
+            && event.details.status === 'FAILED' && typeof event.details.exit_code === 'number'
+            && event.details.exit_code !== 0);
+        return failure >= 0 && events.slice(0, failure).some(event => event.type === 'COMPILE_GATE_PASSED')
+            ? state : undefined;
+    }
+    if (state === 'stack-retained-broad-failure' || state === 'full-suite-out-of-scope-narrow') {
+        const failure = events.findIndex(event => event.type === 'FULL_SUITE_VALIDATION_FAILED'
+            && event.details.status === 'FAILED' && typeof event.details.output_artifact_path === 'string');
+        return failure >= 0 && events.slice(failure + 1).some(event => event.type === 'TASK_TEST_SELECTION_RECORDED')
+            ? 'stack-retained-broad-failure' : undefined;
+    }
+    if (state === 'stack-fixture-unknown-quartz-gate-tour'
+        && events.some(event => event.type === 'FULL_SUITE_VALIDATION_FAILED'
+            && event.details.status === 'FAILED' && typeof event.details.output_artifact_path === 'string')
+        && events.some(event => event.type === 'OUT_OF_SCOPE_FOLLOW_UP_MATERIALIZED'
+            && Array.isArray(event.details.bindings) && event.details.bindings.length > 0)) {
+        return 'retained-task-test-failure';
+    }
+    if (state === 'task-local-expected-red') return events.some(event =>
+        event.type === 'TEST_FIRST_EXPECTED_FAILURE_RECORDED'
+        || event.type === 'PREFLIGHT_CLASSIFIED' && Number(event.details.changed_files_count) > 0
+            && isPlainRecord(event.details.required_reviews) && event.details.required_reviews.test === true
+            && event.details.required_reviews.code === false
+            && typeof event.details.scope_sha256 === 'string' && /^[a-f0-9]{64}$/u.test(event.details.scope_sha256))
+        ? state : undefined;
+    const stackChild = state === 'stack-four-lane-native-child-tree' || state === 'stack-five-lane-native-child-tree';
+    const taskRepairChild = state === 'task-local-full-suite-child-tree';
+    if (taskRepairChild && taskId === WALK_TASK_ID
+        && events.some(event => event.type === 'FULL_SUITE_VALIDATION_FAILED' && event.details.status === 'FAILED')
+        && events.some(event => event.type === 'TASK_TEST_SELECTION_RECORDED'
+            && isPlainRecord(event.details.task_test_selection_authority)
+            && isPlainRecord(event.details.task_test_selection_authority.validation_plan))) return state;
+    const authorityState = stackChild ? 'native-child-tree' : taskRepairChild ? 'full-suite-child-tree'
+        : state === 'task-local-expected-red' ? 'test-first-recorded-red' : state;
+    if (state && STACK_COUNTER_STATE_IDS.has(state)) return events.some(event => event.type === 'TASK_MODE_ENTERED') ? state : undefined;
     // A recipe is admitted by workflow set before task entry, rather than by a task timeline event.
-    if (state === 'declared-recipe-reviewed' || state === 'declared-recipe-docs-only') return declaredRecipeAdmitted ? state : undefined;
+    if (state === 'declared-recipe-reviewed' || state === 'declared-recipe-docs-only'
+        || state === 'declared-recipe-task-local-reviewed' || state === 'declared-recipe-task-local-docs-only')
+        return declaredRecipeAdmitted ? state : undefined;
     // Inspecting a not-yet-entered child already authenticates its admitted parent's evidence.
     // Its own TASK_MODE_ENTERED is later; it is not the boundary that introduces these inputs.
-    const parentAdmission = state === 'native-child-tree' ? 'STRICT_DECOMPOSITION_DECISION_RECORDED'
-        : state === 'full-suite-child-tree' ? 'FULL_SUITE_REPAIR_TASK_MATERIALIZED' : undefined;
+    const parentAdmission = authorityState === 'native-child-tree' ? 'STRICT_DECOMPOSITION_DECISION_RECORDED'
+        : authorityState === 'full-suite-child-tree' ? 'FULL_SUITE_REPAIR_TASK_MATERIALIZED' : undefined;
     if (taskId !== WALK_TASK_ID && parentAdmission && parentEvents.some(event => event.type === parentAdmission)) return state;
+    if ((stackChild || taskRepairChild) && taskId !== WALK_TASK_ID) return undefined; // A real parent handoff is mandatory.
     const admission: Record<string, string> = {
         'test-selection-module': 'TASK_MODE_ENTERED',
         'test-first-recorded-red': 'TEST_FIRST_EXPECTED_FAILURE_RECORDED',
@@ -600,7 +784,7 @@ export function admittedCounterState(state: string | undefined, events: WalkResu
         'native-child-tree': taskId === WALK_TASK_ID ? 'STRICT_DECOMPOSITION_DECISION_RECORDED' : 'TASK_MODE_ENTERED',
         'full-suite-child-tree': taskId === WALK_TASK_ID ? 'FULL_SUITE_REPAIR_TASK_MATERIALIZED' : 'TASK_MODE_ENTERED'
     };
-    return state && admission[state] && events.some(event => event.type === admission[state]) ? state : undefined;
+    return state && authorityState && admission[authorityState] && events.some(event => event.type === admission[authorityState]) ? state : undefined;
 }
 
 function takeDisturbance<K extends WalkDisturbance['kind']>(
@@ -626,7 +810,9 @@ export function observeReviewerLaunch(repoRoot: string, taskId: string, lane: st
 function beginReviewer(context: WalkContext, command: string, lane: string, step: number): void {
     const taskId = argumentValue(command, '--task-id') || WALK_TASK_ID;
     context.reviewsByLane[lane] = (context.reviewsByLane[lane] ?? 0) + 1;
-    context.reviews.push(observeReviewerLaunch(context.repoRoot, taskId, lane, step));
+    const review = observeReviewerLaunch(context.repoRoot, taskId, lane, step);
+    if (context.scenario.expectedTaskReviews) review.taskId = taskId;
+    context.reviews.push(review);
 }
 
 function completeReviewer(context: WalkContext, command: string, lane: string): void {
@@ -652,6 +838,39 @@ function completeReviewer(context: WalkContext, command: string, lane: string): 
     }
     review.completed = context.steps.at(-1)?.index ?? null;
     context.fixPending = failed && context.scenario.findingSeverity !== 'low';
+    context.pendingReviewFailure = context.fixPending ? { reviewType: lane, attempt } : undefined;
+}
+
+/** The reviewer prompt's own required last step: the exact read-only self-check printed in its launch handoff. */
+export function reviewerSelfCheckCommand(launchPath: string): string | null {
+    const directory = path.dirname(launchPath);
+    const candidates = [launchPath, ...fs.existsSync(directory) ? fs.readdirSync(directory)
+        .filter(name => name.endsWith('.json')).sort().map(name => path.join(directory, name)) : []];
+    for (const file of [...new Set(candidates)]) {
+        let prompt: unknown;
+        try { prompt = (JSON.parse(fs.readFileSync(file, 'utf8')) as { copy_paste_reviewer_launch_prompt?: unknown }).copy_paste_reviewer_launch_prompt; }
+        catch { continue; }
+        const line = typeof prompt === 'string' ? /^Required last step, from the repository root: (.+)$/mu.exec(prompt)?.[1]?.trim() : undefined;
+        if (line) return line;
+    }
+    return null;
+}
+
+/**
+ * A contract-valid report must pass the reviewer's required self-check before the reviewer returns it. The modeled
+ * reviewer runs the printed command itself, so a gate that refuses valid history or launch evidence is observed.
+ */
+async function runReviewerSelfCheck(context: WalkContext, command: string, lane: string): Promise<NonNullable<WalkStep['reviewerSelfCheck']>> {
+    const selfCheck = reviewerSelfCheckCommand(path.resolve(context.repoRoot, argumentValue(command, '--reviewer-launch-artifact-path')));
+    if (!selfCheck) throw new Error('The ' + lane + ' reviewer handoff names no required self-check command.');
+    if (!splitCommandLine(selfCheck).includes('--check-only')) throw new Error('The required reviewer self-check is not read-only: ' + selfCheck);
+    const before = hashWalkState(context.repoRoot);
+    const run = await runCommand(selfCheck);
+    const record = { lane, command: selfCheck, exitCode: run.exitCode, stateUnchanged: hashWalkState(context.repoRoot) === before,
+        output: run.output.length > 4000 ? run.output.slice(0, 2000) + '\n[...truncated...]\n' + run.output.slice(-1500) : run.output };
+    if (run.exitCode || !record.stateUnchanged) throw new Error('The required ' + lane + ' reviewer self-check '
+        + (run.exitCode ? 'refused a contract-valid report' : 'changed runtime state') + ': ' + record.output);
+    return record;
 }
 
 async function continueReviewer(context: WalkContext, command: string, lane: string, reason: string): Promise<string | null> {
@@ -666,7 +885,7 @@ async function continueReviewer(context: WalkContext, command: string, lane: str
     if (!['live_reviewer_continuation', 'api_conversation_continuation'].includes(artifact.recovery.selected_transport)) return null;
     const launchCommand = context.reviewerLaunchCommands[lane];
     if (!launchCommand) throw new Error('Correction lost the original open reviewer.');
-    writeReviewerReport(context.repoRoot, launchCommand, lane, 'clean');
+    writeReviewerReport(context.repoRoot, launchCommand, lane, 'clean', context.scenario);
     const responseCommand = /First record the corrected response using: (.*?)\. If your reviewer cannot be reached/su.exec(reason)?.[1];
     if (!responseCommand) throw new Error('Navigator did not provide the correction response command.');
     if (responseCommand.includes('<paste exact delegated reviewer output here>')) throw new Error('Correction response command contains a placeholder.');
@@ -689,27 +908,40 @@ async function actWithoutGate(context: WalkContext, result: ReturnType<typeof re
         context.implemented = true;
         return true;
     }
-    if (context.fixPending && context.scenario.fix) {
-        applyEdits(context.repoRoot, context.scenario.fix);
+    const pendingFix = context.fixPending && context.pendingReviewFailure
+        ? resolveWalkReviewFix(context.scenario, context.pendingReviewFailure.reviewType, context.pendingReviewFailure.attempt)
+        : context.scenario.fix;
+    if (context.fixPending && pendingFix) {
+        applyEdits(context.repoRoot, pendingFix);
         context.fixPending = false;
+        context.pendingReviewFailure = undefined;
         if (context.scenario.qualityRework && context.qualityReworkApplied) {
             const answers = path.join(context.repoRoot, DEFAULT_BUNDLE_NAME, 'runtime/tmp', taskId + '-quality-checklist-answers.json');
-            fillQualityAnswers(answers, context.scenario.edits.map(edit => edit.path));
+            fillQualityAnswers(answers, context.scenario.edits.map(edit => edit.path), context.scenario.fixture);
             const template = JSON.parse(fs.readFileSync(answers, 'utf8')) as { answers: Array<Record<string, unknown>> };
-            template.answers[0].actions_taken = ['Documented the focused status change in src/app.ts.'];
+            template.answers[0].actions_taken = ['Documented the focused status change in ' + (context.scenario.fixture ?? NODE_WALK_FIXTURE).primarySource + '.'];
             fs.writeFileSync(answers, JSON.stringify(template, null, 2) + '\n');
         }
         return true;
     }
     if (result.next_gate === 'run-intermediate-command' || result.next_gate === 'project-validation-evidence') {
-        return (await runGate(['run-intermediate-command', '--task-id', taskId, '--command-source', 'targeted-test',
-            '--command', 'node --test --test-name-pattern="' + TRUST_BOUNDARY_SCENARIO + '" ' + TRUST_BOUNDARY_TEST_FILE,
-            '--selected-case', JSON.stringify({ source: TRUST_BOUNDARY_TEST_FILE, case_id: TRUST_BOUNDARY_SCENARIO, selector: TRUST_BOUNDARY_SCENARIO }),
-            '--preflight-path', DEFAULT_BUNDLE_NAME + '/runtime/reviews/' + taskId + '-preflight.json', '--repo-root', '.'])).exitCode === 0;
+        const fixture = context.scenario.fixture ?? NODE_WALK_FIXTURE;
+        const runs = fixture.taskTestInvocations ?? [{ command: fixture.caseCommand, targets: fixture.cases.map(item => item.source) }];
+        for (const invocation of runs) {
+            const argv = ['run-intermediate-command', '--task-id', taskId, '--command-source', 'targeted-test',
+                '--command', invocation.command,
+                ...fixture.cases.filter(item => invocation.targets.includes(item.source))
+                    .flatMap(item => ['--selected-case', JSON.stringify(item)]),
+                '--preflight-path', DEFAULT_BUNDLE_NAME + '/runtime/reviews/' + taskId + '-preflight.json', '--repo-root', '.'];
+            const executed = await runGate(argv);
+            (context.steps.at(-1)!.preparation ??= []).push({ command: argv.map(arg => JSON.stringify(arg)).join(' '), output: executed.output });
+            if (executed.exitCode !== 0) { context.steps.at(-1)!.output = executed.output; return false; }
+        }
+        return true;
     }
     const answersPath = result.quality_checklist?.answers_template_path;
     if (result.next_gate === 'quality-checklist' && answersPath) {
-        fillQualityAnswers(path.resolve(context.repoRoot, answersPath), context.scenario.edits.map((edit) => edit.path));
+        fillQualityAnswers(path.resolve(context.repoRoot, answersPath), context.scenario.edits.map((edit) => edit.path), context.scenario.fixture);
         if (context.scenario.qualityRework && !context.qualityReworkApplied) {
             const file = path.resolve(context.repoRoot, answersPath);
             const template = JSON.parse(fs.readFileSync(file, 'utf8')) as { answers: Array<Record<string, unknown>> };
@@ -774,7 +1006,7 @@ async function walkSteps(context: WalkContext, from = 0, stopAt = -1, checkpoint
         let failedNavigation: WalkStep | undefined;
         const navigationStarted = performance.now();
         const taskId = context.scenario.inspectTask?.(steps) ?? WALK_TASK_ID;
-        try { navigation = navigate(repoRoot, context.scenario.id, taskId); }
+        try { navigation = navigate(repoRoot, context.scenario.id, taskId, steps); }
         catch (error) {
             failedNavigation = { index, gate: null, status: 'EXCEPTION', route: 'EXCEPTION/navigator', command: null,
                 navigatorMs: performance.now() - navigationStarted, commandMs: 0, exitCode: null, output: '',
@@ -797,30 +1029,67 @@ async function walkSteps(context: WalkContext, from = 0, stopAt = -1, checkpoint
             }
         }
         const { result, ms, measurement, diagnostic } = navigation;
+        context.scenario.inspectNavigation?.(result, steps);
         const launchCommand = result.commands.find((entry) => entry.command.includes('launch_artifact_path'))?.command;
-        let command = launchCommand ?? result.commands[0]?.command ?? null;
+        let command: string | null = launchCommand ?? result.commands[0]?.command ?? null;
         if (context.scenario.unreachableReviewer && result.next_gate === 'record-review-result'
             && result.reason.includes('If your reviewer cannot be reached')) {
-            command = result.commands.find(entry => entry.command.includes('restart-review-cycle'))?.command ?? command;
+            const restart = result.commands.find(entry => entry.command.includes('restart-review-cycle'));
+            if (restart) { command = restart.command; result.next_gate = 'restart-review-cycle'; }
         }
         if (context.scenario.preferredOutOfScopeRepair && result.next_gate === 'task-test-selection'
             && result.commands.some(entry => entry.command.includes('materialize-full-suite-repair-task'))) {
             command = result.commands.find(entry => entry.command.includes('materialize-full-suite-repair-task'))?.command ?? command;
             result.next_gate = 'materialize-full-suite-repair-task';
         }
+        if (context.scenario.reselectAfterFailure && result.next_gate === 'implementation'
+            && context.steps.some(step => step.gate === 'full-suite-validation' && step.exitCode)) {
+            const selection = result.commands.find(entry => entry.command.includes('workflow set') && (entry.command.includes('--task-test-command') || entry.command.includes('--full-suite-command')));
+            if (selection) { command = selection.command; result.next_gate = 'task-test-selection'; }
+        }
+        // Intermediate gates accept one command. Multi-invocation test-first scenarios run
+        // their RED cycle and later focused GREEN commands separately, recording every call.
+        const separateTestFirstRuns = context.scenario.agentExecutesRed
+            && ['test-first-expected-failure', 'run-intermediate-command', 'project-validation-evidence'].includes(String(result.next_gate));
+        if (separateTestFirstRuns) command = null;
         const lane = command ? argumentValue(command, '--review-type') : '';
         if (command) {
+            const fixture = context.scenario.fixture ?? NODE_WALK_FIXTURE;
+            const taskCommand = fixture.taskTestInvocations?.map(run => run.command).join(' && ') ?? fixture.caseCommand;
+            const substitutions: Record<string, string> = {
+                '<task-compile-command>': fixture.compileCommand, '<task-test-command>': taskCommand
+            };
+            const filled = splitCommandLine(command);
+            if (filled.some(arg => Object.hasOwn(substitutions, arg)))
+                command = filled.map(arg => JSON.stringify(substitutions[arg] ?? arg)).join(' ');
+            const execution = splitCommandLine(command);
+            if (execution.includes('run-intermediate-command') && execution.includes('--command') && !execution.includes('--selected-case')) {
+                execution.push(...fixture.cases.flatMap(claim => ['--selected-case', JSON.stringify(claim)]));
+                command = execution.map(arg => JSON.stringify(arg)).join(' ');
+            }
             if (result.next_gate === 'task-test-selection') {
                 command = command.replace('<task behavior and regression relationships>',
-                    'the status renderer changes and task acceptance criteria');
+                    context.scenario.taskTitle ?? (context.scenario.fixture ?? NODE_WALK_FIXTURE).selectionReason
+                    ?? (context.scenario.fixture ?? NODE_WALK_FIXTURE).taskTitle);
                 // The synthetic agent explicitly chooses its fixture command. Production guidance
                 // supplies a placeholder, so the project command is never silently preselected.
                 const args = splitCommandLine(command);
-                args[args.indexOf('--full-suite-command') + 1] = context.scenario.testSelectionCommand ?? FULL_SUITE_COMMAND;
+                const fixture = context.scenario.fixture ?? NODE_WALK_FIXTURE;
+                const selected = context.scenario.testSelectionCommand
+                    ?? fixture.taskTestCommand;
+                args[args.findIndex(arg => arg === '--task-test-command' || arg === '--full-suite-command') + 1] = selected;
+                if (context.scenario.selectionTargets) {
+                    for (let i = args.length - 2; i >= 0; i--) if (args[i] === '--focused-required-test-path') args.splice(i, 2);
+                    args.push(...context.scenario.selectionTargets.flatMap(target => ['--focused-required-test-path', target]));
+                }
+                const targets = args.flatMap((arg, index) => arg === '--focused-required-test-path' ? [args[index + 1]] : []);
+                const declaration = walkTaskSelectionPlan(selected, targets, fixture, taskId);
+                args.push('--task-test-plan', JSON.stringify(declaration));
                 command = args.map(arg => JSON.stringify(arg)).join(' ');
             }
             command = fillProviderValues(command, 'walk-' + (lane || 'task') + '-' + String(context.reviewsByLane[lane] ?? 0),
-                (context.scenario.fix ?? context.scenario.edits).map((edit) => edit.path));
+                (context.scenario.remediationSequence ? walkRemediationEdits(context.scenario)
+                    : context.scenario.fix ?? context.scenario.edits).map((edit) => edit.path));
             if (context.scenario.separateReviewInvocation && result.next_gate === 'complete-reviewer-launch') {
                 command = command.replace(/\s+--record-invocation\b/gu, '');
             }
@@ -833,18 +1102,27 @@ async function walkSteps(context: WalkContext, from = 0, stopAt = -1, checkpoint
                     .replace('<provider-controller fail-closed availability: closed|stateless>', 'stateless');
             }
         }
-        const workspaceSha256 = hashWorkspace(repoRoot);
+        // A native Git refusal is the result under test. Stand bookkeeping must not ask the same
+        // broken Git operation again and hide that returned refusal behind a fixture exception.
+        const workspaceSha256 = result.next_gate === 'git-observation'
+            ? walkNonGitWorkspaceFingerprint(repoRoot) : hashWorkspace(repoRoot);
         const eventInspection = inspectWalkTaskEvents(repoRoot, taskId);
         const taskEventRecords = eventInspection.events;
         const taskEvents = taskEventRecords.length;
+        const { tasks: timelineTasks, ...timelineInput } = inspectWalkTimelineInput(repoRoot, measurement?.work ?? {});
         const step: WalkStep = {
             index, taskId, gate: result.next_gate, status: result.status, command, navigatorMs: ms, commandMs: 0,
-            exitCode: null, output: '', reason: result.reason || '', taskEvents, workspaceSha256, measurement,
-            counterState: admittedCounterState(context.scenario.counterState, taskEventRecords, taskId,
+            exitCode: null, output: '', reason: result.reason || '', taskEvents, timelineInput, workspaceSha256, measurement,
+            recordedWorkInput: recordedTaskWorkInput((timelineTasks?.length ? timelineTasks
+                : [{ file: DEFAULT_BUNDLE_NAME + '/runtime/task-events/' + taskId + '.jsonl', events: taskEventRecords }])
+                .map(task => ({ taskId: task.file, error: 'error' in task && typeof task.error === 'string' ? task.error : undefined,
+                input: recordedWorkInput(task.events, {}, inspectRecordedSkillInputs(repoRoot, task.events), context.scenario.edits.map(edit => edit.path)) })),
+                measurement?.work ?? {}),
+            counterState: measuredNativeCounterState(admittedCounterState(context.scenario.counterState, taskEventRecords, taskId,
                 taskId !== WALK_TASK_ID && context.scenario.counterState?.endsWith('child-tree')
                     ? inspectWalkTaskEvents(repoRoot).events : [],
                 context.scenario.counterState?.startsWith('declared-recipe-')
-                    ? readProjectValidationAuthority(repoRoot) !== null : false),
+                    ? readProjectValidationAuthority(repoRoot) !== null : false), taskEventRecords, true, taskId),
             ...(eventInspection.error ? { eventReadError: eventInspection.error } : {}),
             ...(preparation.length ? { preparation } : {}),
             ...(diagnostic ? { diagnostic } : {})
@@ -859,6 +1137,7 @@ async function walkSteps(context: WalkContext, from = 0, stopAt = -1, checkpoint
             return { outcome: 'agent_stuck', detail: 'Synthetic checkpoint before ' + step.gate + '/' + lane };
         }
         steps.push(step);
+        if (retryWalkNavigation(result, steps.at(-2)?.gate)) continue;
         if (result.status === 'DONE') {
             const afterDone = takeDisturbance(context, 'after-done-edit', '');
             if (afterDone) { applyEdits(repoRoot, [afterDone.edit]); continue; }
@@ -886,8 +1165,8 @@ async function walkSteps(context: WalkContext, from = 0, stopAt = -1, checkpoint
                     // then goes back to following next-step. Its refusal is not this step's outcome.
                     const argv = wrongGateArgv(disturbance.gate, { taskId,
                         preflightPath: DEFAULT_BUNDLE_NAME + '/runtime/reviews/' + taskId + '-preflight.json',
-                        taskIntent: 'Change the status renderer',
-                        changedFiles: [...context.scenario.edits, ...context.scenario.fix ?? []].map(edit => edit.path) });
+                        taskIntent: context.scenario.taskTitle ?? (context.scenario.fixture ?? NODE_WALK_FIXTURE).taskTitle,
+                        changedFiles: [...context.scenario.edits, ...walkRemediationEdits(context.scenario)].map(edit => edit.path) });
                     const wrongStarted = performance.now();
                     const wrong = await runGate(argv);
                     clockOffsetMs += 1;
@@ -905,7 +1184,8 @@ async function walkSteps(context: WalkContext, from = 0, stopAt = -1, checkpoint
                     (step.preparation ??= []).push({ command: argv.join(' '), output: reset.output });
                     if (reset.exitCode || !isCompletedSweepReset(reset.output)) throw new Error('Operator-authorized task reset failed: ' + reset.output);
                     context.preservedImplementation = context.implemented;
-                    context.implemented = false; context.fixPending = false; context.reviewerLaunchCommands = {};
+                    context.implemented = false; context.fixPending = false; context.pendingReviewFailure = undefined;
+                    context.reviewerLaunchCommands = {};
                 } else if ('artifact' in disturbance && ordered.some(entry => entry.kind === 'reset-task')) {
                     // Reset combinations are one batch, including inputs that survived the reset.
                     pendingArtifacts.push(disturbance);
@@ -943,7 +1223,13 @@ async function walkSteps(context: WalkContext, from = 0, stopAt = -1, checkpoint
         seen.add(stateKey);
         const argv = command ? splitCommandLine(command) : [];
         const action = command ? (argv[argv.indexOf('gate') + 1] ?? 'command') + ':' + argumentValue(command, '--stage') : 'instruction';
-        if (progress.observe(workspaceSha256, step.gate, lane, action, taskId)) {
+        const classification = taskEventRecords.filter(event => event.type === 'PREFLIGHT_CLASSIFIED').at(-1)?.details;
+        // Task-declared roles can refine code -> mixed without editing bytes. A stable semantic key permits that
+        // one refinement; changing timestamps/hashes or toggling back to an earlier classification keeps its count.
+        const classificationKey = JSON.stringify([context.applied, context.scenario.progressBoundary?.(), isPlainRecord(classification?.profile_guardrails)
+            ? classification.profile_guardrails.scope_category : null, classification?.code_changed,
+        isPlainRecord(classification?.required_reviews) ? Object.entries(classification.required_reviews).sort(([a], [b]) => a.localeCompare(b)) : []]);
+        if (progress.observe(workspaceSha256, step.gate, lane, action, taskId, classificationKey)) {
             return { outcome: 'loop', detail: 'Repeated ' + step.gate + ' without a workspace change across recovery cycles. ' + step.reason };
         }
         const lateEdit = takeDisturbance(context, 'late-edit', String(result.next_gate));
@@ -994,16 +1280,32 @@ async function walkSteps(context: WalkContext, from = 0, stopAt = -1, checkpoint
             if (isDeadEnd(result)) return { outcome: 'dead_end', detail: result.next_gate + ': ' + result.reason };
             const action = await captureArtifactReads(repoRoot, () => actWithoutGate(context, result));
             step.reads = action.reads;
-            if (action.value) continue;
+            if (action.value) {
+                if (separateTestFirstRuns) {
+                    step.exitCode = 0;
+                    step.output = result.next_gate === 'test-first-expected-failure'
+                        ? 'Executed each declared RED command separately.' : 'Executed each declared focused command separately.';
+                }
+                continue;
+            }
             if (injection && context.injected && result.status === 'BLOCKED' && hasHumanRecovery(result.reason)) return { outcome: 'blocked', detail: result.reason };
-            return { outcome: 'agent_stuck', detail: result.next_gate + ': ' + result.reason };
+            return { outcome: 'agent_stuck', detail: result.next_gate + ': ' + result.reason + (step.output ? '\n' + step.output : '') };
         }
         if (result.next_gate === 'next-step-effect') {
             const planSha256 = /--effect-plan-sha256\s+["']?([a-f0-9]{64})/u.exec(command)?.[1] || '';
             const started = performance.now();
             beginRouteObservation();
             try {
-                const executed = await captureArtifactReads(repoRoot, async () => executeNextStepEffects({ taskId, repoRoot }, planSha256));
+                const executed = await captureArtifactReads(repoRoot, async () => {
+                    if (!process.env.GARDA_SYNTHETIC_WALK_DIAGNOSTICS) return executeNextStepEffects({ taskId, repoRoot }, planSha256);
+                    const native = nativeWalkCommand(['next-step', taskId, '--repo-root', repoRoot,
+                        '--execute-effects', '--effect-plan-sha256', planSha256, '--as-json']);
+                    if (native.exitCode) {
+                        if (nativeEffectNeedsReinspection(native.output)) throw new NextStepEffectPlanStaleError(native.output);
+                        throw new Error(native.output);
+                    }
+                    return JSON.parse(native.output) as ReturnType<typeof resolveNextStep>;
+                });
                 const effect = executed.value;
                 step.reads = executed.reads;
                 step.effectResult = { gate: effect.next_gate, status: effect.status,
@@ -1032,7 +1334,10 @@ async function walkSteps(context: WalkContext, from = 0, stopAt = -1, checkpoint
         }
         if (context.fixPending && result.next_gate === 'restart-review-cycle') await actWithoutGate(context, result);
         if (result.next_gate === 'complete-reviewer-launch'
-            && !result.reason.includes('durable launched control artifact')) completeReviewer(context, command, lane);
+            && !result.reason.includes('durable launched control artifact')) {
+            completeReviewer(context, command, lane);
+            if (context.scenario.reviewerSelfCheck) step.reviewerSelfCheck = await runReviewerSelfCheck(context, command, lane);
+        }
         if (result.next_gate === 'enter-task-mode' && context.applied.includes('reset-task')) {
             // The modeled operator knows the task-owned files it is reopening, including the injected edits.
             command += resetPlannedFiles(context.scenario).map(file => ' --planned-changed-file ' + JSON.stringify(file)).join('');
@@ -1070,6 +1375,17 @@ async function walkSteps(context: WalkContext, from = 0, stopAt = -1, checkpoint
 export function isReviewPolicyRefusal(injection: SweepInjection, step: WalkStep): boolean {
     return injection.disturbances.some(entry => entry.kind === 'change-policy') && step.gate === 'load-rule-pack'
         && !!step.exitCode && /Task profile policy inputs changed after preflight/u.test(step.output);
+}
+
+/**
+ * The documented route of an approved review-policy change: the policy frozen at task entry refuses the change (C6.1.1),
+ * and the operator-approved adoption re-enters task mode, keeping passed reviews (C6.2.4). Only that refusal, answered by
+ * a successful adoption as the next executed command, belongs to the route; any other failure stays a finding.
+ */
+export function isAdoptedReviewPolicyRefusal(injection: SweepInjection | undefined, steps: readonly WalkStep[], step: WalkStep): boolean {
+    if (!injection || !isReviewPolicyRefusal(injection, step)) return false;
+    const next = steps.find(candidate => candidate.index > step.index && candidate.command);
+    return next?.gate === 'enter-task-mode' && next.exitCode === 0 && /\s--adopt-changed-review-policy\s/u.test(next.command ?? '');
 }
 
 const OPERATOR_CONFIRMATION_TIME_PLACEHOLDER = '<ISO-8601 timestamp>';
@@ -1203,6 +1519,7 @@ async function walkIsolatedTaskFamily(templateRoot: string, scenario: WalkScenar
     onResult?: (result: WalkResult) => void): Promise<WalkResult[]> {
     const started = performance.now();
     const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'garda-walk-'));
+    if (scenario.windowsAclInput === 'inherited-trusted') prepareEmptyWalkWindowsAcl(repoRoot);
     fs.cpSync(templateRoot, repoRoot, { recursive: true });
     if (scenario.customLane) {
         writeTextFile(path.join(repoRoot, DEFAULT_BUNDLE_NAME, 'live/config/review-catalog.json'), JSON.stringify({
@@ -1212,7 +1529,7 @@ async function walkIsolatedTaskFamily(templateRoot: string, scenario: WalkScenar
         }) + '\n');
         const pathsConfigPath = path.join(repoRoot, DEFAULT_BUNDLE_NAME, 'live/config/paths.json');
         const pathsConfig = JSON.parse(fs.readFileSync(pathsConfigPath, 'utf8')) as { triggers: Record<string, string[]> };
-        pathsConfig.triggers['custom-quality'] = ['^src/app[.]ts$'];
+        pathsConfig.triggers['custom-quality'] = ['^' + (scenario.fixture ?? NODE_WALK_FIXTURE).primarySource.replaceAll('.', '[.]') + '$'];
         writeTextFile(pathsConfigPath, JSON.stringify(pathsConfig) + '\n');
         const capabilitiesPath = path.join(repoRoot, DEFAULT_BUNDLE_NAME, 'live/config/review-capabilities.json');
         const capabilities = JSON.parse(fs.readFileSync(capabilitiesPath, 'utf8'));
@@ -1250,13 +1567,19 @@ async function walkIsolatedTaskFamily(templateRoot: string, scenario: WalkScenar
         writeTextFile(queuePath, fs.readFileSync(queuePath, 'utf8').replace('| balanced |', '| ' + scenario.profile + ' |'));
     }
     if (scenario.trackedFiles !== undefined) {
-        const scaffold = runGit(repoRoot, ['ls-files']).stdout.trim().split(/\r?\n/u).filter(file => !['src/app.ts', 'tests/app.test.ts'].includes(file));
+        const scaffold = runGit(repoRoot, ['ls-files']).stdout.trim().split(/\r?\n/u).filter(file => ![(scenario.fixture ?? NODE_WALK_FIXTURE).primarySource, (scenario.fixture ?? NODE_WALK_FIXTURE).primaryTest].includes(file));
         fs.appendFileSync(path.join(repoRoot, '.git/info/exclude'), '\n' + scaffold.map(file => '/' + file).join('\n') + '\n');
         runGit(repoRoot, ['rm', '--cached', '--', ...scaffold]);
         for (let index = 2; index < scenario.trackedFiles; index++) writeTextFile(path.join(repoRoot, 'size-fixture', String(index) + '.ts'), 'export {};\n');
         if (scenario.trackedFiles > 2) runGit(repoRoot, ['add', 'size-fixture']);
         runGit(repoRoot, ['commit', '-qm', 'Seed project size fixture']);
         if (runGit(repoRoot, ['ls-files']).stdout.trim().split(/\r?\n/u).length !== scenario.trackedFiles) throw new Error('Project-size fixture tracked-file count is wrong');
+    }
+    if (scenario.taskTitle || scenario.taskNotes) {
+        const file = path.join(repoRoot, 'TASK.md');
+        writeTextFile(file, fs.readFileSync(file, 'utf8')
+            .replace((scenario.fixture ?? NODE_WALK_FIXTURE).taskTitle, scenario.taskTitle ?? (scenario.fixture ?? NODE_WALK_FIXTURE).taskTitle)
+            .replace('Synthetic navigator walk.', scenario.taskNotes ?? 'Synthetic navigator walk.'));
     }
     scenario.configure?.(repoRoot);
     if (scenario.configure || scenario.mode || scenario.requiredLanes || scenario.reviewOrder || scenario.dependencyGraph || scenario.fullSuitePlacement || scenario.profile) {
@@ -1304,6 +1627,8 @@ async function walkIsolatedTaskFamily(templateRoot: string, scenario: WalkScenar
             };
             if (!variants.length) {
                 const result = await finish(context);
+                try { await scenario.inspectResult?.(repoRoot, result); }
+                catch (error) { result.outcome = 'exception'; result.detail = [result.detail, 'Fixture oracle: ' + String(error)].filter(Boolean).join('\n'); }
                 onResult?.(result);
                 return [result];
             }
@@ -1362,6 +1687,7 @@ async function walkIsolatedTaskFamily(templateRoot: string, scenario: WalkScenar
 
 /** What the walk did against what the scenario expects; every finding is a stable id. */
 export function compareWalk(scenario: WalkScenario, result: WalkResult): StandFinding[] {
+    observeStandOracle('navigator-oracle');
     const findings: StandFinding[] = [];
     const add = (kind: StandFinding['kind'], id: string, summary: string, step = result.steps.at(-1), extra: Record<string, unknown> = {}) => findings.push({ layer: 'walk', kind, id, summary, detail: {
         route: step?.route ?? '(setup)', step: step?.index ?? -1,
@@ -1510,7 +1836,12 @@ export function compareWalk(scenario: WalkScenario, result: WalkResult): StandFi
                 'DONE after wrong gate ' + wrong?.gate + ' without ' + missing.join(', ') + ' in the final cycle.', undefined,
                 { wrongGate: wrong, events: result.events.map(event => event.type) });
         }
-        return findings;
+        if (!scenario.enforceReviewExpectations) return findings;
+    }
+    for (const [taskId, expected] of Object.entries(scenario.expectedTaskReviews ?? {})) {
+        const actual = result.reviews.filter(review => review.taskId === taskId).map(review => review.lane + ':' + review.mode);
+        if (actual.join(' ') !== expected.join(' ')) add('contract', 'walk:task-review-modes:' + scenario.id + ':' + taskId,
+            'Expected ' + taskId + ': ' + expected.join(' ') + ', observed ' + actual.join(' ') + '.');
     }
     for (const lane of new Set([...Object.keys(scenario.expectedReviews), ...Object.keys(result.reviewsByLane)])) {
         const expected = scenario.expectedReviews[lane] ?? 0;
@@ -1521,11 +1852,13 @@ export function compareWalk(scenario: WalkScenario, result: WalkResult): StandFi
         }
     }
     const modes = result.reviews.map((review) => review.lane + ':' + review.mode).join(' ');
-    if (scenario.expectedModes.join(' ') !== modes) {
+    if (scenario.expectedModes.length !== result.reviews.length || scenario.expectedModes.some((expected, index) =>
+        !expected.split('|').includes(result.reviews[index]?.lane + ':' + result.reviews[index]?.mode))) {
         add('contract', 'walk:modes:' + scenario.id, 'Expected ' + scenario.expectedModes.join(' ') + ', observed ' + modes + '.');
     }
     for (const step of result.steps) {
-        if (step.exitCode && !step.effectReinspection && !(scenario.expectedFailingGates ?? []).includes(String(step.gate))) {
+        if (step.exitCode && !step.effectReinspection && !(scenario.expectedFailingGates ?? []).includes(String(step.gate))
+            && !isAdoptedReviewPolicyRefusal(scenario.injection, result.steps, step)) {
             add('safety', 'walk:gate-failed:' + step.gate + ':' + scenario.id, step.output.slice(0, 400), step);
         }
     }

@@ -1,3 +1,5 @@
+import { recordFixtureFullSuiteArtifact } from '../../../../task-test-selection-fixtures';
+import { buildCurrentReviewCycleCaseResolutions } from '../review-cycle/gates-review-cycle-fixtures';
 import { materializeReusedReviewEvidence } from '../../../../../../src/gates/review-reuse/review-reuse-materialization';
 import { normalizeReviewReceiptReviewerProvenance, type ReviewReceipt } from '../../../../../../src/gate-runtime/review-context';
 import { hasAuthenticatedIntermediateGroupedReceiptSource } from '../../../../../../src/gates/review/review-grouped-receipt-source';
@@ -145,9 +147,17 @@ async function seedTrustBoundaryChecklist(repoRoot: string, taskId: string, pref
     appendTaskEvent(getOrchestratorRoot(repoRoot), taskId, 'PREFLIGHT_CLASSIFIED', 'INFO',
         'Current review-reuse fixture preflight.', { output_path: preflightPath.replace(/\\/gu, '/'), ...metrics });
     writeCompilePassEvidence(repoRoot, taskId, preflightPath);
-    const execution = await runIntermediateCommandCommand({ repoRoot, taskId, preflightPath,
-        commandSource: 'targeted-test',
-        command: `node --experimental-strip-types --test --test-reporter=tap ${evidenceRelativePath}` });
+    const testContext = process.env.NODE_TEST_CONTEXT;
+    let execution: Awaited<ReturnType<typeof runIntermediateCommandCommand>>;
+    try {
+        delete process.env.NODE_TEST_CONTEXT;
+        execution = await runIntermediateCommandCommand({ repoRoot, taskId, preflightPath,
+            commandSource: 'targeted-test',
+            command: `node --experimental-strip-types --test --test-reporter=tap ${evidenceRelativePath}` });
+    } finally {
+        if (testContext === undefined) delete process.env.NODE_TEST_CONTEXT;
+        else process.env.NODE_TEST_CONTEXT = testContext;
+    }
     assert.equal(execution.exitCode, 0, execution.outputLines.join('\n'));
     const preflightSha256 = sha256File(preflightPath);
     const artifact = {
@@ -430,12 +440,7 @@ function writeFullSuitePassEvidence(
         warnings: [],
         cycle_binding: cycleBinding
     }, null, 2)}\n`, 'utf8');
-    appendTaskEvent(getOrchestratorRoot(repoRoot), taskId, 'FULL_SUITE_VALIDATION_PASSED', 'PASS', 'Full suite validation passed.', {
-        command: 'npm test',
-        placement: 'after_compile_before_reviews',
-        cycle_binding: cycleBinding,
-        artifact_path: artifactPath.replace(/\\/g, '/')
-    });
+    recordFixtureFullSuiteArtifact(repoRoot, taskId);
     return artifactPath;
 }
 
@@ -1414,7 +1419,8 @@ describe('cli/commands/gates - review reuse upstream reuse', () => {
         // Even identical claimed facts are insufficient when the replacement bytes no longer match the event.
         const authenticated = fs.readFileSync(suitePath, 'utf8');
         fs.writeFileSync(suitePath, authenticated + ' ');
-        assert.match(getReviewContextFullSuiteValidationViolations(suiteOptions).join(' '), /sha256 does not match/u);
+        assert.match(getReviewContextFullSuiteValidationViolations(suiteOptions).join(' '),
+            /Task test artifact integrity: hash or authenticated execution binding is missing or differs/u);
         fs.writeFileSync(suitePath, authenticated);
         const build = await runBuildReviewContextCommand({ reviewType: 'code', depth: '2', preflightPath,
             outputPath: contextPath, repoRoot });
@@ -1535,7 +1541,7 @@ describe('cli/commands/gates - review reuse upstream reuse', () => {
         assert.equal(secondBuild.reusedReviewEvidence, true, secondOutput);
         assert.ok(secondBuild.outputLines.includes('CurrentPassReviewEvidence: rejected'), secondOutput);
         assert.ok(
-            secondBuild.outputLines.some((line) => line.includes('review context full-suite validation binding is stale')),
+            secondBuild.outputLines.some((line) => line.includes('review context task test validation binding is stale')),
             secondOutput
         );
         assert.ok(secondBuild.outputLines.includes('ReviewReuseDecision: accepted'), secondOutput);
@@ -1941,6 +1947,7 @@ describe('cli/commands/gates - review reuse upstream reuse', () => {
         const priorPreflightPath = writePreflight(repoRoot, taskId, {
             changed_files: ['src/app.ts'],
             metrics: { changed_lines_total: 3 },
+            triggers: { security: true },
             required_reviews: requiredReviews
         }, `${taskId}-prior-preflight.json`);
         await seedTrustBoundaryChecklist(repoRoot, taskId, priorPreflightPath);
@@ -1959,7 +1966,8 @@ describe('cli/commands/gates - review reuse upstream reuse', () => {
                 verdict,
                 priorPreflightPath,
                 path.join(reviewsRoot, `${taskId}-${reviewType}-review-context.json`),
-                reviewerIdentity
+                reviewerIdentity,
+                { caseResolutions: buildCurrentReviewCycleCaseResolutions(repoRoot, taskId) }
             );
             const context = JSON.parse(fs.readFileSync(path.join(reviewsRoot, `${taskId}-${reviewType}-review-context.json`), 'utf8')) as {
                 coverage_contract: ReviewCoverageContract;
@@ -1975,7 +1983,7 @@ describe('cli/commands/gates - review reuse upstream reuse', () => {
             scope_category: 'mixed',
             changed_files: ['src/app.ts', workflowConfigRelativePath],
             metrics: { changed_lines_total: 5 },
-            triggers: { changed_workflow_config_files: [workflowConfigRelativePath] },
+            triggers: { security: true, changed_workflow_config_files: [workflowConfigRelativePath] },
             required_reviews: requiredReviews
         });
         await seedTrustBoundaryChecklist(repoRoot, taskId, preflightPath);
@@ -1989,14 +1997,6 @@ describe('cli/commands/gates - review reuse upstream reuse', () => {
             assert.ok(validation.every(entry => entry.validation_binding?.snapshot_sha256 === currentPreflightSha256));
         };
         for (const [reviewType] of reviewTypes) {
-            if (reviewType === 'test') {
-                await assert.rejects(() => runBuildReviewContextCommand({ repoRoot, reviewType, depth: 2, preflightPath,
-                    outputPath: path.join(reviewsRoot, `${taskId}-${reviewType}-review-context.json`) }),
-                /ReviewType 'test' is blocked until upstream reviews pass for the current cycle: code/u);
-                const { contract } = buildDeclaredReviewCoverageContract({ reviewType, repoRoot, preflight, preflightPath });
-                assertCurrentSemanticCoverage(reviewType, contract);
-                continue;
-            }
             const build = await runBuildReviewContextCommand({
                 repoRoot,
                 reviewType,
@@ -2007,11 +2007,15 @@ describe('cli/commands/gates - review reuse upstream reuse', () => {
             const context = JSON.parse(fs.readFileSync(path.join(reviewsRoot, `${taskId}-${reviewType}-review-context.json`), 'utf8')) as {
                 coverage_contract: ReviewCoverageContract;
             };
-            const semantic = reviewType === 'code';
+            const semantic = reviewType === 'test';
             assert.equal(build.reusedReviewEvidence, !semantic, `${reviewType}: ${build.outputLines.join('\n')}`);
             assert.ok(build.outputLines.includes(`ReviewReuseDecision: ${semantic ? 'rejected' : 'accepted'}`));
             if (semantic) {
                 assertCurrentSemanticCoverage(reviewType, context.coverage_contract);
+                const { contract } = buildDeclaredReviewCoverageContract({ reviewType, repoRoot, preflight, preflightPath });
+                assertCurrentSemanticCoverage(reviewType, contract);
+            } else {
+                assert.equal(context.coverage_contract.contract_sha256, priorCoverage.get(reviewType));
             }
         }
 
@@ -2197,7 +2201,7 @@ describe('cli/commands/gates - review reuse upstream reuse', () => {
         fs.rmSync(repoRoot, { recursive: true, force: true });
     });
 
-    it('reuses prior code-review evidence when non-runtime performance support is delegated to performance review', async () => {
+    for (const existingObligation of [false, true]) it(`${existingObligation ? 'reuses code PASS for an existing' : 'requires FULL code review for a new'} performance obligation when support is delegated`, async () => {
         const repoRoot = createTempRepo();
         const taskId = 'T-904a-code-reuse-performance-support';
         seedTaskQueue(repoRoot, taskId);
@@ -2213,6 +2217,7 @@ describe('cli/commands/gates - review reuse upstream reuse', () => {
         const priorPreflightPath = writePreflight(repoRoot, taskId, {
             changed_files: ['src/app.ts'],
             metrics: { changed_lines_total: 3 },
+            triggers: { performance: existingObligation },
             required_reviews: {
                 code: true,
                 db: false,
@@ -2220,7 +2225,7 @@ describe('cli/commands/gates - review reuse upstream reuse', () => {
                 refactor: false,
                 api: false,
                 test: false,
-                performance: false,
+                performance: existingObligation,
                 infra: false,
                 dependency: false
             }
@@ -2255,7 +2260,15 @@ describe('cli/commands/gates - review reuse upstream reuse', () => {
             preflightPath,
             outputPath: codeReviewContextPath
         });
-        assert.equal(codeBuild.reusedReviewEvidence, true);
+        assert.equal(codeBuild.reusedReviewEvidence, existingObligation, codeBuild.outputLines.join('\n'));
+        if (!existingObligation) {
+            const context = JSON.parse(fs.readFileSync(codeReviewContextPath, 'utf8'));
+            const priorReceipt = JSON.parse(fs.readFileSync(path.join(reviewsRoot, `${taskId}-code-receipt.json`), 'utf8'));
+            assert.notEqual(context.task_criteria_binding.sha256, priorReceipt.task_criteria_binding_sha256);
+            assert.equal(context.review_execution.mode, 'FULL');
+            fs.rmSync(repoRoot, { recursive: true, force: true });
+            return;
+        }
         assert.ok(codeBuild.outputLines.includes('ReviewReuseDecision: accepted'));
         assert.ok(codeBuild.outputLines.some((line) => line.includes('non-runtime performance support file(s) delegated')));
 

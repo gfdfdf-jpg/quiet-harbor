@@ -27,6 +27,19 @@ export function synchronizeFinalCloseoutArtifacts(
     const finalUserReportPath = summary.final_closeout.artifact_paths.final_user_report;
     const bundleRoot = path.dirname(path.dirname(path.dirname(jsonPath)));
     const ledgerPath = resolveTaskHistoryLedgerPath(bundleRoot, summary.task_id);
+    const implementation = summary.final_closeout.implementation_summary;
+
+    if (summary.final_closeout.status === 'READY' && implementation.changed_files?.length
+        && fs.existsSync(path.join(path.dirname(bundleRoot), '.git'))) {
+        const hashes = [implementation.changed_files_sha256, implementation.scope_content_sha256, implementation.scope_sha256];
+        if (implementation.audited_scope_provenance?.use_staged === true
+            && implementation.worktree_scope_content_sha256 !== undefined) {
+            hashes.push(implementation.worktree_scope_content_sha256);
+        }
+        if (hashes.some(value => typeof value !== 'string' || !/^[0-9a-f]{64}$/u.test(value))) {
+            throw new Error('Cannot publish final closeout without authenticated scope hashes. Retry the task audit.');
+        }
+    }
 
     if (summary.final_closeout.status === 'READY') {
         const closeout = redactSensitiveData({

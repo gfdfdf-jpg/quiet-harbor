@@ -5,7 +5,7 @@ import * as fs from 'node:fs';
 import { lstatFileIdentitySync } from '../../core/file-stat';
 import * as path from 'node:path';
 
-import { redactSecretText, sha256RedactedJsonPayload } from '../../core/redaction';
+import { redactSecretText, redactSensitiveData, sha256RedactedJsonPayload } from '../../core/redaction';
 import {
     getSafeWorktreePathState,
     type SafeWorktreePathState
@@ -615,7 +615,10 @@ export function getReviewRemediationDeltaBaseViolations(
     if (JSON.stringify(entryPaths) !== JSON.stringify(changedFiles)) {
         violations.push('delta_base entries must match changed_files exactly and in order.');
     }
-    if (base.entries_sha256 !== sha256RedactedJsonPayload(base.entries)) {
+    // Both seals contain the same entries. Redact them once, preserving the existing
+    // two independently serialized payloads and their exact hash format.
+    const redactedEntries = redactSensitiveData(base.entries);
+    if (base.entries_sha256 !== sha256Text(`${JSON.stringify(redactedEntries, null, 2)}\n`)) {
         violations.push('delta_base.entries_sha256 does not match entries.');
     }
     const snapshotPayload = {
@@ -628,7 +631,9 @@ export function getReviewRemediationDeltaBaseViolations(
         entries: base.entries,
         entries_sha256: base.entries_sha256
     };
-    if (base.snapshot_sha256 !== sha256RedactedJsonPayload(snapshotPayload)) {
+    const redactedSnapshot = redactSensitiveData({ ...snapshotPayload, entries: null }) as Record<string, unknown>;
+    redactedSnapshot.entries = redactedEntries;
+    if (base.snapshot_sha256 !== sha256Text(`${JSON.stringify(redactedSnapshot, null, 2)}\n`)) {
         violations.push('delta_base.snapshot_sha256 does not match the baseline snapshot payload.');
     }
     return violations;

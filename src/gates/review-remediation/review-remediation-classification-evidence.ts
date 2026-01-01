@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { assertTransactionPath, readTransactionBytes } from '../../core/file-transaction-journal';
+import { assertTransactionPath, readInvocationTransactionBytes, readTransactionBytes } from '../../core/file-transaction-journal';
 import { parseJsonText } from '../../core/json';
 import { readInvocationFileContent, readInvocationPathObservation } from '../../core/invocation-file-observation';
 import { createInvocationReadMemoKey, isInvocationReadObservationActive, memoizeInvocationRead } from '../../core/invocation-read-observation';
@@ -62,15 +62,7 @@ function readClassificationBytes(reviewsRoot: string, artifactPath: string): Buf
     const bytes = memoizeInvocationRead(CLASSIFICATION_BYTES, key, () => {
         readInvocationPathObservation(reviewsRoot);
         readInvocationPathObservation(artifactPath);
-        // Keep every transaction path, descriptor, link-count, byte-bound and after-read check.
-        const captured = readTransactionBytes(reviewsRoot, artifactPath, MAX_CLASSIFICATION_SNAPSHOT_BYTES);
-        if (captured) {
-            const content = readInvocationFileContent(artifactPath, MAX_CLASSIFICATION_SNAPSHOT_BYTES)!;
-            if (content.sha256 !== bytesSha256(captured) || content.size !== captured.length) {
-                throw new Error('Review classification snapshot changed after transaction reading.');
-            }
-        }
-        return captured;
+        return readInvocationTransactionBytes(reviewsRoot, artifactPath, MAX_CLASSIFICATION_SNAPSHOT_BYTES);
     }).value;
     return bytes === null ? null : Buffer.from(bytes);
 }
@@ -93,7 +85,8 @@ export function readRestartReviewClassification(options: {
     const artifactPath = snapshotPath(options.reviewsRoot, options.taskId, reference.artifact_sha256);
     if (!pathsEqual(reference.artifact_path, artifactPath)) throw new Error('Review classification snapshot path is not canonical.');
     const bytes = readClassificationBytes(options.reviewsRoot, artifactPath);
-    if (!bytes || bytesSha256(bytes) !== reference.artifact_sha256) throw new Error('Review classification snapshot is missing or its hash does not match.');
+    if (!bytes || (readInvocationFileContent(artifactPath, MAX_CLASSIFICATION_SNAPSHOT_BYTES)?.sha256
+        ?? bytesSha256(bytes)) !== reference.artifact_sha256) throw new Error('Review classification snapshot is missing or its hash does not match.');
     const artifact = parseJsonText(bytes.toString('utf8'), artifactPath);
     if (!isPlainRecord(artifact) || artifact.schema_version !== 1
         || artifact.artifact_type !== 'review_remediation_classification'

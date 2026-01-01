@@ -111,6 +111,43 @@ describe('gates/workspace-snapshot-cache', () => {
         cleanupTestRepo(tempDir);
     });
 
+    for (const source of ['git_auto', 'explicit_changed_files']) for (const persisted of [false, true])
+        it(`refreshes build-output filtering after ignored config changes (${source}, persisted=${persisted})`, () => {
+        fs.writeFileSync(path.join(repoRoot, '.gitignore'), 'garda-agent-orchestrator/\n');
+        const config = path.join(repoRoot, 'garda-agent-orchestrator/live/config/paths.json');
+        fs.mkdirSync(path.dirname(config), { recursive: true });
+        fs.mkdirSync(path.join(repoRoot, 'src/build'), { recursive: true });
+        fs.writeFileSync(path.join(repoRoot, 'src/build/feature.ts'), 'export const feature = true;\n');
+        const filter = (patterns: string[]) => fs.writeFileSync(config, JSON.stringify({ untracked_build_output_regexes: patterns }));
+        filter(['(^|/)build/', '(^|/)artifacts/']);
+        const files = source === 'explicit_changed_files' ? ['src/build/feature.ts'] : [];
+        const read = () => getWorkspaceSnapshotCached(repoRoot, source, true, files);
+        const first = read();
+        if (source === 'explicit_changed_files') assert.ok(first.ignored_build_output_files.includes('src/build/feature.ts'));
+        assert.ok(!first.changed_files.includes('src/build/feature.ts'));
+        const fingerprint = computeSnapshotFingerprint(repoRoot, source, true, files).fingerprint;
+        const cachePath = resolveSnapshotCachePath(repoRoot);
+        const signed = fs.readFileSync(cachePath);
+        assert.ok(readSnapshotCache(cachePath), 'the old cache is correctly signed');
+        filter(['(^|/)artifacts/', '(^|/)build/', '(^|/)build/']);
+        assert.equal(read().cache_hit, true, 'order and duplicate patterns preserve the effective filter');
+        if (persisted) {
+            invalidateSnapshotCache(repoRoot);
+            fs.writeFileSync(cachePath, signed);
+        }
+        filter([]);
+        const fresh = read();
+        assert.equal(fresh.cache_hit, false);
+        assert.ok(fresh.changed_files.includes('src/build/feature.ts'));
+        assert.ok(!fresh.ignored_build_output_files.includes('src/build/feature.ts'));
+        assert.notEqual(computeSnapshotFingerprint(repoRoot, source, true, files).fingerprint, fingerprint);
+        assert.equal(read().cache_hit, true);
+        filter(['(^|/)build/']);
+        const excluded = read();
+        assert.ok(!excluded.changed_files.includes('src/build/feature.ts'));
+        if (source === 'explicit_changed_files') assert.ok(excluded.ignored_build_output_files.includes('src/build/feature.ts'));
+    });
+
     it('fails closed when authenticated numstat collection fails', () => {
         fs.writeFileSync(path.join(repoRoot, 'file.ts'), 'export const a = 2;\n', 'utf8');
         const generation = createWorkspaceSnapshotGitGeneration(repoRoot);
@@ -214,9 +251,8 @@ describe('gates/workspace-snapshot-cache', () => {
             assert.match(sha, /^[0-9a-f]{40}$/);
         });
 
-        it('returns null for non-repo directory', () => {
-            const sha = readHeadSha(tempDir);
-            assert.equal(sha, null);
+        it('rejects unavailable HEAD authority for a non-repo directory', () => {
+            assert.throws(() => readHeadSha(tempDir), /git rev-parse HEAD failed/u);
         });
     });
 
@@ -1583,14 +1619,20 @@ describe('gates/workspace-snapshot-cache', () => {
             assert.deepEqual(cached.changed_files, ['file.ts']);
         });
 
-        it('fails closed when staged-plus-untracked cache status fingerprint git probes fail', () => {
+        it('fails closed when staged-plus-untracked cache status fingerprint git probes fail', t => {
             fs.writeFileSync(path.join(repoRoot, 'file.ts'), 'export const a = 2;\n', 'utf8');
             execFileSync('git', ['-C', repoRoot, 'add', 'file.ts'], { stdio: 'ignore' });
             const first = getWorkspaceSnapshotCached(repoRoot, 'git_staged_plus_untracked', true, []);
             assert.equal(first.cache_hit, false);
 
             fs.writeFileSync(path.join(repoRoot, 'untracked.ts'), 'export const u = 1;\n', 'utf8');
-            fs.renameSync(path.join(repoRoot, '.git'), path.join(repoRoot, '.git-offline'));
+            const native = require('node:child_process') as typeof import('node:child_process');
+            const original = native.spawnSync;
+            t.mock.method(native, 'spawnSync', (...args: Parameters<typeof original>) => {
+                const result = original(...args);
+                if (args[1]?.includes('--porcelain=v1')) Object.assign(result, { status: 128, stderr: 'status authority unavailable' });
+                return result;
+            });
             assert.throws(
                 () => getWorkspaceSnapshotCached(repoRoot, 'git_staged_plus_untracked', true, []),
                 /git --no-pager status .* failed/

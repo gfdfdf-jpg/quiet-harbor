@@ -28,17 +28,22 @@ interface CompileReplay {
 function compileReplayKey(event: Readonly<Record<string, unknown>>, nativeEnvelope = true): string | null {
     const details = event.details && typeof event.details === 'object' && !Array.isArray(event.details)
         ? event.details as Record<string, unknown> : null;
+    const declaration = details?.compile_declaration && typeof details.compile_declaration === 'object'
+        ? details.compile_declaration as Record<string, unknown> : null;
+    const notApplicable = details?.compile_command_source === 'task_local' && declaration?.kind === 'not_applicable'
+        && typeof declaration.reason === 'string' && declaration.reason.trim().length >= 20;
     if (event.event_type !== 'COMPILE_GATE_PASSED'
         || ((nativeEnvelope || event.actor != null) && event.actor !== 'gate') || event.outcome !== 'PASS'
         || details?.status !== 'PASSED' || details.exit_code !== 0
         || typeof details.preflight_path !== 'string' || !details.preflight_path.trim()
-        || !Array.isArray(details.command_descriptors) || !details.command_descriptors.length
-        || !Array.isArray(details.compile_commands) || !details.compile_commands.length) return null;
+        || !Array.isArray(details.command_descriptors) || !notApplicable && !details.command_descriptors.length
+        || !Array.isArray(details.compile_commands) || !notApplicable && !details.compile_commands.length) return null;
     const hashes = ['preflight_hash_sha256', 'scope_changed_files_sha256', 'scope_sha256', 'scope_content_sha256']
         .map(key => details[key]);
     if (hashes.some(value => typeof value !== 'string' || !/^[0-9a-f]{64}$/u.test(value))) return null;
     return JSON.stringify([details.preflight_path, ...hashes, details.command_descriptors,
-        details.compile_commands, details.workflow_config_path, details.commands_path]);
+        details.compile_commands, details.workflow_config_path, details.commands_path,
+        ...(declaration ? [declaration] : [])]);
 }
 
 /**

@@ -346,15 +346,15 @@ describe('gates/full-suite-validation', () => {
                 previous_best_duration_ms: 80_000,
                 previous_latest_duration_ms: 95_000,
                 current_duration_ms: 90_000,
-                delta_vs_previous_average_ms: 10_000,
-                delta_vs_previous_best_ms: -10_000,
-                delta_vs_previous_latest_ms: 5_000
+                delta_vs_previous_average_ms: -10_000,
+                delta_vs_previous_best_ms: 10_000,
+                delta_vs_previous_latest_ms: -5_000
             };
 
             const text = formatFullSuiteValidationResult(result);
 
-            assert.ok(text.includes('DurationHistoryComparison: current_duration_ms=90000; previous_sample_count=3; previous_average_duration_ms=100000; delta_vs_previous_average_ms=10000;'));
-            assert.ok(text.includes('delta_vs_previous_best_ms=-10000; previous_latest_duration_ms=95000; delta_vs_previous_latest_ms=5000;'));
+            assert.ok(text.includes('DurationHistoryComparison: current_duration_ms=90000; previous_sample_count=3; previous_average_duration_ms=100000; delta_vs_previous_average_ms=-10000;'));
+            assert.ok(text.includes('delta_vs_previous_best_ms=10000; previous_latest_duration_ms=95000; delta_vs_previous_latest_ms=-5000;'));
         });
 
         it('formatFullSuiteValidationResult surfaces top failure diagnostics', () => {

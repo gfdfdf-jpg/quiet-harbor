@@ -100,6 +100,12 @@ secrets, private keys, and more) with project-specific allowlists:
   plus exact root `testResults.xml` and `tests/node/core/redaction.test.ts`,
   are excluded. A project's `runtime/`, nested runtime-like paths, and
   fixture-name lookalikes remain covered.
+- **Generated file hashes and exact public test data** — rule-specific exceptions
+  require both the exact file path and the complete benign match. Only SHA-256
+  JSON file-digest entries in the package baseline and three literal synthetic
+  examples are accepted. Other credentials in those same files, other rule
+  types, backup paths and filename lookalikes remain scanned. Native scanner
+  controls verify these boundaries in both directory and Git-history modes.
 - Words such as `dummy` or `EXAMPLE_TOKEN` on a line do not suppress an
   otherwise detected secret. Use public placeholders that cannot be credentials.
 

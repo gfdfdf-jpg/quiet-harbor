@@ -1,4 +1,4 @@
-import { beforeEach, describe, it } from 'node:test';
+import { beforeEach, describe, it, mock } from 'node:test';
 import { withCurrentTaskTestSelectionFixture } from './task-test-selection-fixture';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
@@ -14,7 +14,14 @@ import {
 import { getCurrentWorkflowConfigFileHashes } from '../../../../src/gates/workflow-config/workflow-config-work';
 import { buildTaskModeArtifact } from '../../../../src/gates/task-mode';
 import { buildEventIntegrityHash } from '../../../../src/gate-runtime/task-events';
-import { runCliWithCapturedOutput } from '../../cli/commands/gate-test-helpers';
+import {
+    runCliWithCapturedOutput, createTempRepo, seedTaskQueue, seedInitAnswers, runEnterTaskMode,
+    loadTaskEntryRulePack, runHandshakeForTask, runShellSmokeForTask, runExplicitPreflight,
+    loadPostPreflightRulePack, writeBudgetOutputFilters
+} from '../../cli/commands/gate-test-helpers';
+import { runCompileGateCommand } from '../../../../src/cli/commands/gates';
+import { selectConfiguredTaskTests } from '../../task-test-selection-fixtures';
+import { DEFAULT_FULL_SUITE_VALIDATION_CONFIG } from '../../../../src/core/full-suite-validation-config';
 import { getWorkspaceSnapshot } from '../next-step/next-step-test-support';
 beforeEach(withCurrentTaskTestSelectionFixture);
 
@@ -155,7 +162,7 @@ function writeFullSuiteTaskModeBaseline(repoRoot: string, taskId: string): void 
 
 describe('gates/full-suite-validation', () => {
     describe('CLI integration reuse and rebind', () => {
-        it('rebinds same-scope passed evidence to the current compile cycle without rerunning the command', async () => {
+        it('reexecutes own tests when a legacy PASS lacks native command and artifact identity', async () => {
             const repoRoot = path.resolve(process.cwd());
             const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'garda-fsv-cli-rebind-current-'));
             const configDir = path.join(tempDir, 'garda-agent-orchestrator', 'live', 'config');
@@ -270,8 +277,8 @@ describe('gates/full-suite-validation', () => {
             ], { cwd: repoRoot });
 
             assert.equal(result.exitCode, 0, `stdout=${result.logs.join('\n')}\nstderr=${result.errors.join('\n')}`);
-            assert.equal(fs.existsSync(executedMarker), false);
-            assert.ok(result.logs.some((line) => line.includes('Rebound existing full-suite evidence')));
+            assert.equal(fs.existsSync(executedMarker), true);
+            assert.ok(!result.logs.some((line) => line.includes('Rebound existing full-suite evidence')));
             const artifact = JSON.parse(fs.readFileSync(path.join(reviewsDir, `${taskId}-full-suite-validation.json`), 'utf8'));
             assert.equal(artifact.cycle_binding.preflight_sha256, preflightSha256);
             assert.equal(artifact.cycle_binding.compile_gate_timestamp, currentCompileTimestamp);
@@ -281,132 +288,80 @@ describe('gates/full-suite-validation', () => {
                 .map((line) => JSON.parse(line) as Record<string, unknown>);
             const latestEvent = timelineLines[timelineLines.length - 1];
             assert.equal(latestEvent.event_type, 'FULL_SUITE_VALIDATION_PASSED');
-            assert.equal(((latestEvent.details as Record<string, unknown>).reused_existing_evidence), true);
+            assert.notEqual(((latestEvent.details as Record<string, unknown>).reused_existing_evidence), true);
             assert.equal((((latestEvent.details as Record<string, unknown>).cycle_binding as Record<string, unknown>).compile_gate_timestamp), currentCompileTimestamp);
             fs.rmSync(tempDir, { recursive: true, force: true });
         });
 
         it('retains raw output when rebinding PASSED evidence that carries warnings', async () => {
-            const repoRoot = path.resolve(process.cwd());
-            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'garda-fsv-cli-rebind-warning-pass-'));
-            const configDir = path.join(tempDir, 'garda-agent-orchestrator', 'live', 'config');
-            const reviewsDir = path.join(tempDir, 'garda-agent-orchestrator', 'runtime', 'reviews');
-            const eventsDir = path.join(tempDir, 'garda-agent-orchestrator', 'runtime', 'task-events');
-            fs.mkdirSync(configDir, { recursive: true });
-            fs.mkdirSync(reviewsDir, { recursive: true });
-            fs.mkdirSync(eventsDir, { recursive: true });
-
-            const executedMarker = path.join(tempDir, 'command-executed.txt');
-            const helperScript = path.join(tempDir, 'pass-rebind-warning-pass.js');
-            fs.writeFileSync(
-                helperScript,
-                `require('node:fs').writeFileSync(${JSON.stringify(executedMarker)}, 'executed\\n', 'utf8'); process.stdout.write("should not run\\n"); process.exit(0);`,
-                'utf8'
-            );
-            fs.writeFileSync(path.join(configDir, 'workflow-config.json'), JSON.stringify({
-                full_suite_validation: {
-                    enabled: true,
-                    command: `"${process.execPath.replace(/\\/g, '/')}" "${helperScript.replace(/\\/g, '/')}"`,
-                    timeout_ms: 30000,
-                    green_summary_max_lines: 5,
-                    red_failure_chunk_lines: 50,
-                    out_of_scope_failure_policy: 'AUDIT_AND_BLOCK'
-                }
-            }), 'utf8');
-
+            // This positive reuse case needs native admission and execution identity.
+            mock.restoreAll();
+            const tempDir = createTempRepo();
             const taskId = 'T-REBIND-WARNING-PASS';
-            const preflightPath = path.join(reviewsDir, `${taskId}-preflight.json`);
-            writeFullSuitePreflight(tempDir, preflightPath, {
-                task_id: taskId,
-                changed_files: ['src/changed.ts']
-            });
-            const preflightSha256 = createHash('sha256').update(fs.readFileSync(preflightPath, 'utf8')).digest('hex');
-            const currentCompileTimestamp = '2026-01-01T00:00:02.000Z';
-            const compileArtifactPath = path.join(reviewsDir, `${taskId}-compile-gate.json`);
-            const compileArtifact = JSON.parse(fs.readFileSync(compileArtifactPath, 'utf8')) as Record<string, unknown>;
-            const changedFilesSha = String(compileArtifact.scope_changed_files_sha256);
-            const scopeSha = String(compileArtifact.scope_sha256);
-            const scopeContentSha = String(compileArtifact.scope_content_sha256);
-            fs.writeFileSync(compileArtifactPath, JSON.stringify({
-                ...compileArtifact,
-                timestamp_utc: currentCompileTimestamp
-            }, null, 2), 'utf8');
-            writeAuthenticatedTimeline(tempDir, taskId, [
-                {
-                    event_type: 'FULL_SUITE_VALIDATION_PASSED',
-                    timestamp_utc: '2026-01-01T00:00:01.000Z',
-                    outcome: 'PASS',
-                    details: {
-                        cycle_binding: {
-                            task_id: taskId,
-                            preflight_path: preflightPath.replace(/\\/g, '/'),
-                            preflight_sha256: 'old-cycle',
-                            compile_gate_timestamp: '2026-01-01T00:00:00.000Z',
-                            scope_binding: {
-                                changed_files_sha256: changedFilesSha,
-                                scope_sha256: scopeSha,
-                                scope_content_sha256: scopeContentSha
-                            }
-                        }
+            try {
+                seedTaskQueue(tempDir, taskId);
+                seedInitAnswers(tempDir);
+                const configDir = path.join(tempDir, 'garda-agent-orchestrator/live/config');
+                const reviewsDir = path.join(tempDir, 'garda-agent-orchestrator/runtime/reviews');
+                const target = 'tests/retained-warning.test.cjs';
+                fs.mkdirSync(path.join(tempDir, 'tests'), { recursive: true });
+                const executedMarker = path.join(tempDir, 'command-executed.txt');
+                fs.writeFileSync(path.join(configDir, 'workflow-config.json'), JSON.stringify({
+                    compile_gate: { command: 'node --version' },
+                    project_memory_maintenance: { enabled: false },
+                    full_suite_validation: {
+                        ...DEFAULT_FULL_SUITE_VALIDATION_CONFIG,
+                        enabled: true, command: `node ${target}`, timeout_ms: 30000,
+                        // A missing optional report adds a real adapter warning to process PASS.
+                        report_files: [{ path: 'reports/optional.xml', max_bytes: 4096 }]
                     }
-                },
-                {
-                    event_type: 'COMPILE_GATE_PASSED',
-                    timestamp_utc: currentCompileTimestamp,
-                    outcome: 'PASS',
-                    details: {
-                        preflight_path: preflightPath.replace(/\\/g, '/'),
-                        preflight_hash_sha256: preflightSha256,
-                        preflight_changed_files_sha256: changedFilesSha,
-                        preflight_scope_sha256: scopeSha,
-                        preflight_scope_content_sha256: scopeContentSha
-                    }
-                }
-            ]);
-            const outputArtifactPath = path.join(reviewsDir, `${taskId}-full-suite-output.log`);
-            fs.writeFileSync(outputArtifactPath, 'cached pass output with warning\n', 'utf8');
-            fs.writeFileSync(path.join(reviewsDir, `${taskId}-full-suite-validation.json`), JSON.stringify({
-                status: 'PASSED',
-                enabled: true,
-                command: `"${process.execPath.replace(/\\/g, '/')}" "${helperScript.replace(/\\/g, '/')}"`,
-                placement: 'after_compile_before_reviews',
-                exit_code: 0,
-                timed_out: false,
-                output_artifact_path: outputArtifactPath,
-                compact_summary: ['cached pass output with warning'],
-                failure_chunks: [],
-                out_of_scope_failure_policy: 'AUDIT_AND_BLOCK',
-                out_of_scope_failure_detected: false,
-                out_of_scope_audit_verdict: 'NOT_APPLICABLE',
-                violations: [],
-                warnings: ['non-blocking warning'],
-                cycle_binding: {
-                    task_id: taskId,
-                    preflight_path: preflightPath.replace(/\\/g, '/'),
-                    preflight_sha256: 'old-cycle',
-                    compile_gate_timestamp: '2026-01-01T00:00:00.000Z',
-                    scope_binding: {
-                        changed_files_sha256: changedFilesSha,
-                        scope_sha256: scopeSha,
-                        scope_content_sha256: scopeContentSha
-                    }
-                }
-            }, null, 2), 'utf8');
+                }));
+                writeBudgetOutputFilters(tempDir);
+                assert.equal(runEnterTaskMode({ repoRoot: tempDir, taskId,
+                    taskSummary: 'Verify retained task test output', provider: 'Codex', plannedChangedFiles: [target] }).exitCode, 0);
+                assert.equal(loadTaskEntryRulePack(tempDir, taskId).exitCode, 0);
+                runHandshakeForTask(tempDir, taskId);
+                runShellSmokeForTask(tempDir, taskId);
+                fs.writeFileSync(path.join(tempDir, target), [
+                    "const fs = require('node:fs');",
+                    "require('node:assert/strict').equal(2 + 2, 4);",
+                    `fs.appendFileSync(${JSON.stringify(executedMarker)}, 'executed\\n');`,
+                    "console.log('cached pass output with warning');"
+                ].join('\n'));
+                const preflightPath = runExplicitPreflight(tempDir, taskId,
+                    'Verify retained task test output', [target]);
+                selectConfiguredTaskTests(tempDir, taskId, preflightPath);
+                assert.equal(loadPostPreflightRulePack(tempDir, taskId, preflightPath).exitCode, 0);
+                const compileOptions = { repoRoot: tempDir, taskId, preflightPath, emitMetrics: false };
+                const compile = await runCompileGateCommand(compileOptions);
+                assert.equal(compile.exitCode, 0, compile.outputLines.join('\n'));
+                const args = ['gate', 'task-test-validation', '--task-id', taskId,
+                    '--preflight-path', preflightPath, '--repo-root', tempDir];
+                const first = await runCliWithCapturedOutput(args, { cwd: process.cwd() });
+                assert.equal(first.exitCode, 0, first.logs.concat(first.errors).join('\n'));
+                const artifactPath = path.join(reviewsDir, `${taskId}-full-suite-validation.json`);
+                const retained = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+                assert.equal(retained.status, 'PASSED');
+                assert.ok(retained.warnings.length > 0);
+                assert.ok(retained.task_test_process_evidence);
+                const raw = fs.readFileSync(retained.output_artifact_path, 'utf8');
+                assert.match(raw, /cached pass output with warning/u);
 
-            const result = await runCliWithCapturedOutput([
-                'gate', 'full-suite-validation',
-                '--task-id', taskId,
-                '--preflight-path', preflightPath,
-                '--repo-root', tempDir
-            ], { cwd: repoRoot });
-
-            assert.equal(result.exitCode, 0, `stdout=${result.logs.join('\n')}\nstderr=${result.errors.join('\n')}`);
-            assert.equal(fs.existsSync(executedMarker), false);
-            const artifact = JSON.parse(fs.readFileSync(path.join(reviewsDir, `${taskId}-full-suite-validation.json`), 'utf8'));
-            assert.equal(String(artifact.output_artifact_path).replace(/\\/g, '/'), outputArtifactPath.replace(/\\/g, '/'));
-            assert.equal(artifact.output_retention, undefined);
-            assert.equal(fs.existsSync(outputArtifactPath), true);
-            fs.rmSync(tempDir, { recursive: true, force: true });
+                const refreshed = await runCompileGateCommand(compileOptions);
+                assert.equal(refreshed.exitCode, 0, refreshed.outputLines.join('\n'));
+                const result = await runCliWithCapturedOutput(args, { cwd: process.cwd() });
+                assert.equal(result.exitCode, 0, result.logs.concat(result.errors).join('\n'));
+                assert.equal(fs.readFileSync(executedMarker, 'utf8'), 'executed\n');
+                const rebound = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+                assert.notEqual(rebound.cycle_binding.compile_gate_timestamp, retained.cycle_binding.compile_gate_timestamp);
+                assert.equal(rebound.output_artifact_path, retained.output_artifact_path);
+                assert.deepEqual(rebound.output_retention, retained.output_retention);
+                assert.deepEqual(rebound.warnings, retained.warnings);
+                assert.deepEqual(rebound.task_test_process_evidence, retained.task_test_process_evidence);
+                assert.equal(fs.readFileSync(rebound.output_artifact_path, 'utf8'), raw);
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+            }
         });
 
         it('drops stale pending full-suite artifacts when the transaction id does not match the latest lifecycle event', async () => {

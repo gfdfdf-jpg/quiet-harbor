@@ -345,10 +345,67 @@ function resolveEffectiveCodeChangedForTask(
     return detectCodeChangedFromPreflight(bundlePath, taskId);
 }
 
+/** Called under the summary lock by rollback or a confirmed index rebuild. */
+function rebuildMalformedTimelineSummary(
+    eventsRoot: string,
+    summaryPath: string,
+    fullSuiteValidationEnabled: boolean
+): boolean {
+    if (!fs.lstatSync(summaryPath).isFile()) return false;
+    const malformed = fs.readFileSync(summaryPath);
+    try {
+        JSON.parse(malformed.toString('utf8'));
+        // Do not overwrite a readable JSON object with an unknown schema.
+        return false;
+    } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
+    }
+
+    const bundlePath = path.resolve(eventsRoot, '..', '..');
+    const listCanonicalFiles = () => fs.readdirSync(eventsRoot).filter(name => {
+        const taskId = parseTaskIdJsonlFileName(name);
+        return taskId !== null && name === `${taskId}.jsonl`;
+    }).sort();
+    const files = listCanonicalFiles();
+    const entries = Object.create(null) as Record<string, TimelineSummaryEntry>;
+    const timelineStats = new Map<string, fs.Stats>();
+    for (const file of files) {
+        const taskId = parseTaskIdJsonlFileName(file)!;
+        const timelinePath = path.join(eventsRoot, file);
+        const stat = fs.lstatSync(timelinePath);
+        const entry = stat.isFile()
+            ? buildTimelineSummaryEntry(timelinePath, taskId,
+                detectCodeChangedFromPreflight(bundlePath, taskId), fullSuiteValidationEnabled)
+            : null;
+        if (!entry || entry.integrity_status === 'FAILED' || entry.integrity_status === 'MISSING') {
+            throw new Error(`Cannot rebuild timeline summary from unsafe or invalid canonical timeline '${file}'.`);
+        }
+        timelineStats.set(file, stat);
+        entries[taskId] = entry;
+    }
+
+    // Other task writers take their own task locks; do not publish an incomplete inventory
+    // or entries that changed during the scan while we were holding the summary lock.
+    if (JSON.stringify(listCanonicalFiles()) !== JSON.stringify(files)
+        || [...timelineStats].some(([file, before]) => {
+            const current = fs.lstatSync(path.join(eventsRoot, file));
+            return !current.isFile() || current.dev !== before.dev || current.ino !== before.ino
+                || current.size !== before.size || current.mtimeMs !== before.mtimeMs || current.ctimeMs !== before.ctimeMs;
+        })
+        || !fs.lstatSync(summaryPath).isFile()
+        || !fs.readFileSync(summaryPath).equals(malformed)) {
+        throw new Error('Timeline summary or canonical timelines changed during rollback recovery.');
+    }
+    const index: TimelineSummaryIndex = { version: SUMMARY_VERSION, updated_at_utc: new Date().toISOString(), entries };
+    writeFileAtomically(summaryPath, JSON.stringify(index, null, 2) + '\n', { encoding: 'utf8' });
+    return true;
+}
+
 export function reconcileTimelineSummaryForTask(
     eventsRoot: string,
     taskId: string,
-    codeChanged?: boolean
+    codeChanged?: boolean,
+    options: { recoverMalformedIndex?: boolean } = {}
 ): void {
     const timelinePath = path.join(eventsRoot, `${taskId}.jsonl`);
     const summaryPath = getTimelineSummaryPath(eventsRoot);
@@ -368,8 +425,13 @@ export function reconcileTimelineSummaryForTask(
             timelineExists = false;
         }
 
+        const cleanupIndex = readTimelineSummaryIndexForCleanupPrune(eventsRoot);
+        if (summaryFileExists && !cleanupIndex && options.recoverMalformedIndex
+            && rebuildMalformedTimelineSummary(eventsRoot, summaryPath, fullSuiteValidationEnabled)) {
+            return;
+        }
+
         if (!timelineExists) {
-            const cleanupIndex = readTimelineSummaryIndexForCleanupPrune(eventsRoot);
             if (summaryFileExists && !cleanupIndex) {
                 throw new Error(`Unable to safely read existing timeline summary index before removing '${taskId}'.`);
             }
@@ -393,7 +455,6 @@ export function reconcileTimelineSummaryForTask(
             throw new Error(`Unable to rebuild timeline summary entry for '${taskId}'.`);
         }
 
-        const cleanupIndex = readTimelineSummaryIndexForCleanupPrune(eventsRoot);
         if (summaryFileExists && !cleanupIndex) {
             throw new Error(`Unable to safely read existing timeline summary index before reconciling '${taskId}'.`);
         }

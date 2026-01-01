@@ -75,7 +75,7 @@ function createPolicyRoot(): string {
         full_suite_validation: {
             ...buildDefaultWorkflowConfig().full_suite_validation,
             enabled: true,
-            command: 'node suite-fixture.cjs',
+            command: 'node --test tests/suite-fixture.test.cjs',
             timeout_ms: 30000,
             placement: 'after_compile_before_reviews'
         },
@@ -137,11 +137,13 @@ function createPolicyClassifier(profile: string, taskIntent = TASK_INTENT) {
 function createPolicyFixture(profile: string, plannedFiles: string[]): PolicyFixture {
     const root = createPolicyRoot();
     const taskId = 'T-MIXED-POLICY';
-    writeFile(root, 'suite-fixture.cjs', [
+    writeFile(root, 'tests/suite-fixture.test.cjs', [
         'const assert = require("node:assert/strict");',
         'const fs = require("node:fs");',
-        'assert.equal(process.cwd(), __dirname);',
-        'fs.appendFileSync("suite-ran.log", "ran\\n");'
+        'require("node:test").test("fixture workspace", () => {',
+        'assert.equal(process.cwd(), require("node:path").resolve(__dirname, ".."));',
+        'fs.appendFileSync("suite-ran.log", "ran\\n");',
+        '});'
     ].join('\n'));
     writeFile(root, '.gitignore', 'garda-agent-orchestrator/runtime/\nsuite-ran.log\n');
     seedTaskQueue(root, taskId, 'TODO', profile, 'Mixed scope policy fixture', TASK_INTENT);

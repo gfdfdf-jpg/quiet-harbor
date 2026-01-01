@@ -99,7 +99,7 @@ function markAsSourceCheckout(repoRoot: string): void {
         'utf8'
     );
     fs.mkdirSync(path.join(repoRoot, 'bin'), { recursive: true });
-    fs.writeFileSync(path.join(repoRoot, 'bin', 'garda.js'), '#!/usr/bin/env node\n', 'utf8');
+    fs.writeFileSync(path.join(repoRoot, 'bin', 'garda.js'), '#!/usr/bin/env node\nconsole.log("0.0.0-test");\n', 'utf8');
 }
 
 function readPreflightChangedFiles(preflightPath: unknown): string[] {
@@ -378,7 +378,7 @@ function seedRemediationRepoBase(repoRoot: string): void {
         { recursive: true }
     );
     fs.writeFileSync(path.join(repoRoot, '.agents', 'workflows', 'start-task.md'), '# start-task\n', 'utf8');
-    fs.writeFileSync(path.join(repoRoot, 'garda-agent-orchestrator', 'bin', 'garda.js'), '#!/usr/bin/env node\n', 'utf8');
+    fs.writeFileSync(path.join(repoRoot, 'garda-agent-orchestrator', 'bin', 'garda.js'), '#!/usr/bin/env node\nconsole.log("0.0.0-test");\n', 'utf8');
     for (const skillId of new Set(buildBuiltInReviewTypeDefinitions().flatMap((definition) => definition.skill_ids))) {
         const skillRoot = path.join(repoRoot, 'garda-agent-orchestrator', 'live', 'skills', skillId);
         fs.mkdirSync(skillRoot, { recursive: true });

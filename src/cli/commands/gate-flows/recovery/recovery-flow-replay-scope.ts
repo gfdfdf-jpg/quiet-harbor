@@ -77,15 +77,21 @@ export function normalizeRuleFileList(requiredReviews: Record<string, boolean>, 
 
 export function resolveReplayScope(
     options: RestartCoherentCycleCommandOptions,
-    previousPreflight: ReturnType<typeof getPreflightContext>
+    previousPreflight: ReturnType<typeof getPreflightContext>,
+    previousTaskMode?: Pick<ReturnType<typeof getTaskModeEvidence>, 'planned_changed_files'>
 ): ResolvedReplayScope {
     const explicitChangedFilesProvided = options.changedFiles !== undefined;
     const explicitChangedFiles = normalizeChangedFiles(expandValueList(options.changedFiles || [], { splitDelimiters: true }));
     const previousChangedFiles = getTaskOwnedReplayChangedFiles(previousPreflight);
+    // Declarations describe task targets, including unchanged tests; preflight describes actual edits.
+    // Retain the former without adding them to the latter's classification input.
+    const plannedFiles = (files: readonly string[]): string[] => normalizeChangedFiles([
+        ...(previousTaskMode?.planned_changed_files ?? []), ...files
+    ]);
 
     if (explicitChangedFilesProvided) {
         return {
-            plannedChangedFiles: explicitChangedFiles,
+            plannedChangedFiles: plannedFiles(explicitChangedFiles),
             changedFiles: explicitChangedFiles,
             detectionSource: 'explicit_changed_files'
         };
@@ -94,7 +100,7 @@ export function resolveReplayScope(
     if (options.useStaged === true) {
         const includeUntracked = parseBooleanOption(options.includeUntracked, previousPreflight.include_untracked);
         return {
-            plannedChangedFiles: previousChangedFiles,
+            plannedChangedFiles: plannedFiles(previousChangedFiles),
             useStaged: true,
             includeUntracked,
             detectionSource: includeUntracked ? 'git_staged_plus_untracked' : 'git_staged_only'
@@ -104,20 +110,20 @@ export function resolveReplayScope(
     switch (previousPreflight.detection_source) {
         case 'explicit_changed_files':
             return {
-                plannedChangedFiles: previousChangedFiles,
+                plannedChangedFiles: plannedFiles(previousChangedFiles),
                 changedFiles: previousChangedFiles,
                 detectionSource: 'explicit_changed_files'
             };
         case 'git_staged_only':
             return {
-                plannedChangedFiles: previousChangedFiles,
+                plannedChangedFiles: plannedFiles(previousChangedFiles),
                 useStaged: true,
                 includeUntracked: false,
                 detectionSource: 'git_staged_only'
             };
         case 'git_staged_plus_untracked':
             return {
-                plannedChangedFiles: previousChangedFiles,
+                plannedChangedFiles: plannedFiles(previousChangedFiles),
                 useStaged: true,
                 includeUntracked: true,
                 detectionSource: 'git_staged_plus_untracked'
@@ -125,13 +131,13 @@ export function resolveReplayScope(
         default:
             if (previousChangedFiles.length === 0) {
                 return {
-                    plannedChangedFiles: [],
+                    plannedChangedFiles: plannedFiles([]),
                     changedFiles: undefined,
                     detectionSource: 'git_auto_current_workspace'
                 };
             }
             return {
-                plannedChangedFiles: previousChangedFiles,
+                plannedChangedFiles: plannedFiles(previousChangedFiles),
                 changedFiles: previousChangedFiles,
                 detectionSource: 'explicit_changed_files'
             };

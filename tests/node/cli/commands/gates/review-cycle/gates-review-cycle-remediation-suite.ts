@@ -2615,16 +2615,19 @@ describe('cli/commands/gates – review-cycle remediation reuse policy', {
         );
         assert.deepEqual(
             [...resumedReuse.reusedReviewTypes].sort(),
-            expectedPreservedReviews.filter(reviewType => reviewType !== 'code' && reviewType !== 'security'),
+            expectedPreservedReviews.filter(reviewType => reviewType !== 'security'),
             restartResult.outputLines.join('\n')
         );
-        assert.deepEqual(resumedReuse.launchRequiredReviewTypes, ['code', 'security']);
+        assert.deepEqual(resumedReuse.launchRequiredReviewTypes, ['security']);
 
         const codeReviewContextPath = path.join(
             getReviewsRoot(repoRoot),
             `${taskId}-code-review-context.json`
         );
-        const codeContextBeforeEvidenceRestartSha256 = fileSha256(codeReviewContextPath);
+        const countFreshCodeReviews = () => readTaskTimelineEvents(repoRoot, taskId).filter(event =>
+            event.event_type === 'REVIEW_RECORDED' && (event.details as Record<string, unknown> | undefined)?.review_type === 'code'
+            && (event.details as Record<string, unknown> | undefined)?.reused_existing_review !== true).length;
+        const freshCodeReviewsBeforeEvidenceRestart = countFreshCodeReviews();
         const evidenceRestart = await runRestartReviewCycleCommand({
             repoRoot,
             taskId,
@@ -2647,29 +2650,20 @@ describe('cli/commands/gates – review-cycle remediation reuse policy', {
             outputPath: codeReviewContextPath
         });
         const codeRebuildOutput = codeRebuildAfterEvidenceRestart.outputLines.join('\n');
-        assert.equal(codeRebuildAfterEvidenceRestart.reusedReviewEvidence, false, codeRebuildOutput);
+        assert.equal(codeRebuildAfterEvidenceRestart.reusedReviewEvidence, true, codeRebuildOutput);
         assert.ok(
-            codeRebuildAfterEvidenceRestart.outputLines.includes('CurrentPassReviewEvidence: True'),
-            codeRebuildOutput
-        );
-        assert.ok(
-            codeRebuildAfterEvidenceRestart.outputLines.includes('ReviewReuseEvidence: FRESH'),
+            codeRebuildAfterEvidenceRestart.outputLines.includes('ReviewReuseEvidence: REUSED'),
             codeRebuildOutput
         );
         assert.ok(
             codeRebuildAfterEvidenceRestart.outputLines.includes('ReviewReuseDecision: accepted'),
             codeRebuildOutput
         );
-        assert.equal(
-            codeRebuildAfterEvidenceRestart.outputLines.some((line) => line.includes('review context rebuild skipped')),
-            true,
-            codeRebuildOutput
-        );
-        assert.equal(
-            fileSha256(codeReviewContextPath),
-            codeContextBeforeEvidenceRestartSha256,
-            'test evidence restart preserves the genuine current code-review context'
-        );
+        const codeReceipt = JSON.parse(fs.readFileSync(path.join(
+            getReviewsRoot(repoRoot), `${taskId}-code-receipt.json`), 'utf8')) as Record<string, unknown>;
+        assert.equal(codeReceipt.reused_existing_review, true);
+        assert.equal(countFreshCodeReviews(), freshCodeReviewsBeforeEvidenceRestart,
+            'test evidence restart must keep the passed code review without a fresh reviewer');
 
         fs.rmSync(repoRoot, { recursive: true, force: true });
     });
@@ -3144,10 +3138,10 @@ describe('cli/commands/gates – review-cycle remediation reuse policy', {
         assert.equal(evidence.semantic_scope_source, 'impact_analysis_files');
         assert.deepEqual(
             [...resumedReuse.reusedReviewTypes].sort(),
-            expectedPreservedReviews.filter(reviewType => reviewType !== 'code' && reviewType !== 'security'),
+            expectedPreservedReviews.filter(reviewType => reviewType !== 'security'),
             restartResult.outputLines.join('\n')
         );
-        assert.deepEqual(resumedReuse.launchRequiredReviewTypes, ['code', 'security']);
+        assert.deepEqual(resumedReuse.launchRequiredReviewTypes, ['security']);
 
         fs.rmSync(repoRoot, { recursive: true, force: true });
     });
@@ -3279,9 +3273,9 @@ describe('cli/commands/gates – review-cycle remediation reuse policy', {
         assert.equal(evidence.test_refactor_trigger_reason, null);
         assert.deepEqual(
             [...resumedReuse.reusedReviewTypes].sort(),
-            expectedPreservedReviews.filter(reviewType => reviewType !== 'code' && reviewType !== 'security')
+            expectedPreservedReviews.filter(reviewType => reviewType !== 'security')
         );
-        assert.deepEqual(resumedReuse.launchRequiredReviewTypes, ['code', 'security']);
+        assert.deepEqual(resumedReuse.launchRequiredReviewTypes, ['security']);
 
         fs.rmSync(repoRoot, { recursive: true, force: true });
     });
@@ -3403,11 +3397,11 @@ describe('cli/commands/gates – review-cycle remediation reuse policy', {
         assert.ok(Number(evidence.test_refactor_changed_lines_total) > 50);
         assert.deepEqual(
             [...resumedReuse.reusedReviewTypes].sort(),
-            []
+            ['code']
         );
         assert.deepEqual(
             [...resumedReuse.launchRequiredReviewTypes].sort(),
-            ['code', 'refactor', 'security']
+            ['refactor', 'security']
         );
 
         fs.rmSync(repoRoot, { recursive: true, force: true });

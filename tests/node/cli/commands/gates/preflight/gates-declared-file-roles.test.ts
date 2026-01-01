@@ -105,6 +105,7 @@ test('ordinary native preflight uses declared roles and actual changes independe
             else process.env.NODE_TEST_CONTEXT = testContext;
         }
         assert.equal(red.exitCode, 0, red.outputLines.join('\n'));
-        assert.match(red.outputLines.join('\n'), /EXPECTED_FAILURE/u);
+        assert.match(red.outputLines.join('\n'), /TEST_FIRST_ASSERTION_SEMANTICS_PENDING/u);
+        assert.match(red.outputLines.join('\n'), /^ExitCode: 1$/mu);
     } finally { fs.rmSync(repoRoot, { recursive: true, force: true }); }
 });

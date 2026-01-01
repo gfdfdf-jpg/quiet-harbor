@@ -8,6 +8,7 @@ import { seedCompiledRuntimeLayout } from '../bundle-source-fixtures';
 import {
     getStatusSnapshot,
     getTaskCycleStatusSnapshot,
+    readTaskCommitGuard,
     formatStatusSnapshot,
     formatStatusSnapshotCompact,
     resolveInitAnswersPath
@@ -1249,6 +1250,28 @@ test('getStatusSnapshot summarizes toxin metrics without creating metrics.jsonl'
         assert.ok(snapshot.toxinMetricsSummary!.runtime_total_bytes > 0);
         assert.equal(fs.existsSync(metricsPath), false);
     } finally {
+        cleanupStatusTempDir(tmpDir);
+    }
+});
+
+test('commit presentation reads the same live/answers precedence without scanning runtime catalogs', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-commit-guard-'));
+    const fsModule = require('node:fs') as typeof import('node:fs');
+    const originalReaddirSync = fsModule.readdirSync;
+    try {
+        seedInitializedWorkspace(tmpDir, 'AGENT_INIT_PROMPT.md');
+        const liveVersion = path.join(tmpDir, 'garda-agent-orchestrator/live/version.json');
+        const expected = getTaskCycleStatusSnapshot(tmpDir, 'T-001').enforceNoAutoCommit;
+        fsModule.readdirSync = (() => { throw new Error('Commit setting must not enumerate catalogs'); }) as typeof fsModule.readdirSync;
+        assert.equal(readTaskCommitGuard(tmpDir), expected);
+        for (const value of [true, false]) {
+            writeStatusFixtureFile(liveVersion, JSON.stringify({ EnforceNoAutoCommit: value }));
+            assert.equal(readTaskCommitGuard(tmpDir), value);
+        }
+        writeStatusFixtureFile(liveVersion, '{broken');
+        assert.equal(readTaskCommitGuard(tmpDir), expected);
+    } finally {
+        fsModule.readdirSync = originalReaddirSync;
         cleanupStatusTempDir(tmpDir);
     }
 });

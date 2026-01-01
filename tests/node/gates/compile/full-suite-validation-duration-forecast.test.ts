@@ -57,7 +57,7 @@ describe('gates/full-suite-validation', () => {
             assert.equal(forecast.recommended_timeout_seconds, 90);
             assert.equal(forecast.safety_margin_seconds, 30);
             assert.equal(forecast.recommendation_source, 'history');
-            assert.match(formatFullSuiteTimeoutForecast(forecast), /Recommended full-suite command timeout: 90s/);
+            assert.match(formatFullSuiteTimeoutForecast(forecast), /Recommended task test command timeout: 90s/);
             assert.match(formatFullSuiteTimeoutForecast(forecast), /max 60s/);
         });
 
@@ -83,9 +83,40 @@ describe('gates/full-suite-validation', () => {
             assert.equal(comparison.previous_average_duration_ms, 100_000);
             assert.equal(comparison.previous_best_duration_ms, 80_000);
             assert.equal(comparison.previous_latest_duration_ms, 80_000);
-            assert.equal(comparison.delta_vs_previous_average_ms, 10_000);
-            assert.equal(comparison.delta_vs_previous_best_ms, -10_000);
-            assert.equal(comparison.delta_vs_previous_latest_ms, -10_000);
+            assert.equal(comparison.delta_vs_previous_average_ms, -10_000);
+            assert.equal(comparison.delta_vs_previous_best_ms, 10_000);
+            assert.equal(comparison.delta_vs_previous_latest_ms, 10_000);
+
+            const slower = buildFullSuiteDurationHistoryComparison(repoRoot, config, 130_000);
+            assert.equal(slower.delta_vs_previous_average_ms, 30_000);
+            assert.equal(slower.delta_vs_previous_best_ms, 50_000);
+            assert.equal(slower.delta_vs_previous_latest_ms, 50_000);
+        });
+
+        it('reports the field duration increase and leaves missing history deltas null', () => {
+            const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'garda-fsv-duration-field-'));
+            const config = buildFullSuiteDurationTestConfig();
+            try {
+                const missing = buildFullSuiteDurationHistoryComparison(repoRoot, config, 120_804);
+                assert.equal(missing.previous_sample_count, 0);
+                assert.equal(missing.delta_vs_previous_average_ms, null);
+                assert.equal(missing.delta_vs_previous_best_ms, null);
+                assert.equal(missing.delta_vs_previous_latest_ms, null);
+                recordFullSuiteValidationDuration(repoRoot, config, {
+                    timestamp_utc: '2099-01-01T00:00:00.000Z',
+                    task_id: 'T-FIELD',
+                    status: 'PASSED',
+                    duration_ms: 90_717,
+                    timed_out: false,
+                    exit_code: 0
+                });
+                const comparison = buildFullSuiteDurationHistoryComparison(repoRoot, config, 120_804);
+                assert.equal(comparison.delta_vs_previous_average_ms, 30_087);
+                assert.equal(comparison.delta_vs_previous_best_ms, 30_087);
+                assert.equal(comparison.delta_vs_previous_latest_ms, 30_087);
+            } finally {
+                fs.rmSync(repoRoot, { recursive: true, force: true });
+            }
         });
 
         it('uses the slowest matching duration instead of hiding outliers behind the average', () => {
@@ -233,7 +264,7 @@ describe('gates/full-suite-validation', () => {
             assert.equal(forecast.sample_count, 0);
             assert.equal(forecast.excluded_sample_count, 2);
             const text = formatFullSuiteTimeoutForecast(forecast);
-            assert.match(text, /no eligible recent matching full-suite duration history/);
+            assert.match(text, /no eligible recent matching task test duration history/);
             assert.match(text, /2 matching run\(s\) excluded from forecast/);
             assert.match(text, /interrupted_or_cancelled=1/);
             assert.match(text, /timed_out=1/);
