@@ -1,0 +1,169 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { buildDefaultWorkflowConfig } from '../../../../src/core/workflow-config';
+import { handleHtml } from '../../../../src/cli/commands/html-command';
+
+const PACKAGE_JSON = { name: 'garda-agent-orchestrator-test', version: '0.0.0-test' };
+
+function makeTempRepo(): string {
+    return fs.mkdtempSync(path.join(os.tmpdir(), 'garda-html-command-test-'));
+}
+
+function writeRepo(repoRoot: string): void {
+    fs.writeFileSync(path.join(repoRoot, 'TASK.md'), [
+        '# TASK.md',
+        '',
+        '## Active Queue',
+        '| ID | Status | Priority | Area | Title | Owner | Updated | Profile | Notes |',
+        '|---|---|---|---|---|---|---|---|---|',
+        '| T-100 | TODO | P2 | ui/report | Build HTML report | gpt-5.4 | 2026-05-16 | balanced | Uses logs only |'
+    ].join('\n'));
+    const configPath = path.join(repoRoot, 'garda-agent-orchestrator', 'live', 'config', 'workflow-config.json');
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify(buildDefaultWorkflowConfig(), null, 2));
+}
+
+async function captureOutput(action: () => unknown | Promise<unknown>): Promise<string> {
+    const captured: string[] = [];
+    const originalLog = console.log;
+    try {
+        process.env.NO_COLOR = '1';
+        console.log = (...args: unknown[]): void => {
+            captured.push(args.map((arg) => String(arg)).join(' '));
+        };
+        await action();
+    } finally {
+        console.log = originalLog;
+        delete process.env.NO_COLOR;
+    }
+    return captured.join('\n');
+}
+
+test('handleHtml prints report path and file URL', async () => {
+    const repoRoot = makeTempRepo();
+    writeRepo(repoRoot);
+    const outputPath = path.join(repoRoot, 'custom-report.html');
+
+    const text = await captureOutput(() => handleHtml([
+        '--target-root', repoRoot,
+        '--output-path', outputPath
+    ], PACKAGE_JSON));
+
+    assert.ok(text.includes('GARDA_HTML_REPORT'));
+    assert.ok(text.includes(`OutputPath: ${outputPath}`));
+    assert.match(text, /Url: file:\/\//);
+    assert.ok(text.includes('DetailedTasks: 0'));
+    assert.ok(text.includes('SkippedDetails: 1'));
+    assert.ok(fs.existsSync(outputPath));
+});
+
+test('handleHtml supports json output', async () => {
+    const repoRoot = makeTempRepo();
+    writeRepo(repoRoot);
+
+    const text = await captureOutput(() => handleHtml(['--target-root', repoRoot, '--json'], PACKAGE_JSON));
+    const parsed = JSON.parse(text) as { task_count: number; url: string };
+
+    assert.equal(parsed.task_count, 1);
+    assert.match(parsed.url, /^file:\/\//);
+});
+
+test('handleHtml supports bounded detail collection', async () => {
+    const repoRoot = makeTempRepo();
+    writeRepo(repoRoot);
+
+    const text = await captureOutput(() => handleHtml([
+        '--target-root', repoRoot,
+        '--max-detailed-tasks', '0',
+        '--json'
+    ], PACKAGE_JSON));
+    const parsed = JSON.parse(text) as {
+        task_count: number;
+        detailed_task_count: number;
+        skipped_detail_count: number;
+        max_detailed_tasks: number;
+    };
+
+    assert.equal(parsed.task_count, 1);
+    assert.equal(parsed.detailed_task_count, 0);
+    assert.equal(parsed.skipped_detail_count, 1);
+    assert.equal(parsed.max_detailed_tasks, 0);
+});
+
+test('handleHtml supports snapshot output and retention', async () => {
+    const repoRoot = makeTempRepo();
+    writeRepo(repoRoot);
+
+    const text = await captureOutput(() => handleHtml([
+        '--target-root', repoRoot,
+        '--snapshot',
+        '--retain-snapshots', '1'
+    ], PACKAGE_JSON));
+
+    assert.ok(text.includes('LatestPath:'));
+    assert.ok(text.includes('SnapshotPath:'));
+    assert.ok(text.includes('SnapshotRetention: 1'));
+    assert.ok(text.includes('DeletedSnapshots: 0'));
+    const snapshotDir = path.join(repoRoot, 'garda-agent-orchestrator', 'runtime', 'reports', 'snapshots');
+    assert.equal(fs.readdirSync(snapshotDir).length, 1);
+});
+
+test('handleHtml enables snapshots when retention is provided', async () => {
+    const repoRoot = makeTempRepo();
+    writeRepo(repoRoot);
+
+    const text = await captureOutput(() => handleHtml([
+        '--target-root', repoRoot,
+        '--retain-snapshots', '1',
+        '--json'
+    ], PACKAGE_JSON));
+    const parsed = JSON.parse(text) as { snapshot_path: string | null; snapshot_retention: number };
+
+    assert.equal(parsed.snapshot_retention, 1);
+    assert.ok(parsed.snapshot_path);
+    assert.ok(fs.existsSync(parsed.snapshot_path));
+});
+
+test('handleHtml rejects invalid snapshot retention values', async () => {
+    const repoRoot = makeTempRepo();
+    writeRepo(repoRoot);
+
+    for (const value of ['0', '-1', '1.5', 'abc']) {
+        await assert.rejects(
+            () => captureOutput(() => handleHtml([
+                '--target-root', repoRoot,
+                '--retain-snapshots', value
+            ], PACKAGE_JSON)),
+            /--retain-snapshots must be a positive integer/
+        );
+    }
+});
+
+test('handleHtml rejects invalid detailed task limit values', async () => {
+    const repoRoot = makeTempRepo();
+    writeRepo(repoRoot);
+
+    for (const value of ['-1', '1.5', 'abc']) {
+        await assert.rejects(
+            () => captureOutput(() => handleHtml([
+                '--target-root', repoRoot,
+                '--max-detailed-tasks', value
+            ], PACKAGE_JSON)),
+            /--max-detailed-tasks must be a non-negative integer/
+        );
+    }
+});
+
+test('handleHtml accepts repo-root as target-root alias', async () => {
+    const repoRoot = makeTempRepo();
+    writeRepo(repoRoot);
+
+    const text = await captureOutput(() => handleHtml(['--repo-root', repoRoot, '--json'], PACKAGE_JSON));
+    const parsed = JSON.parse(text) as { task_count: number; output_path: string };
+
+    assert.equal(parsed.task_count, 1);
+    assert.ok(parsed.output_path.startsWith(repoRoot));
+});

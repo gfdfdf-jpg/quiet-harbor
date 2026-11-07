@@ -1,0 +1,95 @@
+{
+  "tab_intro": {
+    "description": "Lista instantâneos rollback do inventário de cópias. Restauro protegido e edições de auto-backup requerem `garda ui --actions`."
+  },
+  "inventory_title": {
+    "label": "Lista de cópias"
+  },
+  "empty": {
+    "label": "Não há cópias na lista."
+  },
+  "snapshots_root": {
+    "label": "Raiz de instantâneos"
+  },
+  "root_present": {
+    "label": "presente"
+  },
+  "root_missing": {
+    "label": "em falta"
+  },
+  "id_column": {
+    "label": "ID"
+  },
+  "created_column": {
+    "label": "Criado"
+  },
+  "size_column": {
+    "label": "Tamanho"
+  },
+  "reason_column": {
+    "label": "Motivo"
+  },
+  "status_column": {
+    "label": "Estado"
+  },
+  "restore_column": {
+    "label": "Restaurar"
+  },
+  "reason_update": {
+    "label": "atualização"
+  },
+  "reason_scheduled": {
+    "label": "agendado"
+  },
+  "reason_manual": {
+    "label": "manual"
+  },
+  "health_available": {
+    "label": "Disponível"
+  },
+  "health_missing_records": {
+    "label": "Registos em falta"
+  },
+  "health_invalid_records": {
+    "label": "Registos inválidos"
+  },
+  "actions_disabled": {
+    "label": "Ações controladas estão desativadas."
+  },
+  "manual_create_title": {
+    "label": "Cópia manual"
+  },
+  "manual_create_help": {
+    "description": "Cria um instantâneo de cópia de segurança para reversão do estado atual do espaço de trabalho através do backend protegido."
+  },
+  "manual_create_button": {
+    "label": "Criar cópia"
+  },
+  "manual_create_unavailable": {
+    "label": "A criação manual de cópias não está disponível."
+  },
+  "restore_unavailable": {
+    "label": "Restauro indisponível para esta cópia."
+  },
+  "restore_backup": {
+    "label": "Restaurar cópia"
+  },
+  "auto_backup_title": {
+    "label": "Cópia automática"
+  },
+  "auto_backup_help": {
+    "description": "As cópias automáticas agendadas usam definições de workflow auditadas. Guardar requer confirmação."
+  },
+  "auto_enabled": {
+    "label": "Ativado"
+  },
+  "auto_interval_days": {
+    "label": "Intervalo (dias)"
+  },
+  "auto_keep_latest": {
+    "label": "Manter recentes"
+  },
+  "restore_preview_help": {
+    "description": "Escolha uma cópia para a restaurar através da ação protegida de rollback."
+  }
+}

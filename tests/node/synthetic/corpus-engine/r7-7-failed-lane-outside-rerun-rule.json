@@ -1,0 +1,62 @@
+[
+  {
+    "note": "R7-7 E: the failed lane was outside the rerun rule of the fix category, so it was reviewed again in FULL mode although the fix qualified for DELTA. Case: failed infra review, fix edits one shared test fixture.",
+    "scenario": {
+      "id": "r7-7-e-failed-infra-shared-fixture",
+      "stack": "python",
+      "failedLane": "infra",
+      "requiredLanes": [
+        "code",
+        "infra",
+        "test"
+      ],
+      "scope": [
+        {
+          "role": "INFRA",
+          "path": "Dockerfile",
+          "lines": 7
+        },
+        {
+          "role": "TEST_FIXTURE",
+          "path": "tests/fixtures/invoice.json",
+          "lines": 48
+        }
+      ],
+      "fix": [
+        {
+          "role": "TEST_FIXTURE",
+          "path": "tests/fixtures/invoice.json",
+          "operation": "modified",
+          "changedLines": 49
+        }
+      ]
+    }
+  },
+  {
+    "note": "R7-7 E: the failed lane was outside the rerun rule of the fix category, so it was reviewed again in FULL mode although the fix qualified for DELTA. Case: failed code review, fix grows one unit test past the test-refactor threshold.",
+    "scenario": {
+      "id": "r7-7-e-failed-code-structural-test",
+      "stack": "php",
+      "failedLane": "code",
+      "requiredLanes": [
+        "code",
+        "test"
+      ],
+      "scope": [
+        {
+          "role": "UNIT_TEST",
+          "path": "tests/Orders/InvoiceTest.php",
+          "lines": 60
+        }
+      ],
+      "fix": [
+        {
+          "role": "UNIT_TEST",
+          "path": "tests/Orders/InvoiceTest.php",
+          "operation": "modified",
+          "changedLines": 120
+        }
+      ]
+    }
+  }
+]

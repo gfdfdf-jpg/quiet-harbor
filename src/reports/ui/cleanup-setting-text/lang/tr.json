@@ -1,0 +1,90 @@
+{
+  "tab_intro": {
+    "description": "`runtime-retention.json` içindeki runtime saklama politikası: zamanlanmış bakım eşikleri, sıkıştırma kuralları ve korumalı manuel temizlik işlemleri."
+  },
+  "daily_maintenance_enabled": {
+    "label": "Günlük bakım",
+    "description": "Zamanlanmış günlük bakımı açar veya kapatır. Etkinleştirildiğinde orkestratör, manuel müdahale olmadan programa göre sınırlı sayıda uygun görevi işleyebilir."
+  },
+  "daily_maintenance_max_tasks_per_run": {
+    "label": "Bakım çalıştırması başına en fazla görev",
+    "description": "Günlük bakımın tek bir çalıştırmada işleyeceği uygun görev sayısının üst sınırı. Eşikler yanlış yapılandırılmışsa etki alanını sınırlar."
+  },
+  "eligible_older_than_days": {
+    "label": "Şundan eski task kayıtlarını sil (gün)",
+    "description": "Manuel temizlik bu gün sayısından daha eski task runtime artifacts verilerini seçer. Etkin ve daha yeni task kayıtları korunur."
+  },
+  "keep_latest_tasks": {
+    "label": "En az en yeni task kayıtlarını koru (adet)",
+    "description": "Yaş eşiğinden eski olsalar bile en yeni task kayıtlarından en az bu kadarını her zaman korur. Yalnızca yaş ve etkin task korumasına güvenmek için 0 ayarlayın."
+  },
+  "include_problematic_tasks": {
+    "label": "Sorunlu görevleri de sil"
+  },
+  "daily_maintenance_dry_run": {
+    "label": "Günlük bakım dry-run",
+    "description": "Değer true olduğunda zamanlanmış günlük bakım yalnızca adayları listeler ve denetim çıktısı yazar; artefaktları silmez veya sıkıştırmaz. Eşikleri ayarlarken true kullanın, uygulamak için sonra false yapın."
+  },
+  "purge_require_confirm": {
+    "label": "Otomatik cleanup onay korumasi",
+    "description": "true oldugunda zamanlanmis veya CLI uzerinden yikici cleanup sessizce calismaz ve onay gerektirir. UI manuel cleanup ve gorev artefakti cleanup her zaman kendi yazili onay ifadelerini ister."
+  },
+  "healthy_done_compact_after_days": {
+    "label": "Saglikli DONE gorevlerini sonra sikistir (gun)",
+    "description": "Bu kadar gunden sonra basariyla tamamlanan DONE gorevleri ledger kaniti dogrulaninca yalniz ledger gecmisine sikistirilabilir."
+  },
+  "problem_tasks_compress_after_days": {
+    "label": "Sorunlu görevleri şu kadar gün sonra sıkıştır",
+    "description": "Bu kadar gün sonra başarısız veya takılı kalmış görevlerin ağır adli artefaktları, kurtarma için okunabilir kanıt korunarak sıkıştırılabilir."
+  },
+  "manual_runtime_cleanup": {
+    "label": "Manuel runtime cleanup",
+    "description": "Bu satırdaki yaş ve keep-latest kontrolleriyle seçilen etkin olmayan görevlere ait runtime artifacts verilerini siler. Önizleme bir dry-run raporudur; Temizliği çalıştır seçilen görev artifacts verilerini siler, paylaşılan indeksleri bir kez onarır ve yazılı onay ister."
+  },
+  "task_purge": {
+    "label": "Gorev runtime artefakti cleanup",
+    "description": "Bir gorev ID sine ait runtime artefaktlarini kaldirir ve paylasilan indeksleri onarir. Tum paylasilan dosyalari kaldirmaz; aktif gorev korumasi sunucuda kalir."
+  },
+  "task_id": {
+    "label": "Görev kimliği"
+  },
+  "purge_task_button": {
+    "label": "Runtime artefaktlarini temizle"
+  },
+  "run_preview": {
+    "label": "Ön hesaplama"
+  },
+  "value_true": {
+    "label": "true — etkin"
+  },
+  "value_false": {
+    "label": "false — devre dışı"
+  },
+  "run_apply": {
+    "label": "Temizliği çalıştır"
+  },
+  "cleanup_report": {
+    "label": "Temizlik raporu"
+  },
+  "cleanup_result": {
+    "label": "Temizlik sonucu"
+  },
+  "report_preview_tasks": {
+    "label": "Önizleme adayları"
+  },
+  "report_eligible_now": {
+    "label": "Şimdi uygun"
+  },
+  "report_would_remove": {
+    "label": "Kaldırılırdı"
+  },
+  "report_would_free": {
+    "label": "Alan açardı"
+  },
+  "report_removed": {
+    "label": "Kaldırıldı"
+  },
+  "report_freed": {
+    "label": "Alan açıldı"
+  }
+}

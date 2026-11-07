@@ -1,0 +1,24 @@
+# Gitleaks configuration for Garda Agent Orchestrator.
+# Extends the built-in ruleset with project-specific allowlists.
+# Docs: https://github.com/gitleaks/gitleaks#configuration
+
+title = "Garda Agent Orchestrator — gitleaks config"
+
+# Explicitly retain the built-in rules when loading this custom config.
+[extend]
+useDefault = true
+
+# ── Global allowlist ─────────────────────────────────────────────────────────
+# Paths and patterns that are known to produce false positives in this repo.
+[allowlist]
+description = "Project-wide false-positive suppressions"
+
+# Root generated artifacts and one intentional redaction fixture only.
+# A project's own runtime/ or a nested runtime-like path must still be scanned.
+paths = [
+  '''^testResults\.xml$''',
+  '''^garda-agent-orchestrator/runtime/''',
+  '''^\.node-build/''',
+  '''^tests/node/core/redaction\.test\.ts$''',
+  '''^node_modules/''',
+]

@@ -1,0 +1,38 @@
+# Working alongside an unfinished task
+
+Garda reports unfinished implementation owners before starting another task in
+the same worktree. Ask the operator to confirm proceeding while preserving the
+existing changes. A dirty working tree does not require a separate worktree.
+
+After confirmation, use the `enter-task-mode` command supplied by `next-step`:
+add one `--allow-active-task <id>` for every reported owner, provide
+`--operator-confirmed yes` and the current confirmation timestamp through
+`--operator-confirmed-at-utc`, and declare the new task's files with repeated
+`--planned-changed-file` arguments. Do not claim operator confirmation before
+it has been given.
+
+The task-mode event records the approval and binds it to the receiving task's
+artifact and the approved owners' task-mode artifacts. Subsequent gates reuse
+that approval. A newly active owner, a restarted owner, or a changed receiving
+artifact requires confirmation again. Missing or invalid owner evidence cannot
+be approved through this flow.
+
+The receiving task's planned files must not overlap an unfinished owner's
+planned scope. This includes containing directories and alternate paths to the
+same file. Confirmation does not grant shared ownership of those files.
+
+Re-entering the same task, for example through `restart-coherent-cycle` after a
+review fix added files, keeps the operator's confirmation while every current
+owner was approved and its task-mode artifact is unchanged. The new scope is
+checked again and must still not overlap any owner's planned files. A new or
+restarted owner requires fresh confirmation; explicitly supplied confirmation
+flags are always validated. Task-mode re-entry automatically preserves its original dirty-workspace baseline, even
+without `--upgrade-existing-task-mode`, when writing a different artifact path,
+or after every previously approved owner has completed. Later unrelated changes
+cannot become accepted baseline state through re-entry.
+
+Existing changes outside the new task's scope remain protected by the captured
+dirty-workspace baseline. The approval does not complete, reset, or discard the
+unfinished tasks, and does not skip their validation or review gates.
+
+Consent reuse is limited to receivers in `IN_PROGRESS` or `IN_REVIEW` with no ending lifecycle event after their last entry. An explicit `--allow-active-task` list always requires fresh confirmation. Widening scope to include a preserved dirty-baseline file that the receiver did not previously own also requires fresh confirmation.

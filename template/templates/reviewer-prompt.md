@@ -1,0 +1,32 @@
+# Reviewer Prompt Template
+
+Use this template as a human-visible reviewer instruction surface.
+
+<!-- garda:protected-start review-context -->
+Review type: {{REVIEW_TYPE}}
+Review context path: {{REVIEW_CONTEXT_PATH}}
+<!-- garda:protected-end review-context -->
+
+<!-- garda:protected-start findings-contract -->
+Output mode: verdict-free findings-only JSON.
+Return exactly one JSON object that follows the generated output template and completes every coverage-ledger obligation.
+Do not add verdict, pass/fail, status, downstream disposition, or remediation fields.
+- Missing prior focused execution evidence is not by itself a finding or residual risk.
+- Only when the prospective finding is specifically that a relevant focused check may not have run, execute the smallest safe relevant local test or validation command yourself for its declared repository test or validation target files, with no unrelated or directory target, before deciding whether a finding exists.
+- The focused self-check must stay inside the authenticated review scope and must not invoke Garda, access network services implicitly, start background services, mutate source or control artifacts, use shell command chaining, substitution, or expansion, run a broad build/full suite, or duplicate current gate-owned evidence.
+- Use the declared task command and its existing configuration for the exact relevant repository targets. One command may bind multiple targets. Do not create temporary runner scripts or substitute custom compilation, transpilation, dynamic module loading, or an in-memory runner for that declared invocation.
+- For an admitted project recipe, use the exact authenticated executable/arguments and declared test role with the current task identity. A source input or filename extension cannot substitute for that declaration; a passed claim requires the current native PASSED result.
+- Never run inline interpreter code with unauditable side effects. Prohibited invocation examples: `node -e`, `node --eval`, `python -c`, `ruby -e`, `perl -e`, `php -r`, `pwsh -Command`, `powershell -EncodedCommand`, `bash -c`, `cmd /c`. This reviewer rule applies to every stack; these examples are not an exhaustive list of interpreters.
+- Normal runtime compilation or transformation inside the configured test tool is permitted. This rule does not prohibit a configured TypeScript loader, Python assertion rewriting, or ordinary runtime compilation by the project toolchain.
+- The focused evidence handoff includes validator-compatible command hints only when an exact current authenticated command is available. Hints describe existing evidence, do not authorize automatic execution, and must not be used to duplicate current gate-owned validation.
+- An absent command hint is not proof of missing or unavailable execution. If the project-configured focused invocation cannot be executed, record its exact attempted command and concrete unavailable/prohibited diagnostics; never invent a substitute compiler or relax a mandatory gate.
+- Record the exact attempted command, command_outcome (`passed`, `failed`, `unavailable`, or `prohibited`), and concise non-placeholder diagnostics that state the concrete result, failure, or prohibition in a validation_notes entry whose topic is `focused-self-validation`. The command must identify every exact check target. Its authenticated changed-file evidence must explain why each target is relevant. For a passed command, evidence does not need to repeat the target paths, even when the review reports a separate finding.
+- For a failed, unavailable, or prohibited focused command, keep evidence.location as a concrete path:line inside the assigned lane's authenticated changed-file evidence domain. Put the exact command target path and its concrete relationship to changed behavior in one clause of evidence.observation when the target itself is outside that domain; for example: `<exact-target> validates the changed behavior at this source location.` The target, `affected`/`changed`/`modified`/`new`/`updated` (or the current task id), and a relationship verb such as `validates`/`covers`/`exercises`/`asserts` must appear in that clause. Semicolons, newlines, sentence punctuation, and contrastive conjunctions `but`/`however`/`whereas`/`while` start a new clause. Reuse a finding's exact changed-file evidence location when finding_ids links the note. Naming the target only in note, command, or diagnostics does not satisfy the evidence contract.
+- If the focused command passes, do not report missing prior execution as a finding or residual risk. If it exposes an actual defect or test failure, report that defect as an ordinary severity finding rather than as evidence-only F-000, link the failed validation note to the exact ordinary finding through finding_ids, and reuse at least one exact changed-file evidence location from each linked finding in that note.
+- Use reserved id `F-000` only after a real focused attempt is unavailable or prohibited. Put the exact canonical marker `[garda:evidence-only:missing-focused-validation] test=<exact-repository-relative-test-path>; action=run-and-record-focused-test` or `[garda:evidence-only:missing-focused-validation] target=<exact-repository-relative-validation-path>; action=run-and-record-focused-validation` in its title or description, replacing only the angle-bracketed path. For multiple required targets, put each canonical marker on a separate description line; every target needs an associated attempted command and evidence. A `failed` check represents actual failure evidence and must use an ordinary severity finding. The focused-self-validation note must preserve the exact command and actionable diagnostics.
+Write the JSON to ReviewOutputPath and run the exact read-only `record-review-result --check-only` command in the launch handoff as the required last step. Fix every diagnostic and repeat until it passes, then return that same object. Do not run any other Garda command, launch descendants, mutate source or control evidence, access network services implicitly, start background services, or use shell command chaining, substitution, or expansion. The launcher owns result recording and downstream workflow.
+<!-- garda:protected-end findings-contract -->
+
+<!-- garda:protected-start review-integrity -->
+Review integrity requirement: {{REVIEW_INTEGRITY}}
+<!-- garda:protected-end review-integrity -->

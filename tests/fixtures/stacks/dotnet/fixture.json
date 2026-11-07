@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "id": "dotnet",
+  "title": ".NET",
+  "adapter": null,
+  "technologies": [
+    {
+      "id": "dotnet",
+      "executable": "tools/dotnet",
+      "compileArgv": [
+        "build",
+        "Orders.sln",
+        "--no-restore"
+      ],
+      "firstArgv": [
+        "test",
+        "Orders.sln",
+        "--filter",
+        "FullyQualifiedName=Example.Orders.OrderTests.TaskContract",
+        "--logger",
+        "trx"
+      ],
+      "allArgv": [
+        "test",
+        "Orders.sln",
+        "--filter",
+        "FullyQualifiedName=Example.Orders.OrderTests.TaskContract|FullyQualifiedName=Example.Partners.OrderTests.TaskContract",
+        "--logger",
+        "trx"
+      ],
+      "broadArgv": [
+        "test",
+        "Orders.sln"
+      ],
+      "report": "trx",
+      "secondArgv": [
+        "test",
+        "Orders.sln",
+        "--filter",
+        "FullyQualifiedName=Example.Partners.OrderTests.TaskContract",
+        "--logger",
+        "trx"
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "orders",
+      "technology": "dotnet",
+      "source": "src/Orders/Service.cs",
+      "target": "tests/Orders.Tests/OrderTests.cs",
+      "case": "task-contract",
+      "comment": "//"
+    },
+    {
+      "id": "partners",
+      "technology": "dotnet",
+      "source": "src/Partners/Service.cs",
+      "target": "tests/Partners.Tests/OrderTests.cs",
+      "case": "task-contract",
+      "comment": "//"
+    }
+  ],
+  "helpers": []
+}

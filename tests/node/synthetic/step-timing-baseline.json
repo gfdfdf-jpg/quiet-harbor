@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "release": "1.4.4",
+  "source_commit": null,
+  "package_sha256": null,
+  "harness_sha256": null,
+  "checkpoint_manifest_sha256": null,
+  "environment": null,
+  "protocol": {
+    "mode": "resolver-warm",
+    "warmups": 5,
+    "samples": 100,
+    "quantile": "nearest-rank",
+    "jobs": 1
+  },
+  "routes": [],
+  "baseline_update": {
+    "reason": "No accepted quiet-machine release measurements yet; shared stand machine is busy. Never infer a timing PASS.",
+    "previous_sha256": null
+  }
+}

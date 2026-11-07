@@ -1,0 +1,705 @@
+import { appendTaskEvent } from './task-events';
+import type { AutoEmitOptions } from './lifecycle-event-core';
+import {
+    emitLifecycleEvent,
+    emitLifecycleEventAsync,
+    emitMandatoryLifecycleEvent,
+    emitMandatoryLifecycleEventAsync
+} from './lifecycle-event-core';
+import { LIFECYCLE_EVENT_TYPES } from './lifecycle-event-types';
+
+interface ReviewerInvocationAttestedOptions extends AutoEmitOptions {
+    launchDetails?: Record<string, unknown>;
+}
+
+export function emitPlanCreatedEvent(repoRoot: string, taskId: string, details: unknown, options: AutoEmitOptions = {}) {
+    return emitLifecycleEvent(repoRoot, taskId, LIFECYCLE_EVENT_TYPES.PLAN_CREATED, 'INFO', 'Task plan created.', details, options, true);
+}
+
+export async function emitPlanCreatedEventAsync(repoRoot: string, taskId: string, details: unknown, options: AutoEmitOptions = {}) {
+    return emitLifecycleEventAsync(repoRoot, taskId, LIFECYCLE_EVENT_TYPES.PLAN_CREATED, 'INFO', 'Task plan created.', details, options, true);
+}
+
+export function emitPreflightStartedEvent(repoRoot: string, taskId: string, details: unknown, options: AutoEmitOptions = {}) {
+    return emitLifecycleEvent(repoRoot, taskId, LIFECYCLE_EVENT_TYPES.PREFLIGHT_STARTED, 'INFO', 'Preflight classification started.', details, options);
+}
+
+export function emitMandatoryPreflightStartedEvent(repoRoot: string, taskId: string, details: unknown, options: AutoEmitOptions = {}) {
+    return emitMandatoryLifecycleEvent(repoRoot, taskId, LIFECYCLE_EVENT_TYPES.PREFLIGHT_STARTED, 'INFO', 'Preflight classification started.', details, options);
+}
+
+export async function emitMandatoryPreflightStartedEventAsync(repoRoot: string, taskId: string, details: unknown, options: AutoEmitOptions = {}) {
+    return emitMandatoryLifecycleEventAsync(repoRoot, taskId, LIFECYCLE_EVENT_TYPES.PREFLIGHT_STARTED, 'INFO', 'Preflight classification started.', details, options);
+}
+
+export function emitPreflightFailedEvent(repoRoot: string, taskId: string, details: unknown, options: AutoEmitOptions = {}) {
+    return emitLifecycleEvent(repoRoot, taskId, LIFECYCLE_EVENT_TYPES.PREFLIGHT_FAILED, 'FAIL', 'Preflight classification failed.', details, options);
+}
+
+export function emitMandatoryPreflightFailedEvent(repoRoot: string, taskId: string, details: unknown, options: AutoEmitOptions = {}) {
+    return emitMandatoryLifecycleEvent(repoRoot, taskId, LIFECYCLE_EVENT_TYPES.PREFLIGHT_FAILED, 'FAIL', 'Preflight classification failed.', details, options);
+}
+
+export async function emitMandatoryPreflightFailedEventAsync(repoRoot: string, taskId: string, details: unknown, options: AutoEmitOptions = {}) {
+    return emitMandatoryLifecycleEventAsync(repoRoot, taskId, LIFECYCLE_EVENT_TYPES.PREFLIGHT_FAILED, 'FAIL', 'Preflight classification failed.', details, options);
+}
+
+export function emitImplementationStartedEvent(repoRoot: string, taskId: string, details: unknown, options: AutoEmitOptions = {}) {
+    return emitLifecycleEvent(repoRoot, taskId, LIFECYCLE_EVENT_TYPES.IMPLEMENTATION_STARTED, 'INFO', 'Implementation started.', details, options);
+}
+
+export function emitMandatoryImplementationStartedEvent(repoRoot: string, taskId: string, details: unknown, options: AutoEmitOptions = {}) {
+    return emitMandatoryLifecycleEvent(repoRoot, taskId, LIFECYCLE_EVENT_TYPES.IMPLEMENTATION_STARTED, 'INFO', 'Implementation started.', details, options);
+}
+
+export async function emitMandatoryImplementationStartedEventAsync(repoRoot: string, taskId: string, details: unknown, options: AutoEmitOptions = {}) {
+    return emitMandatoryLifecycleEventAsync(repoRoot, taskId, LIFECYCLE_EVENT_TYPES.IMPLEMENTATION_STARTED, 'INFO', 'Implementation started.', details, options);
+}
+
+export function emitReviewPhaseStartedEvent(repoRoot: string, taskId: string, details: unknown, options: AutoEmitOptions = {}) {
+    return emitLifecycleEvent(repoRoot, taskId, LIFECYCLE_EVENT_TYPES.REVIEW_PHASE_STARTED, 'INFO', 'Review phase started.', details, options);
+}
+
+export async function emitReviewPhaseStartedEventAsync(repoRoot: string, taskId: string, details: unknown, options: AutoEmitOptions = {}) {
+    return emitLifecycleEventAsync(repoRoot, taskId, LIFECYCLE_EVENT_TYPES.REVIEW_PHASE_STARTED, 'INFO', 'Review phase started.', details, options);
+}
+
+export function emitReviewRecordedEvent(repoRoot: string, taskId: string, reviewType: string, details: unknown, options: AutoEmitOptions = {}) {
+    return emitLifecycleEvent(repoRoot, taskId, LIFECYCLE_EVENT_TYPES.REVIEW_RECORDED, 'PASS', `Review recorded: ${reviewType}.`, details, options);
+}
+
+export async function emitReviewRecordedEventAsync(repoRoot: string, taskId: string, reviewType: string, details: unknown, options: AutoEmitOptions = {}) {
+    return emitLifecycleEventAsync(repoRoot, taskId, LIFECYCLE_EVENT_TYPES.REVIEW_RECORDED, 'PASS', `Review recorded: ${reviewType}.`, details, options);
+}
+
+export async function emitReviewOutputCorrectionRequiredEventAsync(
+    repoRoot: string,
+    taskId: string,
+    reviewType: string,
+    details: unknown,
+    options: AutoEmitOptions = {}
+) {
+    return emitLifecycleEventAsync(
+        repoRoot,
+        taskId,
+        LIFECYCLE_EVENT_TYPES.REVIEW_OUTPUT_CORRECTION_REQUIRED,
+        'INFO',
+        `Review output correction required: ${reviewType}.`,
+        details,
+        { ...options, actor: options.actor || 'orchestrator' }
+    );
+}
+
+export async function emitReviewOutputCorrectionTransportEventAsync(
+    repoRoot: string,
+    taskId: string,
+    reviewType: string,
+    transport: 'live_reviewer_continuation' | 'api_conversation_continuation' | 'correction_only_invocation',
+    details: unknown,
+    options: AutoEmitOptions = {}
+) {
+    const eventType = {
+        live_reviewer_continuation: LIFECYCLE_EVENT_TYPES.REVIEW_OUTPUT_CORRECTION_LIVE_CONTINUATION,
+        api_conversation_continuation: LIFECYCLE_EVENT_TYPES.REVIEW_OUTPUT_CORRECTION_API_CONTINUATION,
+        correction_only_invocation: LIFECYCLE_EVENT_TYPES.REVIEW_OUTPUT_CORRECTION_ONLY_INVOCATION
+    }[transport];
+    return emitLifecycleEventAsync(
+        repoRoot,
+        taskId,
+        eventType,
+        'INFO',
+        `Review output correction transport selected: ${reviewType} (${transport}).`,
+        details,
+        { ...options, actor: options.actor || 'orchestrator' }
+    );
+}
+
+export async function emitReviewOutputCorrectionNormalizedEventAsync(
+    repoRoot: string,
+    taskId: string,
+    reviewType: string,
+    details: unknown,
+    options: AutoEmitOptions = {}
+) {
+    return emitLifecycleEventAsync(
+        repoRoot,
+        taskId,
+        LIFECYCLE_EVENT_TYPES.REVIEW_OUTPUT_CORRECTION_NORMALIZED,
+        'INFO',
+        `Review output normalized mechanically: ${reviewType}.`,
+        details,
+        { ...options, actor: options.actor || 'orchestrator' }
+    );
+}
+
+export async function emitReviewOutputCorrectionAcceptedEventAsync(
+    repoRoot: string,
+    taskId: string,
+    reviewType: string,
+    details: unknown,
+    options: AutoEmitOptions = {}
+) {
+    return emitLifecycleEventAsync(
+        repoRoot,
+        taskId,
+        LIFECYCLE_EVENT_TYPES.REVIEW_OUTPUT_CORRECTION_ACCEPTED,
+        'PASS',
+        `Review output correction accepted: ${reviewType}.`,
+        details,
+        { ...options, actor: options.actor || 'orchestrator' }
+    );
+}
+
+export async function emitReviewOutputCorrectionInvocationAttestedEventAsync(
+    repoRoot: string,
+    taskId: string,
+    reviewType: string,
+    details: unknown,
+    options: AutoEmitOptions = {}
+) {
+    return emitLifecycleEventAsync(
+        repoRoot,
+        taskId,
+        LIFECYCLE_EVENT_TYPES.REVIEW_OUTPUT_CORRECTION_INVOCATION_ATTESTED,
+        'INFO',
+        `Review output correction invocation attested: ${reviewType}.`,
+        details,
+        { ...options, actor: options.actor || 'orchestrator' }
+    );
+}
+
+export async function emitReviewOutputCorrectionFullReviewRequiredEventAsync(
+    repoRoot: string,
+    taskId: string,
+    reviewType: string,
+    details: unknown,
+    options: AutoEmitOptions = {}
+) {
+    return emitLifecycleEventAsync(
+        repoRoot,
+        taskId,
+        LIFECYCLE_EVENT_TYPES.REVIEW_OUTPUT_CORRECTION_FULL_REVIEW_REQUIRED,
+        'FAIL',
+        `Review output correction requires a full reviewer relaunch: ${reviewType}.`,
+        details,
+        { ...options, actor: options.actor || 'orchestrator' }
+    );
+}
+
+export function emitMandatoryReviewPhaseStartedEvent(repoRoot: string, taskId: string, details: unknown, options: AutoEmitOptions = {}) {
+    return emitMandatoryLifecycleEvent(repoRoot, taskId, LIFECYCLE_EVENT_TYPES.REVIEW_PHASE_STARTED, 'INFO', 'Review phase started.', details, options);
+}
+
+export async function emitMandatoryReviewPhaseStartedEventAsync(repoRoot: string, taskId: string, details: unknown, options: AutoEmitOptions = {}) {
+    return emitMandatoryLifecycleEventAsync(repoRoot, taskId, LIFECYCLE_EVENT_TYPES.REVIEW_PHASE_STARTED, 'INFO', 'Review phase started.', details, options);
+}
+
+export function emitFullSuiteValidationEvent(
+    repoRoot: string,
+    taskId: string,
+    status: 'PASSED' | 'FAILED' | 'WARNED' | 'SKIPPED',
+    details: unknown,
+    options: AutoEmitOptions = {}
+) {
+    const eventType = {
+        PASSED: LIFECYCLE_EVENT_TYPES.FULL_SUITE_VALIDATION_PASSED,
+        FAILED: LIFECYCLE_EVENT_TYPES.FULL_SUITE_VALIDATION_FAILED,
+        WARNED: LIFECYCLE_EVENT_TYPES.FULL_SUITE_VALIDATION_WARNED,
+        SKIPPED: LIFECYCLE_EVENT_TYPES.FULL_SUITE_VALIDATION_SKIPPED
+    }[status];
+    const outcome = status === 'FAILED' ? 'FAIL' : status === 'WARNED' ? 'WARN' : status === 'SKIPPED' ? 'INFO' : 'PASS';
+    return emitLifecycleEvent(
+        repoRoot,
+        taskId,
+        eventType,
+        outcome,
+        `Full-suite validation ${status.toLowerCase()}.`,
+        details,
+        options
+    );
+}
+
+export async function emitMandatoryFullSuiteValidationEventAsync(
+    repoRoot: string,
+    taskId: string,
+    status: 'PASSED' | 'FAILED' | 'WARNED' | 'SKIPPED',
+    details: unknown,
+    options: AutoEmitOptions = {}
+) {
+    const eventType = {
+        PASSED: LIFECYCLE_EVENT_TYPES.FULL_SUITE_VALIDATION_PASSED,
+        FAILED: LIFECYCLE_EVENT_TYPES.FULL_SUITE_VALIDATION_FAILED,
+        WARNED: LIFECYCLE_EVENT_TYPES.FULL_SUITE_VALIDATION_WARNED,
+        SKIPPED: LIFECYCLE_EVENT_TYPES.FULL_SUITE_VALIDATION_SKIPPED
+    }[status];
+    const outcome = status === 'FAILED' ? 'FAIL' : status === 'WARNED' ? 'WARN' : status === 'SKIPPED' ? 'INFO' : 'PASS';
+    return emitMandatoryLifecycleEventAsync(
+        repoRoot,
+        taskId,
+        eventType,
+        outcome,
+        `Full-suite validation ${status.toLowerCase()}.`,
+        details,
+        options
+    );
+}
+
+export function emitCompletionGateEvent(repoRoot: string, taskId: string, passed: boolean, details: unknown, options: AutoEmitOptions = {}): ReturnType<typeof appendTaskEvent> {
+    if (!repoRoot || !taskId) return null;
+    try {
+        return appendTaskEvent(
+            repoRoot,
+            taskId,
+            passed ? LIFECYCLE_EVENT_TYPES.COMPLETION_GATE_PASSED : LIFECYCLE_EVENT_TYPES.COMPLETION_GATE_FAILED,
+            passed ? 'PASS' : 'FAIL',
+            passed ? 'Completion gate passed.' : 'Completion gate failed.',
+            details,
+            {
+                actor: options.actor || 'gate',
+                passThru: options.passThru ?? true,
+                eventsRoot: options.eventsRoot
+            }
+        );
+    } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        process.stderr.write(`WARNING: completion-gate event emit failed: ${msg}\n`);
+        return null;
+    }
+}
+
+export function emitMandatoryCompletionGateEvent(repoRoot: string, taskId: string, passed: boolean, details: unknown, options: AutoEmitOptions = {}) {
+    return emitMandatoryLifecycleEvent(
+        repoRoot,
+        taskId,
+        passed ? LIFECYCLE_EVENT_TYPES.COMPLETION_GATE_PASSED : LIFECYCLE_EVENT_TYPES.COMPLETION_GATE_FAILED,
+        passed ? 'PASS' : 'FAIL',
+        passed ? 'Completion gate passed.' : 'Completion gate failed.',
+        details,
+        options
+    );
+}
+
+export async function emitMandatoryCompletionGateEventAsync(repoRoot: string, taskId: string, passed: boolean, details: unknown, options: AutoEmitOptions = {}) {
+    return emitMandatoryLifecycleEventAsync(
+        repoRoot,
+        taskId,
+        passed ? LIFECYCLE_EVENT_TYPES.COMPLETION_GATE_PASSED : LIFECYCLE_EVENT_TYPES.COMPLETION_GATE_FAILED,
+        passed ? 'PASS' : 'FAIL',
+        passed ? 'Completion gate passed.' : 'Completion gate failed.',
+        details,
+        options
+    );
+}
+
+export function emitStatusChangedEvent(repoRoot: string, taskId: string, previousStatus: string, newStatus: string, options: AutoEmitOptions = {}) {
+    return emitLifecycleEvent(
+        repoRoot,
+        taskId,
+        LIFECYCLE_EVENT_TYPES.STATUS_CHANGED,
+        'INFO',
+        `Task status changed: ${previousStatus} → ${newStatus}.`,
+        {
+            previous_status: previousStatus,
+            new_status: newStatus
+        },
+        { ...options, actor: options.actor || 'orchestrator' }
+    );
+}
+
+export function emitMandatoryStatusChangedEvent(
+    repoRoot: string,
+    taskId: string,
+    previousStatus: string,
+    newStatus: string,
+    options: AutoEmitOptions = {}
+) {
+    return emitMandatoryLifecycleEvent(
+        repoRoot,
+        taskId,
+        LIFECYCLE_EVENT_TYPES.STATUS_CHANGED,
+        'INFO',
+        `Task status changed: ${previousStatus} → ${newStatus}.`,
+        {
+            previous_status: previousStatus,
+            new_status: newStatus
+        },
+        { ...options, actor: options.actor || 'orchestrator' }
+    );
+}
+
+export async function emitStatusChangedEventAsync(repoRoot: string, taskId: string, previousStatus: string, newStatus: string, options: AutoEmitOptions = {}) {
+    return emitLifecycleEventAsync(
+        repoRoot,
+        taskId,
+        LIFECYCLE_EVENT_TYPES.STATUS_CHANGED,
+        'INFO',
+        `Task status changed: ${previousStatus} → ${newStatus}.`,
+        {
+            previous_status: previousStatus,
+            new_status: newStatus
+        },
+        { ...options, actor: options.actor || 'orchestrator' }
+    );
+}
+
+export async function emitMandatoryStatusChangedEventAsync(
+    repoRoot: string,
+    taskId: string,
+    previousStatus: string,
+    newStatus: string,
+    options: AutoEmitOptions = {}
+) {
+    return emitMandatoryLifecycleEventAsync(
+        repoRoot,
+        taskId,
+        LIFECYCLE_EVENT_TYPES.STATUS_CHANGED,
+        'INFO',
+        `Task status changed: ${previousStatus} → ${newStatus}.`,
+        {
+            previous_status: previousStatus,
+            new_status: newStatus
+        },
+        { ...options, actor: options.actor || 'orchestrator' }
+    );
+}
+
+export function emitReviewerDelegationRoutedEvent(
+    repoRoot: string,
+    taskId: string,
+    reviewType: string,
+    executionMode: 'delegated_subagent',
+    reviewerSessionId: string,
+    fallbackReason: string | null = null,
+    options: AutoEmitOptions = {}
+) {
+    return emitLifecycleEvent(
+        repoRoot,
+        taskId,
+        LIFECYCLE_EVENT_TYPES.REVIEWER_DELEGATION_ROUTED,
+        'INFO',
+        `Reviewer delegation: ${reviewType} → ${executionMode}.`,
+        {
+            review_type: reviewType,
+            reviewer_execution_mode: executionMode,
+            reviewer_session_id: reviewerSessionId,
+            delegation_used: executionMode === 'delegated_subagent',
+            reviewer_fallback_reason: fallbackReason
+        },
+        { ...options, actor: options.actor || 'orchestrator' }
+    );
+}
+
+export async function emitReviewerDelegationRoutedEventAsync(
+    repoRoot: string,
+    taskId: string,
+    reviewType: string,
+    executionMode: 'delegated_subagent',
+    reviewerSessionId: string,
+    fallbackReason: string | null = null,
+    options: AutoEmitOptions & { reviewContextSha256?: string | null; taskCriteriaBindingSha256?: string | null;
+        taskCriteriaBindingSchema?: string | null } = {}
+) {
+    return emitLifecycleEventAsync(
+        repoRoot,
+        taskId,
+        LIFECYCLE_EVENT_TYPES.REVIEWER_DELEGATION_ROUTED,
+        'INFO',
+        `Reviewer delegation: ${reviewType} → ${executionMode}.`,
+        {
+            review_type: reviewType,
+            reviewer_execution_mode: executionMode,
+            reviewer_session_id: reviewerSessionId,
+            delegation_used: executionMode === 'delegated_subagent',
+            reviewer_fallback_reason: fallbackReason,
+            ...(options.reviewContextSha256 ? { review_context_sha256: options.reviewContextSha256 } : {}),
+            ...(options.taskCriteriaBindingSha256 && options.taskCriteriaBindingSchema
+                ? { task_criteria_binding_sha256: options.taskCriteriaBindingSha256,
+                    task_criteria_binding_schema: options.taskCriteriaBindingSchema } : {})
+        },
+        { ...options, actor: options.actor || 'orchestrator' }
+    );
+}
+
+export async function emitReviewerLaunchPreparedEventAsync(
+    repoRoot: string,
+    taskId: string,
+    reviewType: string,
+    executionMode: 'delegated_subagent',
+    reviewerSessionId: string,
+    reviewContextSha256: string,
+    routingEventSha256: string,
+    launchBindingSha256: string,
+    options: ReviewerInvocationAttestedOptions = {}
+) {
+    return emitLifecycleEventAsync(
+        repoRoot,
+        taskId,
+        LIFECYCLE_EVENT_TYPES.REVIEWER_LAUNCH_PREPARED,
+        'INFO',
+        `Reviewer launch prepared: ${reviewType} → ${reviewerSessionId}.`,
+        {
+            task_id: taskId,
+            review_type: reviewType,
+            reviewer_execution_mode: executionMode,
+            reviewer_session_id: reviewerSessionId,
+            reviewer_identity: reviewerSessionId,
+            review_context_sha256: reviewContextSha256,
+            routing_event_sha256: routingEventSha256,
+            launch_binding_sha256: launchBindingSha256,
+            ...(options.launchDetails || {})
+        },
+        { ...options, actor: options.actor || 'orchestrator' }
+    );
+}
+
+/**
+ * A launch gate refused the review context's reviewer handoff inputs (stale, corrupt or missing prompt or template).
+ * Next-step reads this authenticated refusal to route the lane to a context rebuild instead of the refused gate.
+ */
+export async function emitReviewerHandoffInputsRejectedEventAsync(
+    repoRoot: string,
+    taskId: string,
+    reviewType: string,
+    rejection: { gate: string; reviewContextPath: string; reviewContextSha256: string; reason: string },
+    options: AutoEmitOptions = {}
+) {
+    return emitLifecycleEventAsync(
+        repoRoot,
+        taskId,
+        LIFECYCLE_EVENT_TYPES.REVIEWER_HANDOFF_INPUTS_REJECTED,
+        'FAIL',
+        `${rejection.gate} refused the '${reviewType}' reviewer handoff inputs; the review context must be rebuilt.`,
+        {
+            task_id: taskId,
+            review_type: reviewType,
+            gate: rejection.gate,
+            review_context_path: rejection.reviewContextPath,
+            review_context_sha256: rejection.reviewContextSha256,
+            reason: rejection.reason.slice(0, 2000)
+        },
+        { ...options, actor: options.actor || 'gate' }
+    );
+}
+
+export async function emitReviewerLaunchInputPinnedEventAsync(
+    repoRoot: string,
+    taskId: string,
+    reviewType: string,
+    executionMode: 'delegated_subagent',
+    reviewerSessionId: string,
+    reviewContextSha256: string,
+    routingEventSha256: string,
+    launchBindingSha256: string,
+    reviewerLaunchAttemptId: string,
+    preparedLaunchEventSha256: string,
+    reviewerLaunchArtifactPath: string,
+    reviewerLaunchInputArtifactPath: string,
+    reviewerLaunchInputArtifactSha256: string,
+    options: AutoEmitOptions = {}
+) {
+    return emitLifecycleEventAsync(
+        repoRoot,
+        taskId,
+        LIFECYCLE_EVENT_TYPES.REVIEWER_LAUNCH_INPUT_PINNED,
+        'INFO',
+        `Reviewer launch input pinned: ${reviewType} → ${reviewerSessionId}.`,
+        {
+            task_id: taskId,
+            review_type: reviewType,
+            reviewer_execution_mode: executionMode,
+            reviewer_session_id: reviewerSessionId,
+            reviewer_identity: reviewerSessionId,
+            review_context_sha256: reviewContextSha256,
+            routing_event_sha256: routingEventSha256,
+            launch_binding_sha256: launchBindingSha256,
+            reviewer_launch_attempt_id: reviewerLaunchAttemptId,
+            prepared_launch_event_sha256: preparedLaunchEventSha256,
+            reviewer_launch_artifact_path: reviewerLaunchArtifactPath,
+            reviewer_launch_input_artifact_path: reviewerLaunchInputArtifactPath,
+            reviewer_launch_input_artifact_sha256: reviewerLaunchInputArtifactSha256
+        },
+        { ...options, actor: options.actor || 'orchestrator' }
+    );
+}
+
+export async function emitReviewerDelegationStartedEventAsync(
+    repoRoot: string,
+    taskId: string,
+    reviewType: string,
+    executionMode: 'delegated_subagent',
+    reviewerSessionId: string,
+    reviewContextSha256: string,
+    routingEventSha256: string,
+    options: ReviewerInvocationAttestedOptions = {}
+) {
+    return emitLifecycleEventAsync(
+        repoRoot,
+        taskId,
+        LIFECYCLE_EVENT_TYPES.REVIEWER_DELEGATION_STARTED,
+        'INFO',
+        `Reviewer delegation started: ${reviewType} -> ${reviewerSessionId}.`,
+        {
+            task_id: taskId,
+            review_type: reviewType,
+            reviewer_execution_mode: executionMode,
+            reviewer_session_id: reviewerSessionId,
+            reviewer_identity: reviewerSessionId,
+            review_context_sha256: reviewContextSha256,
+            routing_event_sha256: routingEventSha256,
+            ...(options.launchDetails || {})
+        },
+        { ...options, actor: options.actor || 'orchestrator' }
+    );
+}
+
+export async function emitReviewerLaunchFailedEventAsync(
+    repoRoot: string,
+    taskId: string,
+    reviewType: string,
+    executionMode: 'delegated_subagent',
+    reviewerSessionId: string,
+    reviewContextSha256: string,
+    routingEventSha256: string,
+    options: ReviewerInvocationAttestedOptions = {}
+) {
+    return emitLifecycleEventAsync(
+        repoRoot,
+        taskId,
+        LIFECYCLE_EVENT_TYPES.REVIEWER_LAUNCH_FAILED,
+        'FAIL',
+        `Reviewer launch failed: ${reviewType} -> ${reviewerSessionId}.`,
+        {
+            task_id: taskId,
+            review_type: reviewType,
+            reviewer_execution_mode: executionMode,
+            reviewer_session_id: reviewerSessionId,
+            reviewer_identity: reviewerSessionId,
+            review_context_sha256: reviewContextSha256,
+            routing_event_sha256: routingEventSha256,
+            ...(options.launchDetails || {})
+        },
+        { ...options, actor: options.actor || 'orchestrator' }
+    );
+}
+
+export async function emitReviewerLaunchCompletedEventAsync(
+    repoRoot: string,
+    taskId: string,
+    reviewType: string,
+    executionMode: 'delegated_subagent',
+    reviewerSessionId: string,
+    reviewContextSha256: string,
+    routingEventSha256: string,
+    options: ReviewerInvocationAttestedOptions = {}
+) {
+    return emitLifecycleEventAsync(
+        repoRoot,
+        taskId,
+        LIFECYCLE_EVENT_TYPES.REVIEWER_LAUNCH_COMPLETED,
+        'INFO',
+        `Reviewer launch completed: ${reviewType} -> ${reviewerSessionId}.`,
+        {
+            task_id: taskId,
+            review_type: reviewType,
+            reviewer_execution_mode: executionMode,
+            reviewer_session_id: reviewerSessionId,
+            reviewer_identity: reviewerSessionId,
+            review_context_sha256: reviewContextSha256,
+            routing_event_sha256: routingEventSha256,
+            ...(options.launchDetails || {})
+        },
+        { ...options, actor: options.actor || 'orchestrator' }
+    );
+}
+
+export function emitReviewerInvocationAttestedEvent(
+    repoRoot: string,
+    taskId: string,
+    reviewType: string,
+    executionMode: 'delegated_subagent',
+    reviewerSessionId: string,
+    reviewContextSha256: string,
+    routingEventSha256: string,
+    options: ReviewerInvocationAttestedOptions = {}
+) {
+    return emitLifecycleEvent(
+        repoRoot,
+        taskId,
+        LIFECYCLE_EVENT_TYPES.REVIEWER_INVOCATION_ATTESTED,
+        'INFO',
+        `Reviewer invocation attested: ${reviewType} → ${reviewerSessionId}.`,
+        {
+            task_id: taskId,
+            review_type: reviewType,
+            reviewer_execution_mode: executionMode,
+            reviewer_session_id: reviewerSessionId,
+            reviewer_identity: reviewerSessionId,
+            review_context_sha256: reviewContextSha256,
+            routing_event_sha256: routingEventSha256,
+            ...(options.launchDetails || {})
+        },
+        { ...options, actor: options.actor || 'orchestrator' }
+    );
+}
+
+export async function emitReviewerInvocationAttestedEventAsync(
+    repoRoot: string,
+    taskId: string,
+    reviewType: string,
+    executionMode: 'delegated_subagent',
+    reviewerSessionId: string,
+    reviewContextSha256: string,
+    routingEventSha256: string,
+    options: ReviewerInvocationAttestedOptions = {}
+) {
+    return emitLifecycleEventAsync(
+        repoRoot,
+        taskId,
+        LIFECYCLE_EVENT_TYPES.REVIEWER_INVOCATION_ATTESTED,
+        'INFO',
+        `Reviewer invocation attested: ${reviewType} → ${reviewerSessionId}.`,
+        {
+            task_id: taskId,
+            review_type: reviewType,
+            reviewer_execution_mode: executionMode,
+            reviewer_session_id: reviewerSessionId,
+            reviewer_identity: reviewerSessionId,
+            review_context_sha256: reviewContextSha256,
+            routing_event_sha256: routingEventSha256,
+            ...(options.launchDetails || {})
+        },
+        { ...options, actor: options.actor || 'orchestrator' }
+    );
+}
+
+export function emitProviderRoutingEvent(repoRoot: string, taskId: string, provider: string, routedTo: string, reason: string, options: AutoEmitOptions = {}) {
+    return emitLifecycleEvent(
+        repoRoot,
+        taskId,
+        LIFECYCLE_EVENT_TYPES.PROVIDER_ROUTING_DECISION,
+        'INFO',
+        `Provider routing: ${provider} → ${routedTo}.`,
+        {
+            provider,
+            routed_to: routedTo,
+            reason
+        },
+        { ...options, actor: options.actor || 'orchestrator' }
+    );
+}
+
+export async function emitProviderRoutingEventAsync(repoRoot: string, taskId: string, provider: string, routedTo: string, reason: string, options: AutoEmitOptions = {}) {
+    return emitLifecycleEventAsync(
+        repoRoot,
+        taskId,
+        LIFECYCLE_EVENT_TYPES.PROVIDER_ROUTING_DECISION,
+        'INFO',
+        `Provider routing: ${provider} → ${routedTo}.`,
+        {
+            provider,
+            routed_to: routedTo,
+            reason
+        },
+        { ...options, actor: options.actor || 'orchestrator' }
+    );
+}

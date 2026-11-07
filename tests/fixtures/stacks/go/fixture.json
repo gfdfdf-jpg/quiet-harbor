@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "id": "go",
+  "title": "Go",
+  "adapter": null,
+  "technologies": [
+    {
+      "id": "go",
+      "executable": "tools/go",
+      "compileArgv": [
+        "build",
+        "./orders",
+        "./partners"
+      ],
+      "firstArgv": [
+        "test",
+        "-json",
+        "./orders",
+        "-run",
+        "^TestTaskContract$"
+      ],
+      "allArgv": [
+        "test",
+        "-json",
+        "./orders",
+        "./partners",
+        "-run",
+        "^TestTaskContract$"
+      ],
+      "broadArgv": [
+        "test",
+        "./..."
+      ],
+      "report": "text",
+      "secondArgv": [
+        "test",
+        "-json",
+        "./partners",
+        "-run",
+        "^TestTaskContract$"
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "orders",
+      "technology": "go",
+      "source": "orders/service.go",
+      "target": "orders/service_test.go",
+      "case": "task-contract",
+      "comment": "//"
+    },
+    {
+      "id": "partners",
+      "technology": "go",
+      "source": "partners/service.go",
+      "target": "partners/service_test.go",
+      "case": "task-contract",
+      "comment": "//"
+    }
+  ],
+  "helpers": []
+}

@@ -1,0 +1,31 @@
+import { writeFileAtomically } from './filesystem';
+import { ensureTrailingLineEnding } from './line-endings';
+import { readInvocationTextFile } from './invocation-file-observation';
+
+export interface FormatJsonOptions {
+    indent?: number;
+    newline?: string;
+}
+
+export function parseJsonText(text: string, sourceLabel: string = 'JSON input'): unknown {
+    try {
+        return JSON.parse(text);
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`Invalid JSON in ${sourceLabel}: ${message}`);
+    }
+}
+
+export function readJsonFile(filePath: string): unknown {
+    return parseJsonText(readInvocationTextFile(filePath), filePath);
+}
+
+export function formatJson(value: unknown, options: FormatJsonOptions = {}): string {
+    const indent = options.indent ?? 2;
+    const newline = options.newline || '\n';
+    return ensureTrailingLineEnding(JSON.stringify(value, null, indent), newline);
+}
+
+export function writeJsonFile(filePath: string, value: unknown, options: FormatJsonOptions = {}): string {
+    return writeFileAtomically(filePath, formatJson(value, options), { encoding: 'utf8' });
+}
