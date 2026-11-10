@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { preservedDeltaFieldScenario } from './walk-preserved-delta-field-scenarios';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -39,6 +40,7 @@ export function fieldSpringScenario(id: string, modules: 1 | 2 = 2): WalkScenari
 }
 
 export function fieldCase(id: typeof FIELD_CASE_IDS[number], modules: 1 | 2 = 2): WalkScenario {
+    if (id === 'field-onlinestore-passed-delta-after-test-repair') return preservedDeltaFieldScenario();
     const base = fieldSpringScenario(id, modules);
     const legacyProducer = id === 'field-onlinestore-op035-follow-up-attribution';
     if (id === 'field-onlinestore-op035-follow-up-attribution') {

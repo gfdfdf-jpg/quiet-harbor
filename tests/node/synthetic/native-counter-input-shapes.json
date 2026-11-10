@@ -188,6 +188,21 @@
       "id": "native-v4-task-local-full-suite-child-tree",
       "base_state": "task-local-full-suite-child-tree",
       "review_types": null
+    },
+    {
+      "id": "native-v4-preserved-delta-origin-chain",
+      "base_state": "preserved-delta-origin-chain",
+      "review_types": null
+    },
+    {
+      "id": "native-v4-two-source-api-initial",
+      "base_state": "two-source-api-initial",
+      "review_types": null
+    },
+    {
+      "id": "native-v4-two-source-api-remediation",
+      "base_state": "two-source-api-remediation",
+      "review_types": null
     }
   ]
 }

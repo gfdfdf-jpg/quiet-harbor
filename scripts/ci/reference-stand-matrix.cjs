@@ -11,19 +11,16 @@ function shardCount(value, name) {
     return total;
 }
 
-/**
- * Each OS has its own shard count and deep review selection. Review logic is OS independent, so Linux can carry every
- * deep family on every stack while Windows, about four times slower on ACL and process start-up, keeps the complete
- * full level with the seeded deep rotation and more shards. Both still merge into their own complete verdict.
- */
+/** Both OS defaults run all deep families. Sharding changes distribution only; it never drops common matrix cells. */
 function referenceStandMatrix(env) {
     const systems = [
         { os: 'linux', runner: 'ubuntu-latest', total: shardCount(env.STAND_LINUX_SHARDS || '10', 'linux_shards'),
             review_stacks: env.STAND_LINUX_REVIEW_STACKS || 'all' },
         { os: 'windows', runner: 'windows-latest', total: shardCount(env.STAND_WINDOWS_SHARDS || '16', 'windows_shards'),
-            review_stacks: env.STAND_WINDOWS_REVIEW_STACKS || 'seeded' }
+            review_stacks: env.STAND_WINDOWS_REVIEW_STACKS || 'all' }
     ];
     if (!['full', 'sweep'].includes(env.STAND_LEVEL)) throw new Error('level must be full or sweep');
+    if (!['all', 'stand', 'review-matrix'].includes(env.STAND_SUITE || 'all')) throw new Error('suite must be all, stand or review-matrix');
     if (!['linux', 'windows', 'both'].includes(env.STAND_OS)) throw new Error('os must be linux, windows or both');
     for (const system of systems) {
         if (!REVIEW_STACKS.includes(system.review_stacks)) throw new Error(system.os + '_review_stacks must be rotation, seeded or all');

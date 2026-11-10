@@ -614,6 +614,8 @@ export function buildReviewContext(options: BuildReviewContextOptions) {
         },
         ...(customReviewLaneBinding ? { review_lane: customReviewLaneBinding } : {}),
         review_execution: reviewExecutionContract,
+        ...(reviewExecutionValidationAuthority?.preserved_current_scope
+            ? { review_execution_preserved_by: reviewExecutionValidationAuthority.preserved_current_scope } : {}),
         coverage_contract: coverageContract,
         coverage_scope: {
             changed_files: coverageChangedFiles,

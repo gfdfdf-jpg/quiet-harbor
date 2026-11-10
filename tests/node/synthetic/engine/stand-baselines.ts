@@ -13,8 +13,8 @@ export const BASELINE_FILES = {
 } as const;
 export type BaselineKind = keyof typeof BASELINE_FILES;
 export const EXPECTATION_SOURCES = ['engine/walk-scenarios.ts', 'engine/walk-stack-scenarios.ts', 'engine/walk-stack-parent.ts', 'engine/walk-unknown-stack-contract.ts',
-    'engine/walk-field-cases.ts', 'engine/walk-field-case-ids.ts', 'engine/stand-check-plan.ts', 'engine/stand-check-observation.ts',
-    'engine/stand-properties.ts', 'stand-properties.json', '../../../docs/stand/concept-rules.md',
+    'engine/walk-field-cases.ts', 'engine/walk-remediation-script.ts', 'engine/common-review-matrix.ts', 'engine/review-matrix-native.ts', 'review-matrix.cjs', 'engine/walk-preserved-delta-counter-state.ts', 'preserved-delta-counter-calibration-evidence.json', 'engine/walk-field-case-ids.ts', 'engine/stand-check-plan.ts', 'engine/stand-check-observation.ts',
+    'engine/stand-properties.ts', 'stand-properties.json', '../../../docs/stand/concept-rules.md', '../../../docs/stand/review-transition-matrix.md',
     'engine/walk-clock.ts', 'engine/walk-native-owner.ts', 'engine/walk-plan.ts', 'engine/walk-progress.ts', '../../fixtures/stacks/review-rotation.json',
     'engine/walk-run-store.ts', 'engine/walk-restored-parent-controls.ts', 'engine/walk-economy.ts', 'known-findings.json', 'known-walk-findings.json', 'known-uncovered-routes.json', 'api-counter-calibration-evidence.json', 'native-counter-input-shapes.json', 'native-counter-calibration-evidence.json', 'single-repair-counter-calibration-evidence.json', 'engine/walk-metrics.ts', 'engine/navigator-walk.ts',
     '../../fixtures/stacks/tasks.json', '../../fixtures/stacks/catalog.json'];

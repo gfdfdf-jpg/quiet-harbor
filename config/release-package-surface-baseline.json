@@ -4,10 +4,10 @@
     "name": "garda-agent-orchestrator",
     "version": "1.4.4"
   },
-  "packedFileManifestSha256": "c9437b077a2b2d9e2b75df048f619a196fe7ae2e4d263f3db3e3eb5c6411d209",
-  "tarballSha256": "b44edd80e3ee8d37705f1362f5ca9cd252ba10017a93a38a4bab6f3184c9fa87",
+  "packedFileManifestSha256": "45c55ab96b3b5a2f6165a545b5ca84c4251f78b88fb7b2064dd7618822a2b94a",
+  "tarballSha256": "44021f18d33ca32fc7e94d0f80489868e528dc60750d4d2b620b590d36637d3e",
   "tarballSha256ByPlatform": {
-    "win32": "b44edd80e3ee8d37705f1362f5ca9cd252ba10017a93a38a4bab6f3184c9fa87"
+    "win32": "44021f18d33ca32fc7e94d0f80489868e528dc60750d4d2b620b590d36637d3e"
   },
   "packedFileSha256": {
     ".gitattributes": "099d1a09ca2f02b2d7d071bcc19fdd2cda5c66f01f133abe9ff9d63294a1055c",
@@ -31,7 +31,7 @@
     "bin/garda/process-delegation.js": "8de46ad82a42256e30cfa4fe3e073a634afc48f22c19026d471744d0a39bc61f",
     "bin/garda/root-discovery.js": "a2c381d229ea87e4959ff95573b837da557ad71adfb1a21a5e3ee30ec5ea8e07",
     "bin/garda/runtime-loading.js": "28e2333d62e1338ace5fdc7988082ea5b79c905639d51556fe2de1e328658aaa",
-    "dist/publish-runtime-manifest.json": "d3ce14600b5e2dba8d5c6cce103da7e184df27a16928252ce0bff5208607e33a",
+    "dist/publish-runtime-manifest.json": "3cf980eb3625ef875f06aa393852cc409b1fa4155afd43526b35c692455dc25d",
     "dist/src/bin/garda.js": "5bb0b379b56f5dceb7524583e3b485c33ec1d9c519299346c3b079935fc28778",
     "dist/src/bin/garda/compile-cache.js": "dd71b5942c88680041d104475a6b8e3e6384e2ae07d0ff69f7c7278551041171",
     "dist/src/bin/garda/delegation-policy.js": "742e3ebebee0b0edebead5c9286e9d82b178be34f12c8dfc296923b57b845fc8",
@@ -120,9 +120,9 @@
     "dist/src/cli/commands/gate-flows/review-context/index.js": "9d72b0237598ac03473ee13e56a81f1e71834d5d790716e7a5bb7395a2b34723",
     "dist/src/cli/commands/gate-flows/review-context/review-context-command-binding.js": "a061bff10c1551565edad7decedcf4f66d53d95f6a6dc2b1906827e7f194164b",
     "dist/src/cli/commands/gate-flows/review-context/review-context-flow-current-pass-reuse.js": "fe0833157069f12aea6b2eb84d749970cea7f10f54c1f00ea7457b09713ccbbd",
-    "dist/src/cli/commands/gate-flows/review-context/review-context-flow-historical-reuse.js": "21b87944b8073ceca7dc5dbe8da401688cdfedb2cdd65b0462d82df8a16b9308",
+    "dist/src/cli/commands/gate-flows/review-context/review-context-flow-historical-reuse.js": "e57737682f733ed55b3157fda9d7b9a5386060cafb4637fdfbe219efc54be745",
     "dist/src/cli/commands/gate-flows/review-context/review-context-flow-json.js": "e08db429d4c29ee09baedcb49582152e02003eccc3b29f57e1a07cf883e3b14c",
-    "dist/src/cli/commands/gate-flows/review-context/review-context-flow.js": "b4f983eb30a7c6e587811401649cdcdd04d8bfb345cdd8f9003cb871a66fe531",
+    "dist/src/cli/commands/gate-flows/review-context/review-context-flow.js": "5efd080dbbb4e149d8a70d362c3a33aae938913694fbf34f4d4dc8d5594e5e8c",
     "dist/src/cli/commands/gate-flows/review-context/review-context-telemetry.js": "12867ac489e13d332355c56b8cb85560a9f6aedc37859c220c3987e367800128",
     "dist/src/cli/commands/gate-flows/review/index.js": "1f3ad9e08f642bedb32109c07e37961bb2c826e48ea48faf4203623e76113d39",
     "dist/src/cli/commands/gate-flows/review/review-flow-preflight-pipeline.js": "0119dc121a4b71fda9d18465dd0d69a9b881c9468554d14c53f317aea6bc7d69",
@@ -154,7 +154,7 @@
     "dist/src/cli/commands/gate-parent-audit-handlers.js": "0107024fd924a2a2d79e5b8dbc13b8e1178c39079f5b01d3510fac0fdec05e84",
     "dist/src/cli/commands/gate-reset-preflight.js": "431e4ce9e866fbd3f830cb4a3ab5ba076e536a6a6469bf79d0ce1bf441043486",
     "dist/src/cli/commands/gate-review-handlers/context/index.js": "38632db8e3b4d8987ebeef6392dde15ff78026514165f2fdcc2425fa692c2031",
-    "dist/src/cli/commands/gate-review-handlers/context/review-context-runtime-validation.js": "9fdf3613fb57f1584603012de7341c46bdd5b7ca14d3de2aa981a50b73f708d4",
+    "dist/src/cli/commands/gate-review-handlers/context/review-context-runtime-validation.js": "65572eaaefe345657c7c72a95d7903aa5e02fe4970ed69d025ddce238d19e7ec",
     "dist/src/cli/commands/gate-review-handlers/index.js": "9b40e494991aa0986f2ab0843ebd0070c8281c4dfc55e4267a03cb93113a4245",
     "dist/src/cli/commands/gate-review-handlers/launch/index.js": "b0861c1ebc92d275fc2b43c9cc1d80dede4855cd6da20d58c4a7303c192a64d8",
     "dist/src/cli/commands/gate-review-handlers/launch/review-artifact-path-support.js": "827260851664842967e6d5be6a55c4b24565deddca2b587026de8729729f33ee",
@@ -631,8 +631,8 @@
     "dist/src/gates/next-step/next-step-pre-implementation-routing.js": "177126092d32387dda3c587854f293e9d735169c9db6d17f4de122cf9dcc7482",
     "dist/src/gates/next-step/next-step-pre-review-routing.js": "4ae47abfdd36cf6b69fd4a14d5146b69b6e6c8b17c8b218a8877ac6318edd155",
     "dist/src/gates/next-step/next-step-preflight-recovery.js": "2134da5db83f7116751ef0e0c2dddf33f445b5ec14c1a78e818b037d60a98358",
-    "dist/src/gates/next-step/next-step-preflight-workspace-readiness.js": "6f51fa8682c9c699572c443c2f11badef8d91765c09362baec8236996472cf1d",
-    "dist/src/gates/next-step/next-step-protected-scope.js": "e7c0aa87458521a35fb4aa921184ff6f3b2b528d776c5d0fdc186a12435f1904",
+    "dist/src/gates/next-step/next-step-preflight-workspace-readiness.js": "7393c6d001061cc1b5a854de6cf9cff306013b5eee839926a9db0f7ff187ac31",
+    "dist/src/gates/next-step/next-step-protected-scope.js": "1231ba0891ccf56e98662235a415cb898cde104124c0fd43a839890c9c7fc23b",
     "dist/src/gates/next-step/next-step-quality-checklist-readiness.js": "056e81f98521200de6ee1c0826b0fdbf531c97ede95bae30b61d367ee4a09225",
     "dist/src/gates/next-step/next-step-readiness-domain-scope.js": "82b144e4fcaf5303ec8c2b34da16e22eb3973b72d2c626116a36c9463ac9dfe3",
     "dist/src/gates/next-step/next-step-readiness-readers.js": "8334a5ba29a066770b15166e184323fe89fca645779473f5534fed9967e221a2",
@@ -759,10 +759,10 @@
     "dist/src/gates/review-attempts/review-closed-cycle-storage.js": "ccc70a2ce6e8aaafb340cd0af86ef4e94e5fb716c124be793d6e0e24c27115a8",
     "dist/src/gates/review-attempts/review-closed-cycle-summary.js": "1d74552ba87c0bbde3d5c27d72b3c2feefc8bf536ed73bdc89d2afe449223a42",
     "dist/src/gates/review-attempts/review-history-integrity.js": "3cc9b020bb73427971a11ec41b914bde1ea14129034d7a46cb0fb14513746b05",
-    "dist/src/gates/review-context/build-review-context.js": "40df4f371335a7202337a57fecd4b052f8e843007cd2a5bb8375827e474835b4",
+    "dist/src/gates/review-context/build-review-context.js": "0c4441d9ff46fe18f776b34af16da40f692dbf7b6facec6ff48f6f411c9f7ce2",
     "dist/src/gates/review-context/index.js": "a837daedf8c2cacfd1d1b2dbf87cc3bde9ce9aede12cd12ee22800cb1009d8df",
     "dist/src/gates/review-context/review-context-artifacts.js": "01ecc7339b847f3e301b0da775fbbf0dafb9f69171b96b4c30351108ccfdff4d",
-    "dist/src/gates/review-context/review-context-contract.js": "fb800d84fe3fbc3d56682a7e8f7e3b875a3d39fead50152c86b18d9a1b0b0eaa",
+    "dist/src/gates/review-context/review-context-contract.js": "01ca300da50b47133e58f9f9a0f9920fdfcf0393f3b513ad4185b678c2a0159d",
     "dist/src/gates/review-context/review-context-coverage.js": "09d13293c653efcbcd45cf788d7c0999745e90f4b7deb482d33fd907a46c2f10",
     "dist/src/gates/review-context/review-context-diff.js": "7b62b15c6b941cf55cf7ddfa9210e0d5ea616c0ff1353bfdb59ab4aedb951d53",
     "dist/src/gates/review-context/review-context-focused-intermediate-evidence.js": "d22a7461ef9c0cee37cc5f340da3363e8c8b7f0e9ec34cc1cb11531f83415776",
@@ -792,10 +792,11 @@
     "dist/src/gates/review-remediation/review-remediation-classification-evidence.js": "9aa65742c768dc20b1a805161d94593626d986b9e4c700e2a6c028bdd1d09a40",
     "dist/src/gates/review-remediation/review-remediation-delta-contract.js": "c63f46c57b42db70646ba28540e3ec4e301d50941d5820b217feaef5ddfab9dc",
     "dist/src/gates/review-remediation/review-remediation-delta.js": "31f36c539d594bdf099270a484a75e454892232dc771862ae28b1795c557ec15",
-    "dist/src/gates/review-remediation/review-remediation-execution-authority.js": "afd9dcb56d408b4dd2e642a6dc90bc7a87de1068ee93cbdd98d479db0b93a04f",
+    "dist/src/gates/review-remediation/review-remediation-execution-authority.js": "f484271d0920d2fbbb45920c749c885afbcfb8ff9bc770133c98781cbc0bc05d",
     "dist/src/gates/review-remediation/review-remediation-finding-scope.js": "a8f4ec7c0dbb7c7c53a6d25153bc358f2d905c86569b84df66ec324308414c7c",
     "dist/src/gates/review-remediation/review-remediation-impact-template.js": "68ddf3c955c9e73a2a7cc416ba70c977398d6e8029dc341645edf80e703383a9",
     "dist/src/gates/review-remediation/review-remediation-origin.js": "fbd6854c2ffea992247edb5d15754784e1b844643af3d78cd8892a10b13738b6",
+    "dist/src/gates/review-remediation/review-remediation-preserved-verdict.js": "6b0c79f06c6c6f3fbd57ce6a1904e3d54f14b0ab16a084c6c90373592af27ed7",
     "dist/src/gates/review-remediation/review-remediation-readable-diff.js": "f3a967373d6c7db065a8e877df8ba004701fe98a09f4f3a922d890c413523e48",
     "dist/src/gates/review-remediation/review-remediation-recovery-routing.js": "c1b2fa65b45dd18e57442e3bc3cd60d9358f9db7bfda9d3f0b10898ae8e6eeef",
     "dist/src/gates/review-remediation/review-remediation-review-contract.js": "16e431f124e51c53725cd9b3c2cfecbcd461532db3700bcba412a6a7d7d971fe",
@@ -807,7 +808,7 @@
     "dist/src/gates/review-remediation/reviewed-tree-upstream-reviews.js": "12fbeac945bb6d592baf7c4e73d790bd13d9a0df0d15330cb8d43c4af509f90a",
     "dist/src/gates/review-reuse/index.js": "b80f11f7d97eb4adda13e10517656a92829a93883ecbd5bbef1a3141dd4ac39e",
     "dist/src/gates/review-reuse/review-reuse-historical-window.js": "fd7b0198980704870b90fe1915fe2ef81887ee804a9000a29a37ffe9ab9d9554",
-    "dist/src/gates/review-reuse/review-reuse-materialization.js": "d87588e79eca0f24b5304abb8b9cea79112a56794cee291e5a4fa32bd7822706",
+    "dist/src/gates/review-reuse/review-reuse-materialization.js": "f034c34eb1ebb85bbf3a45675b52ed8df5f6af6dbde76ad1e300bc7ea40c273a",
     "dist/src/gates/review-reuse/review-reuse-policy-lane.js": "927bda2082b3c29e3cbcdbb73e6bad4203a46c31bc32f536b5677155e9dd49a3",
     "dist/src/gates/review-reuse/review-reuse-telemetry-diagnostics.js": "61ce9c04d57b69fbd3b3df2e2018ac33413d2b6ab671eeb12f8e2a53832a2945",
     "dist/src/gates/review-reuse/review-reuse-telemetry-events.js": "574d08d41747959bd0b208fb13828a0d336d167384fd7087d1b9b8abf05c16ca",
@@ -1706,9 +1707,9 @@
     "tsconfig.node-foundation.json": "bd42060a2b282ed055e487f79886ea9a9f0bd375cdf0a97608f0aea300e1c8ca"
   },
   "metrics": {
-    "fileCount": 1694,
-    "unpackedSizeBytes": 30280190,
-    "installedSizeBytes": 30285786,
+    "fileCount": 1695,
+    "unpackedSizeBytes": 30299438,
+    "installedSizeBytes": 30305034,
     "productionDependencyCount": 0,
     "lifecycleScripts": {
       "postpack": "node scripts/package-legacy-entrypoint-compat.cjs remove",
@@ -1785,7 +1786,7 @@
       "child_process": 45,
       "exec": 240,
       "fetch": 45,
-      "fs": 3855,
+      "fs": 3854,
       "readFile": 556,
       "writeFile": 134
     }
@@ -1803,5 +1804,5 @@
       "writeFile": 0
     }
   },
-  "rationale": "Audited accumulated Garda 1.4.4 task-local validation, review recovery, parent WIP restoration, compile applicability, startup recovery and rule materialization changes through source 5c9f128f. Exact packed diff retains 296 changed files and 46 added runtime modules, no removed files; package grows 1014884 bytes. Production dependencies remain zero, executable paths, minified artifacts, URL hosts, lifecycle scripts and package metadata are unchanged. Lexical risk changes exec +23, fs +82, writeFile +1 and readFile -13 are recorded explicitly; child_process and fetch counts are unchanged. Developer wrappers, profiles and test logs are excluded. Retain every existing allowedGrowth value; this baseline refresh records reviewed release content and does not relax future drift checks."
+  "rationale": "P12: audited 1.4.4 review-preservation authority and current-scope obligation validation; remove unused Git queries; production dependencies, lifecycle scripts and growth allowances unchanged; developer matrix and diagnostics excluded from the package."
 }

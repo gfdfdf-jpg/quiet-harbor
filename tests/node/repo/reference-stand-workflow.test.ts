@@ -18,17 +18,18 @@ test('reference stand dispatch validates and bounds the OS/shard matrix and perm
         assert.deepEqual(rows.map(row => row.shard), Array.from({ length: total }, (_, index) => index + 1));
         assert.ok(rows.every(row => row.total === total && row.review_stacks === stacks), os);
     }
-    // Defaults: Linux carries every deep family on every stack; Windows keeps full with the seeded deep rotation and more shards.
+    // Release defaults run every deep family on every stack on both operating systems.
     const defaults = referenceStandMatrix({ STAND_LEVEL: 'full', STAND_SEED: '1785881697', STAND_OS: 'both', STAND_PROVIDER: 'Codex' });
     assert.deepEqual(defaults.shards.include.filter(row => row.shard === 1).map(row => [row.os, row.total, row.review_stacks]),
-        [['linux', 10, 'all'], ['windows', 16, 'seeded']]);
+        [['linux', 10, 'all'], ['windows', 16, 'all']]);
     assert.deepEqual(referenceStandMatrix({ ...env, STAND_OS: 'windows', STAND_ONLY_SHARD: '13' }).shards.include,
         [{ os: 'windows', runner: 'windows-latest', shard: 13, total: 16, review_stacks: 'seeded' }]);
     assert.deepEqual(referenceStandMatrix({ ...env, STAND_OS: 'linux', STAND_ONLY_SHARD: '7' }).shards.include,
         [{ os: 'linux', runner: 'ubuntu-latest', shard: 7, total: 10, review_stacks: 'all' }]);
+    assert.doesNotThrow(() => referenceStandMatrix({ ...env, STAND_SUITE: 'review-matrix', STAND_OS: 'windows', STAND_ONLY_SHARD: '13' }));
     for (const invalid of [{ STAND_LINUX_SHARDS: '129' }, { STAND_WINDOWS_SHARDS: '0' }, { STAND_WINDOWS_SHARDS: '1.5' }, { STAND_OS: 'macos' },
         { STAND_SEED: '-1' }, { STAND_SEED: '4294967296' }, { STAND_PROVIDER: 'injected' }, { STAND_LINUX_REVIEW_STACKS: 'none' },
-        { STAND_WINDOWS_REVIEW_STACKS: 'none' }, { STAND_ONLY_SHARD: '11' }, { STAND_ONLY_SHARD: '17' }, { STAND_ONLY_SHARD: '0' }])
+        { STAND_WINDOWS_REVIEW_STACKS: 'none' }, { STAND_ONLY_SHARD: '11' }, { STAND_ONLY_SHARD: '17' }, { STAND_ONLY_SHARD: '0' }, { STAND_SUITE: 'unknown' }])
         assert.throws(() => referenceStandMatrix({ ...env, ...invalid }), JSON.stringify(invalid));
 });
 test('reference stand is manual only, immutable, bounded, least privilege and uploads partial and merged evidence on failure', () => {
@@ -50,12 +51,23 @@ test('reference stand is manual only, immutable, bounded, least privilege and up
     assert.match(workflow, /name: Upload partial evidence even on failure\n {8}if: always\(\)/u);
     assert.match(workflow, /name: Upload combined verdict and evidence\n {8}if: always\(\)/u);
     assert.match(workflow, /GITHUB_STEP_SUMMARY/u);
+    assert.match(workflow, /review-matrix[.]cjs run --shard/u);
+    assert.match(workflow, /review-matrix[.]cjs merge --inputs/u);
+    assert.match(workflow, /inputs\.suite != 'review-matrix'/u);
+    assert.match(workflow, /inputs\.suite != 'stand'/u);
+    assert.match(workflow, /does not certify the combined release stand/u);
+    assert.match(workflow, /matrix_verdict="\$RUNNER_TEMP\/reference-merged\/review-matrix\/review-matrix-verdict[.]json"/u,
+        'A successful matrix-only diagnostic must report its own verdict instead of falsely requiring the skipped stand summary');
+    assert.match(workflow, /--report "\$RUNNER_TEMP\/review-matrix-shard\/worker-1"/u);
+    assert.match(workflow, /--report "\$RUNNER_TEMP\/review-matrix-shard\/worker-2"/u);
+    assert.doesNotMatch(workflow, /--report "\$RUNNER_TEMP\/reference-shard\/review-matrix"/u,
+        'New matrix artifacts must not mutate an already sealed reference shard');
     assert.doesNotMatch(workflow, /run:.*\$\{\{ inputs\./u);
     // Each shard runs its own OS's review selection; workflow_dispatch accepts at most ten inputs.
     assert.match(workflow, /STAND_REVIEW_STACKS: \$\{\{ matrix\.review_stacks \}\}/u);
     assert.match(workflow, /--review-stacks "\$STAND_REVIEW_STACKS"/u);
     const inputs = workflow.slice(workflow.indexOf('    inputs:'), workflow.indexOf('\npermissions:'));
     const names = [...inputs.matchAll(/^ {6}([a-z_]+):\r?$/gmu)].map(match => match[1]);
-    assert.deepEqual(names, ['level', 'linux_shards', 'windows_shards', 'seed', 'os', 'linux_review_stacks', 'windows_review_stacks', 'provider', 'only_shard']);
+    assert.deepEqual(names, ['level', 'linux_shards', 'windows_shards', 'seed', 'os', 'linux_review_stacks', 'windows_review_stacks', 'provider', 'only_shard', 'suite']);
     assert.ok(names.length <= 10);
 });

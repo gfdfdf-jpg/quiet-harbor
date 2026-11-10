@@ -202,6 +202,9 @@ export function assertReviewContextContractOrThrow(options: {
     repoRoot?: string;
 }): void {
     const coverageRequired = options.preflightPayload?.review_coverage_contract_required === true;
+    if (options.reviewContext?.review_execution_preserved_by !== undefined) {
+        throw new Error('Preserved review execution is historical reuse evidence only; it cannot authorize a new reviewer launch or result. Rebuild the current review context through next-step.');
+    }
     const reviewContextSchemaVersion = Number(options.reviewContext?.schema_version);
     if (coverageRequired && (!Number.isInteger(reviewContextSchemaVersion) || reviewContextSchemaVersion < 3)) {
         throw new Error(

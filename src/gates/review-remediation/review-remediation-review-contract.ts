@@ -168,6 +168,12 @@ export interface ReviewRemediationReviewContractValidationAuthority {
     authoritativeDecision: ReviewRemediationAuthoritativeDecisionBinding | null;
     authoritativeClassification: ReviewRemediationDecisionClassification | null;
     acceptedCurrentPassReplacement?: boolean;
+    /** Native preservation authority for unchanged reviewed work. The execution contract keeps its original preflight. */
+    preserved_current_scope?: {
+        current_preflight_sha256: string;
+        preserving_decision_sha256: string;
+        preserving_classification_sha256: string;
+    };
 }
 
 /**

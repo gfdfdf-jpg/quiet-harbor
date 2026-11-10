@@ -910,13 +910,15 @@
           "field-misleading-in-scope-refusal",
           "field-project-command-reselection",
           "field-cmd-call-argv",
-          "field-onlinestore-op035-follow-up-attribution"
+          "field-onlinestore-op035-follow-up-attribution",
+          "field-onlinestore-passed-delta-after-test-repair"
         ],
         "sweep": [
           "field-misleading-in-scope-refusal",
           "field-project-command-reselection",
           "field-cmd-call-argv",
-          "field-onlinestore-op035-follow-up-attribution"
+          "field-onlinestore-op035-follow-up-attribution",
+          "field-onlinestore-passed-delta-after-test-repair"
         ]
       },
       "inventoryPattern": "^field-",

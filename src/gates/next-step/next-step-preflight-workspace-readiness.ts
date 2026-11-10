@@ -729,8 +729,13 @@ export function readPreflightWorkspaceReadiness(
             // Explicit classification can authenticate intentionally generated files that Git ignores
             // (for example source-checkout dist/src launcher output). Their content freshness was already
             // checked against currentScope above, so their absence from the ordinary Git snapshot is expected.
-            const ignoredExplicitGitFiles = [...readGitIgnoredPathSet(repoRoot, expectedGitScopeFiles)]
-                .filter((entry) => !currentComparableChangedFileSet.has(entry));
+            // Ignore evidence is consumed only for expected paths missing from the fresh Git snapshot.
+            // When all expected paths are present, every possible result would be discarded below.
+            const hasMissingExpectedGitFiles = expectedGitScopeFiles.some((entry) => !currentComparableChangedFileSet.has(entry));
+            const ignoredExplicitGitFiles = hasMissingExpectedGitFiles
+                ? [...readGitIgnoredPathSet(repoRoot, expectedGitScopeFiles)]
+                    .filter((entry) => !currentComparableChangedFileSet.has(entry))
+                : [];
             const ignoredWorkflowConfigGitFiles = expectedGitScopeFiles.filter((entry) => (
                 isWorkflowConfigControlPlanePath(entry) && !currentComparableChangedFileSet.has(entry)
             ));

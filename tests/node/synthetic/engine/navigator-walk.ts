@@ -1,5 +1,8 @@
 import NATIVE_COUNTER_SHAPES from '../native-counter-input-shapes.json';
+import { hasPreservedDeltaCounterInputs, hasTwoSourceApiCounterInputs, PRESERVED_DELTA_COUNTER_STATE,
+    TWO_SOURCE_API_INITIAL_STATE, TWO_SOURCE_API_REMEDIATION_STATE } from './walk-preserved-delta-counter-state';
 import { WALK_CLOCK_OFFSET } from './walk-clock';
+import { resolveWalkReviewFix, walkRemediationEdits, type WalkRemediationStep } from './walk-remediation-script';
 import { isPlainRecord } from '../../../../src/core/records';
 import { observeStandOracle } from './stand-check-observation';
 import './walk-route-observer';
@@ -106,6 +109,8 @@ export interface WalkScenario {
     reviewerAttestation?: 'provider' | 'controller' | 'provider-no-live-receipt';
     /** The fix written after each failed review. */
     fix?: WalkEdit[];
+    /** Explicit repairs keyed by the failed lane and attempt, including mixed production/test sequences. */
+    remediationSequence?: readonly WalkRemediationStep[];
     disturbances?: WalkDisturbance[];
     /** Fresh reviewer launches per lane the review contract requires. */
     expectedReviews: Record<string, number>;
@@ -239,6 +244,7 @@ interface WalkContext {
     implemented: boolean;
     preservedImplementation?: boolean;
     fixPending: boolean;
+    pendingReviewFailure?: { reviewType: string; attempt: number };
     injected: boolean;
     approveInjectedRestart?: boolean;
     policyAdoptionsApproved?: number;
@@ -585,7 +591,10 @@ export function isWalkEffectReinspection(error: unknown): boolean {
 }
 
 /** Native v4 selectors/receipts add measured proof inputs. Existing budgets stay as the strict unadmitted fallback. */
-export function measuredNativeCounterState(admitted: string | undefined, events: WalkResult['events'], nativeBundlePrepared = false): string | undefined {
+export function measuredNativeCounterState(admitted: string | undefined, events: WalkResult['events'], nativeBundlePrepared = false, taskId = WALK_TASK_ID): string | undefined {
+    if (admitted === 'native-api-selected-remediation' && hasPreservedDeltaCounterInputs(events, taskId)) return PRESERVED_DELTA_COUNTER_STATE;
+    if (admitted?.startsWith('native-api-selected-') && hasTwoSourceApiCounterInputs(events, taskId))
+        return admitted === 'native-api-selected-initial' ? TWO_SOURCE_API_INITIAL_STATE : TWO_SOURCE_API_REMEDIATION_STATE;
     if (admitted?.startsWith('native-api-selected-')) return admitted;
     const currentEntry = events.some(event => event.type === 'TASK_MODE_ENTERED'
         && event.details.profile_policy_snapshot_required === true
@@ -751,6 +760,7 @@ function completeReviewer(context: WalkContext, command: string, lane: string): 
     }
     review.completed = context.steps.at(-1)?.index ?? null;
     context.fixPending = failed && context.scenario.findingSeverity !== 'low';
+    context.pendingReviewFailure = context.fixPending ? { reviewType: lane, attempt } : undefined;
 }
 
 async function continueReviewer(context: WalkContext, command: string, lane: string, reason: string): Promise<string | null> {
@@ -788,9 +798,13 @@ async function actWithoutGate(context: WalkContext, result: ReturnType<typeof re
         context.implemented = true;
         return true;
     }
-    if (context.fixPending && context.scenario.fix) {
-        applyEdits(context.repoRoot, context.scenario.fix);
+    const pendingFix = context.fixPending && context.pendingReviewFailure
+        ? resolveWalkReviewFix(context.scenario, context.pendingReviewFailure.reviewType, context.pendingReviewFailure.attempt)
+        : context.scenario.fix;
+    if (context.fixPending && pendingFix) {
+        applyEdits(context.repoRoot, pendingFix);
         context.fixPending = false;
+        context.pendingReviewFailure = undefined;
         if (context.scenario.qualityRework && context.qualityReworkApplied) {
             const answers = path.join(context.repoRoot, DEFAULT_BUNDLE_NAME, 'runtime/tmp', taskId + '-quality-checklist-answers.json');
             fillQualityAnswers(answers, context.scenario.edits.map(edit => edit.path), context.scenario.fixture);
@@ -910,7 +924,8 @@ async function walkSteps(context: WalkContext, from = 0, stopAt = -1, checkpoint
         let command: string | null = launchCommand ?? result.commands[0]?.command ?? null;
         if (context.scenario.unreachableReviewer && result.next_gate === 'record-review-result'
             && result.reason.includes('If your reviewer cannot be reached')) {
-            command = result.commands.find(entry => entry.command.includes('restart-review-cycle'))?.command ?? command;
+            const restart = result.commands.find(entry => entry.command.includes('restart-review-cycle'));
+            if (restart) { command = restart.command; result.next_gate = 'restart-review-cycle'; }
         }
         if (context.scenario.preferredOutOfScopeRepair && result.next_gate === 'task-test-selection'
             && result.commands.some(entry => entry.command.includes('materialize-full-suite-repair-task'))) {
@@ -963,7 +978,8 @@ async function walkSteps(context: WalkContext, from = 0, stopAt = -1, checkpoint
                 command = args.map(arg => JSON.stringify(arg)).join(' ');
             }
             command = fillProviderValues(command, 'walk-' + (lane || 'task') + '-' + String(context.reviewsByLane[lane] ?? 0),
-                (context.scenario.fix ?? context.scenario.edits).map((edit) => edit.path));
+                (context.scenario.remediationSequence ? walkRemediationEdits(context.scenario)
+                    : context.scenario.fix ?? context.scenario.edits).map((edit) => edit.path));
             if (context.scenario.separateReviewInvocation && result.next_gate === 'complete-reviewer-launch') {
                 command = command.replace(/\s+--record-invocation\b/gu, '');
             }
@@ -990,7 +1006,7 @@ async function walkSteps(context: WalkContext, from = 0, stopAt = -1, checkpoint
                 taskId !== WALK_TASK_ID && context.scenario.counterState?.endsWith('child-tree')
                     ? inspectWalkTaskEvents(repoRoot).events : [],
                 context.scenario.counterState?.startsWith('declared-recipe-')
-                    ? readProjectValidationAuthority(repoRoot) !== null : false), taskEventRecords, true),
+                    ? readProjectValidationAuthority(repoRoot) !== null : false), taskEventRecords, true, taskId),
             ...(eventInspection.error ? { eventReadError: eventInspection.error } : {}),
             ...(preparation.length ? { preparation } : {}),
             ...(diagnostic ? { diagnostic } : {})
@@ -1033,7 +1049,7 @@ async function walkSteps(context: WalkContext, from = 0, stopAt = -1, checkpoint
                     const argv = wrongGateArgv(disturbance.gate, { taskId,
                         preflightPath: DEFAULT_BUNDLE_NAME + '/runtime/reviews/' + taskId + '-preflight.json',
                         taskIntent: context.scenario.taskTitle ?? (context.scenario.fixture ?? NODE_WALK_FIXTURE).taskTitle,
-                        changedFiles: [...context.scenario.edits, ...context.scenario.fix ?? []].map(edit => edit.path) });
+                        changedFiles: [...context.scenario.edits, ...walkRemediationEdits(context.scenario)].map(edit => edit.path) });
                     const wrongStarted = performance.now();
                     const wrong = await runGate(argv);
                     clockOffsetMs += 1;
@@ -1051,7 +1067,8 @@ async function walkSteps(context: WalkContext, from = 0, stopAt = -1, checkpoint
                     (step.preparation ??= []).push({ command: argv.join(' '), output: reset.output });
                     if (reset.exitCode || !isCompletedSweepReset(reset.output)) throw new Error('Operator-authorized task reset failed: ' + reset.output);
                     context.preservedImplementation = context.implemented;
-                    context.implemented = false; context.fixPending = false; context.reviewerLaunchCommands = {};
+                    context.implemented = false; context.fixPending = false; context.pendingReviewFailure = undefined;
+                    context.reviewerLaunchCommands = {};
                 } else if ('artifact' in disturbance && ordered.some(entry => entry.kind === 'reset-task')) {
                     // Reset combinations are one batch, including inputs that survived the reset.
                     pendingArtifacts.push(disturbance);
@@ -1481,7 +1498,7 @@ async function walkIsolatedTaskFamily(templateRoot: string, scenario: WalkScenar
             if (!variants.length) {
                 const result = await finish(context);
                 try { scenario.inspectResult?.(repoRoot, result); }
-                catch (error) { result.outcome = 'exception'; result.detail = 'Fixture oracle: ' + String(error); }
+                catch (error) { result.outcome = 'exception'; result.detail = [result.detail, 'Fixture oracle: ' + String(error)].filter(Boolean).join('\n'); }
                 onResult?.(result);
                 return [result];
             }

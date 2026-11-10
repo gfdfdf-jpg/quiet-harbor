@@ -625,9 +625,10 @@ describe('review-context trust-boundary handoff', () => {
             appendMandatoryTaskEvent(f.orchestratorRoot, f.taskId, 'REVIEW_CYCLE_RESTARTED', 'PASS', 'Unit DELTA audit fixture.', {
                 task_id: f.taskId, event_type: 'REVIEW_CYCLE_RESTARTED', status: 'PASSED', preflight_sha256: preflightSha256,
                 authoritative_review_decision: decision, authoritative_review_classification: classification });
-            const reviewExecution = buildAuthenticatedRemediationReviewExecution({ taskId: f.taskId, reviewType,
+            const authenticatedExecution = buildAuthenticatedRemediationReviewExecution({ taskId: f.taskId, reviewType,
                 preflightSha256, fullReviewScope: current.preflight.changed_files,
-                authoritativeDecision: decision, authoritativeClassification: classification }).contract;
+                authoritativeDecision: decision, authoritativeClassification: classification });
+            const reviewExecution = authenticatedExecution.contract;
             assert.equal(reviewExecution.mode, 'DELTA');
             const publish = (targets: typeof current.targets) => writeSchema4ReviewPackage({ ...f, reviewsRoot, reviewType,
                 preflight: current.preflight, reviewExecution, evidenceFile: deltaFile,
@@ -640,7 +641,35 @@ describe('review-context trust-boundary handoff', () => {
                 coverageContract: buildReviewCoverageContract({ reviewType: 'code', changedFiles: codeScope.changedFiles,
                     categoryIds: codeScope.categoryIds }) });
             const audit = () => buildReviewCoverageAuditSummary({ reviewsRoot, taskId: f.taskId, requiredReviews: { code: true, test: true } });
-            publish(current.targets);
+            const deltaPackage = publish(current.targets);
+            const reusedCoverageOptions = { reviewType, preflight: current.preflight, repoRoot: f.repoRoot,
+                preflightPath: f.preflightPath, preflightSha256,
+                reviewContextPath: path.join(reviewsRoot, `${f.taskId}-${reviewType}-review-context.json`),
+                receiptPath: deltaPackage.receiptPath, reviewContext: deltaPackage.context,
+                coverageContract: deltaPackage.context.coverage_contract,
+                reviewExecutionValidationAuthority: authenticatedExecution.validationAuthority };
+            assert.ok(current.scope.changedFiles.length > reviewExecution.delta!.required_delta_targets.length,
+                'The FULL task domain must be wider than the accepted DELTA for this regression');
+            assert.deepEqual(getReusedReviewCoverageContractViolations(reusedCoverageOptions), [],
+                'Materialization must validate the authenticated DELTA domain, preserving every current declared target');
+            assert.ok(getReusedReviewCoverageContractViolations({ ...reusedCoverageOptions, preflightSha256: 'f'.repeat(64) }).length);
+            assert.ok(getReusedReviewCoverageContractViolations({ ...reusedCoverageOptions,
+                reviewExecutionValidationAuthority: { ...authenticatedExecution.validationAuthority, taskId: 'T-foreign' } }).length);
+            assert.ok(getReusedReviewCoverageContractViolations({ ...reusedCoverageOptions,
+                reviewContext: { ...deltaPackage.context, review_execution_preserved_by: { current_preflight_sha256: preflightSha256 } } }).length,
+            'A marker cannot invent current preservation authority');
+            assert.ok(getReusedReviewCoverageContractViolations({ ...reusedCoverageOptions,
+                reviewContext: { ...deltaPackage.context, review_execution: { ...reviewExecution,
+                    delta: { ...reviewExecution.delta, required_delta_targets: [] } } } }).length,
+            'A narrowed unbound execution must fail even if the provided coverage ledger looks valid');
+            let reuseMeasurement: NextStepMeasurement | undefined;
+            withNextStepMeasurement(() => withInvocationReadObservation(() => {
+                assert.deepEqual(getReusedReviewCoverageContractViolations(reusedCoverageOptions), []);
+                assert.ok(getReusedReviewCoverageContractViolations({ ...reusedCoverageOptions,
+                    reviewContext: { ...deltaPackage.context, review_execution_preserved_by: { forged: true } } }).length);
+            }), measurement => { reuseMeasurement = measurement; });
+            assert.equal(reuseMeasurement?.work['derive:coverage_contract'], 1,
+                'Changing handoff metadata must not rebuild the same declared graph, or bypass independent authority validation');
             const valid = audit(); assert.equal(valid.status, 'COMPLETE', JSON.stringify(valid));
             assert.equal(valid.review_execution_modes.delta_count, 1);
             assert.equal(valid.entries.find(entry => entry.review_type === 'test')!.obligation_count, buildReviewCoverageContract({ reviewType, changedFiles: [deltaFile],
@@ -650,6 +679,10 @@ describe('review-context trust-boundary handoff', () => {
                 const targets = structuredClone(current.targets);
                 if (mutation === 'omitted') targets.length = 0; else targets[0].attempt_id = 'foreign';
                 publish(targets);
+                assert.ok(getReusedReviewCoverageContractViolations({ ...reusedCoverageOptions,
+                    coverageContract: buildReviewCoverageContract({ reviewType, changedFiles: [deltaFile],
+                        categoryIds: current.scope.categoryIds, validationObligations: targets }) }).length,
+                'DELTA does not excuse omitted or altered current validation obligations');
                 const rejected = audit(); assert.equal(rejected.status, 'INCOMPLETE');
                 assert.ok(rejected.entries.find(entry => entry.review_type === 'test')!.violations.some(v => /does not match.*current-scope/iu.test(v)), mutation);
             }

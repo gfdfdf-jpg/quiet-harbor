@@ -62,7 +62,7 @@ and checking shared hosted-minute allowance, dispatch on the exact prepared ref:
 ```bash
 gh workflow run reference-stand.yml --repo OWNER/TEST_REPO --ref PREPARED_REF \
   -f level=full -f linux_shards=10 -f windows_shards=16 -f seed=1785881697 -f os=both \
-  -f linux_review_stacks=all -f windows_review_stacks=seeded -f provider=Codex
+  -f linux_review_stacks=all -f windows_review_stacks=all -f provider=Codex
 ```
 
 Each OS has its own shard count and deep review selection (defaults above). Review logic is OS independent, so Linux
@@ -187,7 +187,7 @@ timer, then restores the checkpoint in place. Fixed work and subprocess ceilings
 may grow linearly, at most once per added event. Canonical timeline-byte work is retained in raw counters. This is the
 operator's reasonable-growth rule, not a zero-history-growth requirement.
 
-Median averages the central pair; p95 is nearest-rank `ceil(.95*N)-1`. Both show baseline/candidate, Δms and Δ%; baseline
+Median averages the central pair; p95 is nearest-rank `ceil(.95*N)-1`. Both show baseline/candidate, О”ms and О”%; baseline
 zero gives null %. FAIL means growth exceeds `max(absolute, relative*baseline)`: initially median 10%/20ms, p95 15%/50ms,
 sealed before the candidate. Baseline machine/OS/Node/mode/protocol/checkpoint/semantic identities must match. New or missing
 checkpoints are unbaselined/incomplete. Raw accepted release inputs/samples stay embedded/linked in evidence. A paired
@@ -225,7 +225,7 @@ Code lives in `scripts/node-foundation/synthetic/`:
 - `model.ts`: file roles, review lanes, seeded random generator.
 - `stacks.ts`: conventional paths per technology stack for every role, plus conventions a path cannot express.
 - `oracle.ts`: independent expectations written from the documented contract. It never imports a production predicate.
-- `path-layer.ts`: every stack × role × change variant through the shipped classifiers (test path, domain reviews, remediation category).
+- `path-layer.ts`: every stack Г— role Г— change variant through the shipped classifiers (test path, domain reviews, remediation category).
 - `policy-layer.ts`: every combination of the FULL/DELTA remediation mode inputs and every rerun case of the remediation rerun policy.
 - `stand.ts`: runs the layers, replays the corpus and compares the findings with `known-findings.json`.
 
@@ -369,9 +369,9 @@ keep their generic peers in the same report so parity can be assessed. This is t
 Do not run the whole matrix as an ordinary local check. Current product failures stay red and are reported by
 their native gate; neither a fixture-specific handoff nor a wider counter budget hides them.
 
-Planning estimates, not new benchmark claims: sample at two workers 5–20 minutes; the 198-walk matrix at
-20 workers about 1–3 hours, with old scenarios and extra controls added separately. At four workers allow
-roughly 3–6 hours for the matrix, especially A9. Full costs matrix + old scenarios + controls. Sweep needs
+Planning estimates, not new benchmark claims: sample at two workers 5вЂ“20 minutes; the 198-walk matrix at
+20 workers about 1вЂ“3 hours, with old scenarios and extra controls added separately. At four workers allow
+roughly 3вЂ“6 hours for the matrix, especially A9. Full costs matrix + old scenarios + controls. Sweep needs
 its emitted manifest and observed checkpoint durations before an ETA is meaningful; it must not be estimated
 by multiplying every old disturbance by every stack. These Windows simulator measurements do not certify
 real Maven/Gradle/browser toolchains or native Linux/macOS behavior.
@@ -539,11 +539,11 @@ Every in-process navigation call uses `withNextStepMeasurement`. Reports retain 
 
 File-probe budgets are independent of where TMP points. The product authenticates every ancestor of each invocation
 input, at initial capture and again at each dependency validation: per directory above the disposable root, one
-navigation call costs `1 + V` JS `realpathSync` and `2 × (1 + V)` `lstatSync` calls, where `V` is its
+navigation call costs `1 + V` JS `realpathSync` and `2 Г— (1 + V)` `lstatSync` calls, where `V` is its
 `invocation.dependency_validation` count. That cost is real work, but its size follows the TMP depth. `engine/walk-root-chain.ts`
 installs a thin probe label beneath the product's measurement wrappers. It labels each probe of the temp directory or one
 of its lexical/canonical ancestors as `root_chain_probe:<api>:<level>/<directories>` in the call's measurement. A
-complete walk is the minimum count over all chain directories. The budgeted counter is `raw − walks × (directories − 7)`.
+complete walk is the minimum count over all chain directories. The budgeted counter is `raw в€’ walks Г— (directories в€’ 7)`.
 Seven directories is the reference chain of the 1.4.4 counter calibrations (`C:/Users/<user>/AppData/Local/Temp/garda-sol-<package>`).
 The budgets and recorded baseline values stay unchanged. A probe of only some chain directories is ordinary work, as is
 every probe outside the chain, so an extra probe at the same depth still fails. Doubled ancestor work doubles the
@@ -633,7 +633,7 @@ The project-size cases verified exactly 2 / 2,000 / 20,000 tracked files. Their 
 
 Work counts are exact observations. Attributing their fitted growth to event history alone still needs controlled comparisons with unchanged artifacts and cache state; current route/action/source cohorts can also differ in available evidence and cache warmth. Keep those flags red until their cause is reviewed. Remaining refusal-classification questions include closed-cycle restart messages that correctly name `restart-coherent-cycle` without one of the current integrity keywords, and provider timing/invocation handoffs. Those are not confirmed Garda dead ends. Other open work includes authenticated artifact-loss recovery, closed-cycle recovery guidance, profile re-entry after out-of-profile edits, the 118 unexplained source routes and the scenario omissions above. Review, integrity, provenance and timing checks remain in force.
 
-### Measured status, 1 November 2026 — Stage C
+### Measured status, 1 November 2026 вЂ” Stage C
 
 The complete 20-worker sweep in `%TEMP%/garda-stage-c-sweep-complete` finished all 1,456 disturbances and 48 restored controls: 1,614 cases, 17,899 executed navigator calls, 96m48s. It was red with 95 findings: 82 unexplained coverage routes, eight counter findings and five behavioral records. Coverage was 54/69 gates and 73/147 BLOCKED points. There were three disturbed loops, all lost test-review disposition/snapshot/prompt evidence, compared with 369 in the older sweep. No undisturbed constant-counter growth was reported; eleven timing warnings remain observations under load.
 
@@ -647,7 +647,7 @@ Twelve route exemptions have concrete source reasons: a dead startup fallback; s
 
 The later full ordinary run in `%TEMP%/garda-walk-report-mUWOyr` ran 132 cases / 4,955 calls and remained red: 60 coverage findings, 576 counter-budget findings, 11 missing budgets and one behavioral finding. It reached 63/69 gates and 78/148 BLOCKED points. This was not a disturbance sweep. The native strict child-tree and aggregate follow-up reached DONE; independent history-only probes retained zero constant-work increases. The full-suite WIP case exposed missing native parent archive qualification and incomplete aggregate publication after the resumed parent's own SOURCE acceptance. Fixes and focused validation are in progress; the final complete sweep remains outstanding.
 
-`walk-counter-calibration-evidence.json` records a finite 4,096-byte envelope for timeline numeric serialization (128 scalar slots × 32 ASCII bytes), consistently applied to existing route and state budgets. The longest retained ordinary fixture contains 84 timing scalars; its 291 events were unchanged while numeric widths moved. Original expected values and measured spread remain recorded. DONE also has a 79-probe lstat allowance, 2% of its previous 3,925-call ceiling, for source and compiled file-set variation. These allowances are explicit structural tolerances. Constant hash, payload-read, parse, verification and subprocess growth still has zero tolerance, and counter values remain visible. They do not excuse a behavioral finding or admit a failed child-tree run as calibration.
+`walk-counter-calibration-evidence.json` records a finite 4,096-byte envelope for timeline numeric serialization (128 scalar slots Г— 32 ASCII bytes), consistently applied to existing route and state budgets. The longest retained ordinary fixture contains 84 timing scalars; its 291 events were unchanged while numeric widths moved. Original expected values and measured spread remain recorded. DONE also has a 79-probe lstat allowance, 2% of its previous 3,925-call ceiling, for source and compiled file-set variation. These allowances are explicit structural tolerances. Constant hash, payload-read, parse, verification and subprocess growth still has zero tolerance, and counter values remain visible. They do not excuse a behavioral finding or admit a failed child-tree run as calibration.
 
 The focused replay in `%TEMP%/garda-finish-v11` subsequently passed at 20 jobs: 13 cases / 816 steps, zero findings. It includes native parent acceptance (102 steps), aggregate follow-up (145), restored full-suite WIP (120), two long remediation/counter regressions, and exact-guidance recovery/refusal cases. Its partial coverage is 33/69 gates and 35/148 BLOCKED points, with 21 concrete exemptions and no invalid exemption IDs. It does not certify complete coverage. The WIP state's independently retained 102 unchanged-input comparisons each append five events and show zero constant-work increases; its ordinary calibration uses 106 admitted steps across 42 routes.
 
@@ -655,10 +655,12 @@ Coverage work also found an unresolved policy conflict in a temporary native dec
 
 ## What a green stand guarantees
 
-A green result certifies the explicit properties in [stand-properties.json](stand-properties.json) for the recorded source identity, level and selected scenarios. The summary includes every property, its concept rule IDs or gate registry entries, the checks actually executed and their status. [Stable rule IDs](../../../docs/stand/concept-rules.md) cover concept sections 2–7. Missing mappings, removed/filtered/skipped checks, unregistered gates and uncovered rule IDs fail the stand. Known defects remain failures; the historical findings catalog is not an acceptance waiver.
+A green result certifies the explicit properties in [stand-properties.json](stand-properties.json) for the recorded source identity, level and selected scenarios. The summary includes every property, its concept rule IDs or gate registry entries, the checks actually executed and their status. [Stable rule IDs](../../../docs/stand/concept-rules.md) cover concept sections 2вЂ“7. Missing mappings, removed/filtered/skipped checks, unregistered gates and uncovered rule IDs fail the stand. Known defects remain failures; the historical findings catalog is not an acceptance waiver.
 
 The checks cover executable recovery without dead ends/loops or unknown-stack refusals; additive adapters; FULL/DELTA, affected-lane repeats and passed-review reuse; RED before GREEN; separately executed multi-command tasks; fake/no-op/skipped/dropped-target controls; deterministic work budgets and the timing protocol. Full and sweep require the complete stack/task selection. A short or selected run certifies its narrower scope. NOT_REQUESTED is not evidence, and short permits INCONCLUSIVE step timing without claiming speed acceptance.
 
 The stand simulates toolchains and reviewer agents. It does not prove real Maven/Gradle/etc. behavior, other operating systems, or real agents' semantic judgment and clean contexts. External checks are manually authorized CI on three OS (Windows/Linux/macOS), T-406/T-408, and real-project acceptance. Quiet-machine median/p95 acceptance needs a separate measured run with the stored prior-release baseline. No synthetic result substitutes for those checks.
 
 Every externally found bug belongs to the permanent `field-cases` family. See [how to add a field case](../../../docs/stand/field-cases.md). Run its four initial IDs using WALK_ONLY, full, seed 1785881697, Codex and JOBS=3. OnlineStore T-006-6 uses a real archived older Garda to produce legacy selection/failure evidence; current native commands must preserve those bytes, narrow to both own tests and materialize the unattributed failure in the grouped follow-up before DONE.
+
+The manually dispatched reference workflow also executes the [common review transition matrix](../../../docs/stand/review-transition-matrix.md) on every stack and all four execution policies. Its separate native evidence is mandatory for the combined CI verdict; the original stand work ceilings are unchanged.

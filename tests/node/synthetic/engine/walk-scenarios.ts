@@ -70,7 +70,7 @@ export const WALK_SCENARIOS: readonly WalkScenario[] = [
         { id: 'invalid-required-review-declaration', gate: 'task-metadata-validation', guidance: /Correct the task notes/iu,
             change: (text: string) => text.replace('Synthetic navigator walk.', 'Required reviews: imaginary-lane.') },
         { id: 'split-required-without-owned-latch', gate: 'split-required-latch', guidance: /operator repairs or resets the task/iu,
-            change: (text: string) => text.replace('🟦 TODO', 'SPLIT_REQUIRED') }
+            change: (text: string) => text.replace('рџџ¦ TODO', 'SPLIT_REQUIRED') }
     ].map((handoff): WalkScenario => ({
         id: handoff.id, edits: BASE_EDITS, expectedReviews: {}, expectedModes: [],
         expectedBlockedGate: handoff.gate, expectedGuidance: handoff.guidance,
@@ -102,7 +102,7 @@ export const WALK_SCENARIOS: readonly WalkScenario[] = [
         expectedBlockedGate: 'workflow-config-validation', expectedGuidance: /workflow validate/iu,
         expectedReviews: {}, expectedModes: [] },
     { id: 'foreign-active-task', edits: BASE_EDITS, foreignTask: true,
-        setup: root => fs.appendFileSync(path.join(root, 'TASK.md'), '| T-FOREIGN | 🟨 IN_PROGRESS | P1 | app | Other work | another-agent | 2026-10-30 | balanced | Preserve it. |\n'),
+        setup: root => fs.appendFileSync(path.join(root, 'TASK.md'), '| T-FOREIGN | рџџЁ IN_PROGRESS | P1 | app | Other work | another-agent | 2026-10-30 | balanced | Preserve it. |\n'),
         expectedBlockedGate: 'enter-task-mode', expectedGuidance: /Ask the operator to confirm/iu,
         expectedReviews: {}, expectedModes: [] },
     { id: 'dirty-workspace', edits: BASE_EDITS,

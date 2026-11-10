@@ -2,6 +2,7 @@ import { captureClosedReviewGate } from '../review-attempts/review-closed-cycle-
 import { publishClosedReviewAfterGate } from '../review-attempts/review-closed-cycle-gate-hooks';
 import { admitNativeReviewCadence } from '../review-attempts/review-cadence-admission';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { sha256RedactedJsonPayload } from '../../core/redaction';
 import { stringSha256 } from '../../gate-runtime/hash';
 import {
@@ -40,6 +41,10 @@ import {
     type ReviewCoverageContract
 } from '../review/review-coverage-ledger';
 import { buildDeclaredReviewCoverageContract } from '../review-context/review-context-coverage';
+import { readReviewContextChangedFiles } from '../review-context/review-context-diff';
+import { resolvePersistedRemediationReviewExecutionAuthority } from '../review-remediation/review-remediation-execution-authority';
+import { getReviewRemediationReviewContractViolations, type ReviewRemediationReviewContract,
+    type ReviewRemediationReviewContractValidationAuthority } from '../review-remediation/review-remediation-review-contract';
 import {
     type JsonReviewFindingsArtifactValidation
 } from '../review/review-findings-artifact-verdict';
@@ -73,6 +78,8 @@ import {
 } from '../review/review-evidence-contract';
 
 export interface MaterializeReusedReviewEvidenceOptions {
+    /** Native build/restart authority, including a validated staged decision before its restart event is published. */
+    reviewExecutionValidationAuthority?: ReviewRemediationReviewContractValidationAuthority | null;
     repoRoot: string;
     taskId: string;
     reviewType: string;
@@ -126,11 +133,48 @@ export function getReusedReviewCoverageContractViolations(options: {
     repoRoot: string;
     coverageContract: unknown;
     preflightPath?: string;
+    reviewContext?: Record<string, unknown>;
+    reviewContextPath?: string;
+    receiptPath?: string;
+    preflightSha256?: string | null;
+    reviewExecutionValidationAuthority?: ReviewRemediationReviewContractValidationAuthority | null;
 }): string[] {
     try {
-        const authoritativeCoverage = buildDeclaredReviewCoverageContract(options);
+        // Handoff payloads are not inputs to the declared coverage graph; validate them independently below.
+        const authoritativeCoverage = buildDeclaredReviewCoverageContract({ reviewType: options.reviewType,
+            preflight: options.preflight, repoRoot: options.repoRoot, preflightPath: options.preflightPath });
+        let changedFiles = authoritativeCoverage.changedFiles;
+        const execution = options.reviewContext?.review_execution as ReviewRemediationReviewContract | undefined;
+        if (execution?.mode === 'DELTA') {
+            const currentHash = options.preflightPath ? gateHelpers.fileSha256(options.preflightPath) : null;
+            if (!options.preflightPath || !options.reviewContextPath || !options.receiptPath || !currentHash
+                || currentHash !== options.preflightSha256)
+                return ['Reused DELTA coverage requires current native preflight and context bindings.'];
+            const authority = options.reviewExecutionValidationAuthority ?? resolvePersistedRemediationReviewExecutionAuthority({
+                reviewsRoot: path.dirname(options.preflightPath), taskId: String(options.preflight.task_id || ''),
+                reviewType: options.reviewType, preflightPath: options.preflightPath, preflightSha256: currentHash,
+                fullReviewScope: readReviewContextChangedFiles(options.preflight.changed_files), reviewExecution: execution,
+                reviewContextPath: options.reviewContextPath, receiptPath: options.receiptPath,
+                acceptPreservedPendingReuse: true, acceptPreservedOriginReuse: true
+            });
+            if (!authority || authority.taskId !== String(options.preflight.task_id || '') || authority.reviewType !== options.reviewType)
+                return ['Reused DELTA coverage lacks authenticated execution authority.'];
+            const violations = getReviewRemediationReviewContractViolations(execution, authority);
+            const preservation = authority.preserved_current_scope;
+            if (preservation ? preservation.current_preflight_sha256 !== currentHash
+                || sha256RedactedJsonPayload(options.reviewContext?.review_execution_preserved_by ?? null) !== sha256RedactedJsonPayload(preservation)
+                : execution.preflight_sha256 !== currentHash || options.reviewContext?.review_execution_preserved_by !== undefined)
+                violations.push('Reused DELTA coverage has no authenticated current preservation binding.');
+            if (violations.length) return violations.map(violation => 'Reused DELTA coverage rejected: ' + violation);
+            // Only the authenticated execution narrows FILE/boundary obligations. Current acceptance criteria,
+            // categories and validation obligations remain mandatory, exactly as in native context construction.
+            changedFiles = [...(execution.delta?.required_delta_targets ?? [])];
+            const currentTaskScope = new Set(readReviewContextChangedFiles(options.preflight.changed_files));
+            if (changedFiles.some(file => !currentTaskScope.has(file)))
+                return ['Reused DELTA coverage contains a target outside the current authenticated task scope.'];
+        }
         return getReviewCoverageContractViolations(options.coverageContract, {
-            reviewType: options.reviewType, changedFiles: authoritativeCoverage.changedFiles,
+            reviewType: options.reviewType, changedFiles,
             acceptanceCriteria: authoritativeCoverage.acceptanceCriteria, categoryIds: authoritativeCoverage.categoryIds, validationObligations: authoritativeCoverage.validationObligations
         });
     } catch (error) {
@@ -369,7 +413,10 @@ async function materializeReusedReviewEvidenceUnderContextLock(
             preflight: options.preflightPayload,
             repoRoot: options.repoRoot,
             preflightPath: options.preflightPath ?? undefined,
-            coverageContract: currentReviewContext.coverage_contract
+            coverageContract: currentReviewContext.coverage_contract,
+            reviewContext: currentReviewContext, reviewContextPath: options.reviewContextPath,
+            receiptPath: options.receiptPath, preflightSha256: options.currentPreflightHash,
+            reviewExecutionValidationAuthority: options.reviewExecutionValidationAuthority
         });
         if (coverageContractViolations.length > 0) {
             return {

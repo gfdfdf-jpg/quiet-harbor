@@ -12,7 +12,7 @@ import { buildWindowsBatchCommandLine, spawnShellCommand } from '../../../src/co
 import { readValidationFile } from '../../../src/core/project-validation-identity';
 
 test('field-cases are permanent full/sweep scenarios with two own modules and independent result oracles', () => {
-    assert.equal(FIELD_CASE_SCENARIOS.length, 4);
+    assert.equal(FIELD_CASE_SCENARIOS.length, 5);
     assert.ok(!new Set<string>(FIELD_CASE_IDS).has('field-onlinestore-t006-6'));
     assert.match(FIELD_LEGACY_GARDA_COMMIT, /^[a-f0-9]{40}$/u);
     assert.match(FIELD_LEGACY_GARDA_TREE, /^[a-f0-9]{40}$/u);
@@ -23,6 +23,12 @@ test('field-cases are permanent full/sweep scenarios with two own modules and in
         for (const id of FIELD_CASE_IDS) assert.ok(plan.scenarioIds.includes(id), id);
     }
     for (const scenario of FIELD_CASE_SCENARIOS) {
+        if (scenario.id === 'field-onlinestore-passed-delta-after-test-repair') {
+            assert.deepEqual(scenario.expectedReviews, { code: 2, api: 2, test: 2 });
+            assert.equal(scenario.remediationSequence?.length, 2);
+            assert.ok(scenario.inspectResult);
+            continue;
+        }
         assert.equal(scenario.counterState, FIELD_TWO_MODULE_COUNTER_STATE);
         assert.ok(scenario.inspectResult); assert.equal(scenario.expectedBlockedGate, undefined);
         assert.equal(scenario.selectionTargets?.length, 2);
