@@ -1,0 +1,80 @@
+name: Cold matrix bootstrap check
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Exact public reserve SUT commit
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  cold-bootstrap:
+    name: Cold matrix bootstrap / Linux / Node 24
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      SUT_COMMIT: ${{ inputs.commit }}
+      CELL_ID: review-matrix-node--initial-full--strict_sequential
+    steps:
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+      - name: Validate exact diagnostic source
+        run: node -e 'if(!/^[a-f0-9]{40}$/.test(process.env.SUT_COMMIT))throw Error("Full commit SHA required")'
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ inputs.commit }}
+      - name: Install dependencies
+        run: npm ci --no-fund --no-audit
+      - name: Require a cold checkout before native entry
+        run: |
+          node <<'NODE'
+          const fs=require('node:fs'),cp=require('node:child_process'),assert=require('node:assert/strict');
+          assert.equal(cp.execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),process.env.SUT_COMMIT);
+          for(const directory of ['dist','.node-build'])assert.equal(fs.existsSync(directory),false,'Must start cold: '+directory);
+          NODE
+      - name: Run only the failed cold-bootstrap configuration
+        run: |
+          node tests/node/synthetic/review-matrix.cjs run --only "$CELL_ID" --report "$RUNNER_TEMP/cold-matrix-cell"
+      - name: Verify native cell and refusal of incomplete global acceptance
+        run: |
+          node <<'NODE'
+          const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process'),assert=require('node:assert/strict');
+          const input=path.join(process.env.RUNNER_TEMP,'cold-matrix-cell'),output=path.join(process.env.RUNNER_TEMP,'global-rejection-control');
+          const part=JSON.parse(fs.readFileSync(path.join(input,'review-matrix-partial.json'),'utf8'));
+          assert.equal(part.source.commit,process.env.SUT_COMMIT);assert.equal(part.complete,true);assert.deepEqual(part.problems,[]);
+          assert.deepEqual(part.selection,[process.env.CELL_ID]);assert.equal(part.results.length,1);
+          assert.equal(part.results[0].id,process.env.CELL_ID);assert.equal(part.results[0].outcome,'done');
+          assert.ok(part.results[0].nativeSteps>0);assert.deepEqual(part.results[0].findings,[]);
+          const merged=cp.spawnSync(process.execPath,['tests/node/synthetic/review-matrix.cjs','merge','--inputs',input,'--report',output],{stdio:'inherit'});
+          assert.equal(merged.status,1,'One cell must refuse full-matrix acceptance');
+          const verdict=JSON.parse(fs.readFileSync(path.join(output,'review-matrix-verdict.json'),'utf8'));
+          assert.equal(verdict.verdict,'FAIL');assert.equal(verdict.completed,1);assert.equal(verdict.expected,3116);
+          assert.equal(verdict.problems.length,3115);
+          assert.ok(verdict.problems.every(problem=>problem.startsWith('missing-cell:')),'No source, raw-trace or native-contract failures may hide among scope refusals');
+          NODE
+      - name: Run bootstrap compiler-failure and oracle controls
+        run: node scripts/node-foundation/build-scripts.cjs test.js tests/node/synthetic/synthetic-common-review-matrix.test.ts
+      - name: State the exact scope
+        if: always()
+        run: |
+          printf 'Diagnostic only: cold native bootstrap for one Node/strict cell on Linux Node 24.\n' >> "$GITHUB_STEP_SUMMARY"
+          printf 'This check does not certify the complete review matrix or the release. The incomplete global verdict is deliberately refused.\n' >> "$GITHUB_STEP_SUMMARY"
+      - name: Retain diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: cold-matrix-bootstrap-evidence
+          path: |
+            ${{ runner.temp }}/cold-matrix-cell/**
+            ${{ runner.temp }}/global-rejection-control/**
+          if-no-files-found: warn
+          retention-days: 15
+
