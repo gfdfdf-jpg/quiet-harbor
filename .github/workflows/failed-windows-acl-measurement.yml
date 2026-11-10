@@ -33,6 +33,14 @@ jobs:
         run: node -e 'const cp=require("node:child_process"),a=require("node:assert/strict");a.equal(cp.execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim(),process.env.SUT_COMMIT)'
       - name: Install dependencies
         run: npm ci --no-fund --no-audit
+      - name: Match the original Release canonical temporary paths
+        shell: pwsh
+        run: |
+          $gardaPhysicalTemp = node -p 'require("node:fs").realpathSync.native(require("node:os").tmpdir())'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "TEMP=$gardaPhysicalTemp" >> $env:GITHUB_ENV
+          "TMP=$gardaPhysicalTemp" >> $env:GITHUB_ENV
+          "TMPDIR=$gardaPhysicalTemp" >> $env:GITHUB_ENV
       - name: Run only the failed file with native tracing and V8 coverage
         shell: pwsh
         run: |
