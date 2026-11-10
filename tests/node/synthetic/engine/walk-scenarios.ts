@@ -8,6 +8,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { isTaskQueueActiveStatus } from '../../../../src/core/active-task-state';
 import { readTaskQueueEntries } from '../../../../src/core/task-queue-read';
+import { parseCanonicalActiveTaskQueue, replaceTaskMdTableCell } from '../../../../src/core/task-md-table';
+import { readTaskQueueStatusToken } from '../../../../src/core/task-queue/task-queue-status';
 import { COVERAGE_WALK_SCENARIOS } from './walk-coverage-scenarios';
 import { RECOVERY_COVERAGE_WALK_SCENARIOS } from './walk-recovery-coverage-scenarios';
 import { PARENT_COVERAGE_WALK_SCENARIOS } from './walk-parent-coverage-scenarios';
@@ -72,13 +74,26 @@ export const WALK_SCENARIOS: readonly WalkScenario[] = [
         { id: 'invalid-required-review-declaration', gate: 'task-metadata-validation', guidance: /Correct the task notes/iu,
             change: (text: string) => text.replace('Synthetic navigator walk.', 'Required reviews: imaginary-lane.') },
         { id: 'split-required-without-owned-latch', gate: 'split-required-latch', guidance: /operator repairs or resets the task/iu,
-            change: (text: string) => text.replace('рџџ¦ TODO', 'SPLIT_REQUIRED') }
+            change: (text: string) => {
+                const queue = parseCanonicalActiveTaskQueue(text);
+                const row = queue.rows.find(entry => entry.taskId === 'T-WALK');
+                if (!row || queue.diagnostics?.length || readTaskQueueStatusToken(row.status) !== 'TODO')
+                    throw new Error('split-required fixture needs one canonical TODO task before its invalid-input mutation');
+                const changed = replaceTaskMdTableCell(row.rawLine, 1, ' SPLIT_REQUIRED ');
+                if (!changed) throw new Error('split-required fixture could not replace the canonical status cell');
+                const lines = text.split(/\r?\n/u);
+                lines[row.lineIndex] = changed;
+                return lines.join(text.includes('\r\n') ? '\r\n' : '\n');
+            } }
     ].map((handoff): WalkScenario => ({
         id: handoff.id, edits: BASE_EDITS, expectedReviews: {}, expectedModes: [],
         expectedBlockedGate: handoff.gate, expectedGuidance: handoff.guidance,
         setup: root => {
             const file = path.join(root, 'TASK.md');
-            fs.writeFileSync(file, handoff.change(fs.readFileSync(file, 'utf8')));
+            const original = fs.readFileSync(file, 'utf8');
+            const changed = handoff.change(original);
+            if (changed === original) throw new Error(handoff.id + ' fixture mutation did not change its input');
+            fs.writeFileSync(file, changed);
         }
     })),
     { id: 'quality-checklist-rework', edits: BASE_EDITS, qualityRework: true,
