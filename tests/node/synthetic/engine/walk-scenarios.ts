@@ -6,6 +6,8 @@ import { TEST_SELECTION_WALK_SCENARIOS } from './walk-test-selection-scenarios';
 import { OPAQUE_RUNNER_WALK_SCENARIOS } from './walk-opaque-runner-scenarios';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { isTaskQueueActiveStatus } from '../../../../src/core/active-task-state';
+import { readTaskQueueEntries } from '../../../../src/core/task-queue-read';
 import { COVERAGE_WALK_SCENARIOS } from './walk-coverage-scenarios';
 import { RECOVERY_COVERAGE_WALK_SCENARIOS } from './walk-recovery-coverage-scenarios';
 import { PARENT_COVERAGE_WALK_SCENARIOS } from './walk-parent-coverage-scenarios';
@@ -102,7 +104,11 @@ export const WALK_SCENARIOS: readonly WalkScenario[] = [
         expectedBlockedGate: 'workflow-config-validation', expectedGuidance: /workflow validate/iu,
         expectedReviews: {}, expectedModes: [] },
     { id: 'foreign-active-task', edits: BASE_EDITS, foreignTask: true,
-        setup: root => fs.appendFileSync(path.join(root, 'TASK.md'), '| T-FOREIGN | рџџЁ IN_PROGRESS | P1 | app | Other work | another-agent | 2026-10-30 | balanced | Preserve it. |\n'),
+        setup: root => {
+            fs.appendFileSync(path.join(root, 'TASK.md'), '| T-FOREIGN | IN_PROGRESS | P1 | app | Other work | another-agent | 2026-10-30 | balanced | Preserve it. |\n');
+            if (!isTaskQueueActiveStatus(readTaskQueueEntries(root).get('T-FOREIGN')?.status ?? null))
+                throw new Error('foreign-active-task fixture must establish a canonical active queue row before native entry');
+        },
         expectedBlockedGate: 'enter-task-mode', expectedGuidance: /Ask the operator to confirm/iu,
         expectedReviews: {}, expectedModes: [] },
     { id: 'dirty-workspace', edits: BASE_EDITS,
