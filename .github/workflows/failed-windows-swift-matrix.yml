@@ -1,0 +1,79 @@
+name: Failed Windows Swift matrix cell
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Exact fixed public reserve SUT commit
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  swift-cell:
+    name: One failed Swift helper-chain cell / Windows / Node 24
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      SUT_COMMIT: ${{ inputs.commit }}
+      FAILED_CELL: review-matrix-swift--dependency-helper-chain--strict_sequential
+      GARDA_SYNTHETIC_WALK_PROVIDER: Codex
+    steps:
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+      - name: Validate exact diagnostic source
+        run: node -e 'if(!/^[a-f0-9]{40}$/.test(process.env.SUT_COMMIT))throw Error("Full commit SHA required")'
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ inputs.commit }}
+      - name: Assert the checked-out SUT
+        run: node -e 'const cp=require("node:child_process"),a=require("node:assert/strict");a.equal(cp.execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim(),process.env.SUT_COMMIT)'
+      - name: Install dependencies
+        run: npm ci --no-fund --no-audit
+      - name: Replay only the failed native matrix cell
+        run: |
+          set +e
+          node tests/node/synthetic/review-matrix.cjs run --only "$FAILED_CELL" --report "$RUNNER_TEMP/failed-swift-cell"
+          matrix_exit=$?
+          set -e
+          if [ "$matrix_exit" -ne 0 ]; then
+            printf 'Selected native matrix execution failed: %s\n' "$matrix_exit" >&2
+            exit 1
+          fi
+          node <<'NODE'
+          const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),crypto=require('node:crypto'),zlib=require('node:zlib');
+          const root=path.join(process.env.RUNNER_TEMP,'failed-swift-cell');
+          const report=JSON.parse(fs.readFileSync(path.join(root,'review-matrix-partial.json'),'utf8'));
+          assert.equal(report.complete,true);assert.equal(report.source.commit,process.env.SUT_COMMIT);
+          assert.deepEqual(report.selection,[process.env.FAILED_CELL]);assert.deepEqual(report.problems,[]);
+          assert.equal(report.results.length,1);const result=report.results[0];
+          assert.equal(result.id,process.env.FAILED_CELL);assert.equal(result.outcome,'done');assert.deepEqual(result.findings,[]);
+          assert.deepEqual(result.launches,['code:FULL','refactor:FULL','api:FULL','test:FULL','refactor:DELTA','api:DELTA','test:DELTA']);
+          assert.equal(result.evidenceFile,result.id+'.json.gz');
+          const bytes=fs.readFileSync(path.join(root,'cells',result.evidenceFile));
+          assert.equal(crypto.createHash('sha256').update(bytes).digest('hex'),result.evidenceSha256);
+          const native=JSON.parse(zlib.gunzipSync(bytes));assert.deepEqual(native.source,report.source);assert.equal(native.cell.id,result.id);
+          assert.equal(native.result.outcome,'done');assert.equal(native.result.steps.length,result.nativeSteps);
+          assert.ok(native.result.steps.some(step=>step.gate==='task-test-selection'&&step.exitCode===0));
+          assert.ok(native.result.steps.some(step=>step.gate==='full-suite-validation'&&step.exitCode===0));
+          console.log('One exact Swift native regression passed; this is not complete matrix acceptance.');
+          NODE
+      - name: State exact partial scope
+        if: always()
+        run: |
+          printf 'One failed Swift helper-chain/strict_sequential cell, Windows/Node24.\n' >> "$GITHUB_STEP_SUMMARY"
+          printf 'All native guards, exact seven FULL/DELTA launches and reuse checks remain. Earlier red trace retained. This does not certify the whole stand or Release.\n' >> "$GITHUB_STEP_SUMMARY"
+      - name: Retain native evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: failed-windows-swift-cell-evidence
+          path: ${{ runner.temp }}/failed-swift-cell/**
+          if-no-files-found: warn
+          retention-days: 15
