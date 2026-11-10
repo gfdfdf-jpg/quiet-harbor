@@ -1,0 +1,95 @@
+name: Remaining failed Windows Swift cells
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Exact fixed public reserve SUT commit
+        required: true
+        type: string
+      cells:
+        description: Exact recorded failed cell IDs, comma separated; omit accepted cells
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  swift-cells:
+    name: Remaining failed Swift helper cells / Windows / Node 24
+    runs-on: windows-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      SUT_COMMIT: ${{ inputs.commit }}
+      FAILED_CELLS: ${{ inputs.cells }}
+      GARDA_SYNTHETIC_WALK_PROVIDER: Codex
+    steps:
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+      - name: Validate exact source and remaining failed family
+        run: |
+          node <<'NODE'
+          const assert=require('node:assert/strict');
+          assert.match(process.env.SUT_COMMIT,/^[a-f0-9]{40}$/);
+          const cells=process.env.FAILED_CELLS.split(',');
+          assert.ok(cells.length>0&&cells.length<=11);assert.equal(new Set(cells).size,cells.length);
+          for(const cell of cells){
+            assert.match(cell,/^review-matrix-swift--dependency-helper-(?:independent|chain|fanout)--(?:strict_sequential|parallel_all|test_after_code|code_first_optional)$/);
+            assert.notEqual(cell,'review-matrix-swift--dependency-helper-chain--strict_sequential','Already accepted cell is excluded');
+          }
+          NODE
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ inputs.commit }}
+      - name: Assert checked-out SUT
+        run: node -e 'const cp=require("node:child_process"),a=require("node:assert/strict");a.equal(cp.execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim(),process.env.SUT_COMMIT)'
+      - name: Install dependencies
+        run: npm ci --no-fund --no-audit
+      - name: Run only selected failed cells serially
+        run: |
+          set +e
+          node tests/node/synthetic/review-matrix.cjs run --only "$FAILED_CELLS" --report "$RUNNER_TEMP/remaining-swift-cells"
+          matrix_exit=$?
+          set -e
+          if [ "$matrix_exit" -ne 0 ]; then exit "$matrix_exit"; fi
+          node <<'NODE'
+          const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),crypto=require('node:crypto'),zlib=require('node:zlib');
+          const requested=process.env.FAILED_CELLS.split(','),root=path.join(process.env.RUNNER_TEMP,'remaining-swift-cells');
+          const report=JSON.parse(fs.readFileSync(path.join(root,'review-matrix-partial.json'),'utf8'));
+          assert.equal(report.complete,true);assert.equal(report.source.commit,process.env.SUT_COMMIT);
+          assert.deepEqual(report.selection,requested);assert.deepEqual(report.problems,[]);
+          assert.equal(report.results.length,requested.length);
+          assert.deepEqual(report.results.map(result=>result.id).sort(),[...requested].sort());
+          for(const result of report.results){
+            assert.equal(result.outcome,'done');assert.deepEqual(result.findings,[]);
+            const expected=['code:FULL','refactor:FULL','api:FULL','test:FULL','refactor:DELTA',
+              ...(result.id.includes('--dependency-helper-chain--')?['api:DELTA']:[]),'test:DELTA'];
+            assert.deepEqual(result.launches,expected);assert.equal(result.evidenceFile,result.id+'.json.gz');
+            const bytes=fs.readFileSync(path.join(root,'cells',result.evidenceFile));
+            assert.equal(crypto.createHash('sha256').update(bytes).digest('hex'),result.evidenceSha256);
+            const native=JSON.parse(zlib.gunzipSync(bytes));assert.deepEqual(native.source,report.source);assert.equal(native.cell.id,result.id);
+            assert.equal(native.result.outcome,'done');assert.equal(native.result.steps.length,result.nativeSteps);
+            assert.deepEqual(native.result.reviews.map(review=>review.lane+':'+review.mode),expected);
+            for(const gate of ['task-test-selection','full-suite-validation'])assert.ok(native.result.steps.some(step=>step.gate===gate&&step.exitCode===0));
+          }
+          console.log('Selected failed Swift cells passed: '+requested.join(',')+'. Partial regression evidence, not full matrix acceptance.');
+          NODE
+      - name: State exact partial scope
+        if: always()
+        run: |
+          printf 'Only the explicitly selected failed Swift helper cells, Windows/Node24, one serial worker.\n' >> "$GITHUB_STEP_SUMMARY"
+          printf 'Native guards/budgets, original review contracts and reuse checks remain. Accepted cells are omitted. This is not full stand or Release acceptance.\n' >> "$GITHUB_STEP_SUMMARY"
+      - name: Retain native evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: remaining-windows-swift-cells
+          path: ${{ runner.temp }}/remaining-swift-cells/**
+          if-no-files-found: warn
+          retention-days: 15
+
