@@ -36,10 +36,12 @@ const sourceIdentity = () => {
 };
 if (!['run', 'merge', 'inventory'].includes(action)) throw new Error('Use run, merge or inventory');
 // Use the same locked, fingerprint-checked compiler as stand.cjs. A stale .node-build can never certify new source.
-const compilation = cp.spawnSync(process.execPath, ['scripts/node-foundation/build-scripts.cjs', 'build.js', 'node-foundation'],
-    { cwd: root, stdio: ['ignore', 2, 2], windowsHide: true });
-if (compilation.error) throw compilation.error;
-if (compilation.status !== 0) throw new Error('Current source compilation failed: ' + compilation.status);
+for (const target of action === 'run' ? ['publish-runtime', 'node-foundation'] : ['node-foundation']) {
+    const compilation = cp.spawnSync(process.execPath, ['scripts/node-foundation/build-scripts.cjs', 'build.js', target],
+        { cwd: root, stdio: ['ignore', 2, 2], windowsHide: true });
+    if (compilation.error) throw compilation.error;
+    if (compilation.status !== 0) throw new Error('Current source compilation failed (' + target + '): ' + compilation.status);
+}
 const matrix = require(path.join(build, 'tests/node/synthetic/engine/common-review-matrix.js'));
 const inventory = matrix.commonReviewMatrixCells();
 const catalogHash = hash({ rows: matrix.COMMON_REVIEW_MATRIX, cells: inventory });

@@ -121,3 +121,24 @@ test('parallel matrix partitions run every native cell once without changing cov
         assert.throws(() => selectCommonReviewCells(cells, invalid));
     assert.throws(() => selectCommonReviewCells(cells, { index: 1, total: 2 }, { index: 1, total: 25 }));
 });
+
+for (const failedTarget of ['publish-runtime', 'node-foundation']) test('native matrix runtime bootstrap fails closed: ' + failedTarget, () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'garda-review-matrix-runtime-'));
+    try {
+        const entry = path.join(root, 'tests/node/synthetic/review-matrix.cjs');
+        const oracle = path.join(root, '.node-build/tests/node/synthetic/engine/common-review-matrix.js');
+        const driver = path.join(root, 'scripts/node-foundation/build-scripts.cjs');
+        for (const file of [entry, oracle, driver]) fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.copyFileSync('tests/node/synthetic/review-matrix.cjs', entry);
+        fs.writeFileSync(oracle, 'throw new Error("STALE_ORACLE_EXECUTED");');
+        fs.writeFileSync(driver, 'const target=process.argv[3];if(target===' + JSON.stringify(failedTarget) + ')process.exit(63);');
+        const result = spawnSync(process.execPath, [entry, 'run', '--report', path.join(root, 'report')],
+            { cwd: root, encoding: 'utf8', windowsHide: true });
+        assert.notEqual(result.status, 0);
+        assert.ok(result.stderr.includes('Current source compilation failed (' + failedTarget + '): 63'), result.stderr);
+        assert.ok(!result.stderr.includes('STALE_ORACLE_EXECUTED'), 'Failed preparation must never load an older compiled oracle');
+    } finally {
+        assert.equal(path.dirname(root), path.resolve(os.tmpdir()));
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
