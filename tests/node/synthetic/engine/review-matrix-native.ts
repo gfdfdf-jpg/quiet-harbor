@@ -59,7 +59,10 @@ export function nativeReviewMatrixScenario(input: StackManifest, entry: ReviewMa
     });
     const newTest = path.posix.join(path.posix.dirname(suite.target), 'matrix-added.test' + path.posix.extname(suite.target));
     const newSource = extraSource(99);
-    const helper = 'tests/helpers/matrix-shared' + path.posix.extname(suite.source);
+    // Preserve existing directory spelling: Windows merges tests into Tests, while
+    // native contained-file admission requires the exact canonical relative path.
+    const testDirectory = Object.keys(fixture.files).find(file => /^tests\//iu.test(file))?.split('/')[0] ?? 'tests';
+    const helper = path.posix.join(testDirectory, 'helpers', 'matrix-shared' + path.posix.extname(suite.source));
     if (entry.repairs.some(step => step.kind === 'helper')) {
         fixture.files[helper] = comment + ' existing shared test helper\n';
         fixture.taskTestSupport = [...fixture.taskTestSupport ?? [], { path: helper, role: 'helper',

@@ -19,6 +19,17 @@ test('one common review matrix instantiates every row on every stack and all fou
             assert.deepEqual(scenario.expectedReviews, matrixLaunchContract(row).expectedReviews);
             assert.ok(scenario.fixture?.taskTestInvocations?.length);
             assert.ok(scenario.inspectResult);
+            const directorySpellings = new Map<string, string>();
+            for (const relative of Object.keys(scenario.fixture!.files)) {
+                const components = relative.split('/');
+                for (let depth = 1; depth < components.length; depth++) {
+                    const directory = components.slice(0, depth).join('/');
+                    const key = directory.toLowerCase(), previous = directorySpellings.get(key);
+                    if (previous !== undefined) assert.equal(directory, previous,
+                        scenario.id + ': fixture directories must keep one spelling on case-insensitive hosts');
+                    directorySpellings.set(key, directory);
+                }
+            }
         }
     }
 });
