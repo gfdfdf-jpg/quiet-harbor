@@ -1,4 +1,4 @@
-name: Failed Windows foreign-active fixture
+name: Failed Windows preserved-DELTA ACL input
 
 on:
   workflow_dispatch:
@@ -12,16 +12,16 @@ permissions:
   contents: read
 
 jobs:
-  foreign-active:
-    name: One failed foreign-active fixture / Windows / Node 24
+  preserved-delta-acl-input:
+    name: One failed preserved-DELTA case / Windows / Node 24
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     defaults:
       run:
         shell: bash
     env:
       SUT_COMMIT: ${{ inputs.commit }}
-      GARDA_SYNTHETIC_WALK_ONLY: foreign-active-task
+      GARDA_SYNTHETIC_WALK_ONLY: field-onlinestore-passed-delta-after-test-repair
       GARDA_SYNTHETIC_WALK_LEVEL: full
       GARDA_SYNTHETIC_WALK_JOBS: '1'
     steps:
@@ -34,49 +34,67 @@ jobs:
         with:
           ref: ${{ inputs.commit }}
           persist-credentials: false
-      - name: Assert the checked-out SUT
+      - name: Assert the checked-out SUT and Windows runtime
         run: |
-          node -e 'const cp=require("node:child_process"),a=require("node:assert/strict");a.equal(cp.execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim(),process.env.SUT_COMMIT)'
+          node -e 'const cp=require("node:child_process"),a=require("node:assert/strict");a.equal(cp.execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim(),process.env.SUT_COMMIT);a.equal(process.platform,"win32");a.equal(process.versions.node.split(".")[0],"24")'
       - name: Install dependencies
         run: npm ci --no-fund --no-audit
       - name: Set isolated diagnostic directory
-        run: printf 'GARDA_SYNTHETIC_WALK_REPORT=%s/windows-foreign-active-check\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
-      - name: Run only the one failed native stand scenario
+        run: printf 'GARDA_SYNTHETIC_WALK_REPORT=%s/windows-preserved-delta-acl-input\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - name: Verify new native fixture inherited explicit and mutation controls
         run: |
-          node scripts/node-foundation/build-scripts.cjs test.js --garda-shard-timeout-ms 900000 \
+          export PATH="/c/Windows/System32:$PATH"
+          node scripts/node-foundation/build-scripts.cjs test.js --garda-shard-timeout-ms 300000 \
+            tests/node/synthetic/synthetic-windows-acl-fixture.test.ts
+      - name: Run only the failed native stand scenario
+        run: |
+          export PATH="/c/Windows/System32:$PATH"
+          node scripts/node-foundation/build-scripts.cjs test.js --garda-shard-timeout-ms 1200000 \
             tests/node/synthetic/synthetic-navigator-walk.test.ts
-      - name: Refuse skipped, missing or foreign scenario evidence
+      - name: Refuse missing functional reuse or work-budget evidence
         run: |
           node <<'NODE'
-          const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+          const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),crypto=require('node:crypto');
           const root=process.env.GARDA_SYNTHETIC_WALK_REPORT;
-          const report=JSON.parse(fs.readFileSync(path.join(root,'partial-findings.json'),'utf8'));
-          assert.equal(report.partial,true);assert.equal(report.completed,1);assert.equal(report.total,1);
-          assert.equal(report.coverageComplete,false);assert.deepEqual(report.findings,[]);
-          assert.equal(report.scenarios.length,1);
-          assert.deepEqual(report.scenarios.map(s=>s.id).sort(),['foreign-active-task']);
-          for(const scenario of report.scenarios){assert.equal(scenario.outcome,'blocked');assert.deepEqual(scenario.findings,[]);}
-          const inputs=JSON.parse(fs.readFileSync(path.join(root,'run-inputs.json'),'utf8'));
-          assert.equal(inputs.sourceCommit,process.env.SUT_COMMIT);
-          const native=JSON.parse(fs.readFileSync(path.join(root,'navigator-walk.json'),'utf8'));
-          assert.equal(native.scenarios.length,1);const actual=native.scenarios[0];
-          assert.equal(actual.id,'foreign-active-task');assert.equal(actual.outcome,'blocked');
-          assert.equal(actual.terminalRoute,'BLOCKED/enter-task-mode');assert.equal(actual.steps,1);
-          assert.deepEqual(actual.reviews,[]);assert.equal(actual.taskEvents,0);
-          assert.match(actual.detail,/T-FOREIGN/);assert.match(actual.detail,/Ask the operator to confirm/);
+          const read=file=>JSON.parse(fs.readFileSync(path.join(root,file),'utf8'));
+          const hash=value=>crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
+          const partial=read('partial-findings.json'),id='field-onlinestore-passed-delta-after-test-repair';
+          assert.equal(partial.partial,true);assert.equal(partial.completed,1);assert.equal(partial.total,1);
+          assert.deepEqual(partial.findings,[]);assert.deepEqual(partial.scenarios.map(s=>s.id),[id]);
+          assert.equal(partial.scenarios[0].outcome,'done');assert.deepEqual(partial.scenarios[0].findings,[]);
+          assert.equal(read('run-inputs.json').sourceCommit,process.env.SUT_COMMIT);
+          const report=read('navigator-walk.json');assert.deepEqual(report.anomalies,[]);assert.deepEqual(report.findings,[]);
+          assert.equal(report.scenarios.length,1);assert.equal(report.scenarios[0].id,id);assert.equal(report.scenarios[0].outcome,'done');
+          const index=read('results.json');assert.equal(index.schema,2);assert.deepEqual(index.records.map(row=>row.id),[id]);
+          const record=read('scenarios/'+hash(id)+'.json');assert.equal(record.digest,index.records[0].digest);
+          assert.equal(hash({result:record.result,findings:record.findings}),record.digest);assert.deepEqual(record.findings,[]);
+          const result=record.result;assert.equal(result.scenarioId,id);assert.equal(result.outcome,'done');
+          assert.deepEqual(result.reviews.map(r=>r.lane+':'+r.mode),['code:FULL','api:FULL','code:DELTA','api:DELTA','test:FULL','test:DELTA']);
+          assert.equal(result.steps.length,70);
+          const targets=['task-events','task-events/T-WALK.jsonl','reviews','reviews/T-WALK-task-mode.json'];
+          for(const step of result.steps) for(const [key,value] of Object.entries(step.measurement?.work||{}))
+            if(key.startsWith('acl_principal_probe:'))assert.equal(value,0,'inherited input unexpectedly acquired principal witnesses');
+          for(const n of [28,39,53,54,55,56,57,58]) {
+            const step=result.steps.find(s=>s.index===n);assert.ok(step?.measurement?.work);
+            for(const target of targets.slice(0,n===53?2:4)) for(const phase of ['initial','final']) {
+              const matches=Object.entries(step.measurement.work).filter(([key])=>key.startsWith('acl_probe:'+phase+':')&&key.replace(/\\/g,'/').endsWith('/runtime/'+target));
+              assert.equal(matches.length,1);assert.equal(matches[0][1],1,'Every original initial/final ACL object check must remain live');
+            }
+          }
+          console.log('ONE_FAILED_WINDOWS_PRESERVED_DELTA_ACCEPTED: native digest, exact reviews/modes, zero work anomalies, every ACL check retained');
           NODE
       - name: State the exact scope
         if: always()
         run: |
-          printf 'Diagnostic only: one failed foreign-active fixture on Windows Node 24.\n' >> "$GITHUB_STEP_SUMMARY"
-          printf 'Expected native repair/operator-confirmation handoffs, zero reviewers. This does not certify the full stand or release.\n' >> "$GITHUB_STEP_SUMMARY"
+          printf 'Diagnostic only: one failed preserved-DELTA field case on Windows Node24, plus new native ACL input controls.\n' >> "$GITHUB_STEP_SUMMARY"
+          printf 'No successful jobs/matrix cells are repeated; no full-stand or release acceptance is implied.\n' >> "$GITHUB_STEP_SUMMARY"
       - name: Retain diagnostic evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: windows-foreign-active-evidence
+          name: windows-preserved-delta-acl-input-evidence
           path: |
-            ${{ runner.temp }}/windows-foreign-active-check/**
-            !${{ runner.temp }}/windows-foreign-active-check/run-inputs/**
+            ${{ runner.temp }}/windows-preserved-delta-acl-input/**
+            !${{ runner.temp }}/windows-preserved-delta-acl-input/run-inputs/**
           if-no-files-found: warn
           retention-days: 15
