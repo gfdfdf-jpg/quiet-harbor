@@ -4,10 +4,10 @@
     "name": "garda-agent-orchestrator",
     "version": "1.4.4"
   },
-  "packedFileManifestSha256": "45c55ab96b3b5a2f6165a545b5ca84c4251f78b88fb7b2064dd7618822a2b94a",
-  "tarballSha256": "44021f18d33ca32fc7e94d0f80489868e528dc60750d4d2b620b590d36637d3e",
+  "packedFileManifestSha256": "d9e23d7a8aab6713abb1a48b819d71a06f0f12f1fd748de23f7d2f76169aa760",
+  "tarballSha256": "7d1a13e822e90acf29e22fbb93ea08438bc76e6df780bfb1815a8c4d048a32be",
   "tarballSha256ByPlatform": {
-    "win32": "44021f18d33ca32fc7e94d0f80489868e528dc60750d4d2b620b590d36637d3e"
+    "win32": "7d1a13e822e90acf29e22fbb93ea08438bc76e6df780bfb1815a8c4d048a32be"
   },
   "packedFileSha256": {
     ".gitattributes": "099d1a09ca2f02b2d7d071bcc19fdd2cda5c66f01f133abe9ff9d63294a1055c",
@@ -927,7 +927,7 @@
     "dist/src/gates/task-audit/task-audit-summary-review-timing-audit.js": "e0d1b4832cd1988fe1aee39031b054a71072c95cff5bdf219fd8161d2fd10e27",
     "dist/src/gates/task-audit/task-audit-summary-review-trust.js": "f83039bf55e7fc31a91188c475ca86f5163354f5f5ca3d337335187cd9833014",
     "dist/src/gates/task-audit/task-audit-summary-types.js": "d43aa81f5bc89faa359e0f97c814ba25155591ff078fbb9bfd40f8c7c9683230",
-    "dist/src/gates/task-audit/task-audit-summary.js": "14ea4540905a37e45ccb3a34a409518f407712b026d618e970d1626dfd8bf75b",
+    "dist/src/gates/task-audit/task-audit-summary.js": "1e4d4453fda1da56c4e2fc331d0a69d3ab04b09c2a6d8f1258ee60c012fbb9a4",
     "dist/src/gates/task-events-summary/index.js": "6329c11af95695532f03442ebe8011fce190143ce969f2479b659ed26b9119d9",
     "dist/src/gates/task-events-summary/task-events-summary-aggregation.js": "ebcfd482d74041c7b5ccc00376f0849a9cea1eaa29a4376b7c431ffd3505f7da",
     "dist/src/gates/task-events-summary/task-events-summary-artifacts.js": "51429cff6ce1d2213dbdcc684005cda7cb5b1353ceacd5867d63e5ff46c8ffda",
@@ -1708,8 +1708,8 @@
   },
   "metrics": {
     "fileCount": 1695,
-    "unpackedSizeBytes": 30299438,
-    "installedSizeBytes": 30305034,
+    "unpackedSizeBytes": 30299717,
+    "installedSizeBytes": 30305313,
     "productionDependencyCount": 0,
     "lifecycleScripts": {
       "postpack": "node scripts/package-legacy-entrypoint-compat.cjs remove",
@@ -1804,5 +1804,5 @@
       "writeFile": 0
     }
   },
-  "rationale": "P12: audited 1.4.4 review-preservation authority and current-scope obligation validation; remove unused Git queries; production dependencies, lifecycle scripts and growth allowances unchanged; developer matrix and diagnostics excluded from the package."
+  "rationale": "Audit-only MISSING evidence diagnostic is now identical between lazy navigation and full task audit; no gate, threshold, dependency, lifecycle or package inclusion policy changes. Recollect exact package bytes for this runtime correction. Collector install stays offline in its external scratch prefix."
 }

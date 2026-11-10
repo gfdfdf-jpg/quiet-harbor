@@ -89,7 +89,7 @@ function resolveLaunchWithoutUnusedIgnoreReads(repoRoot: string): ReturnType<typ
     }) as typeof originalExecFileSync;
     try {
         const result = resolveNextStep({ taskId: TASK_ID, repoRoot });
-        assert.equal(ignoreCalls, 2, 'full route retains only the two required ignored-file queries');
+        assert.equal(ignoreCalls, 0, 'unchanged protected bytes and scope already observed by Git require no additional ignore queries');
         assert.equal(workspaceStatusCalls, 2, 'one shared workspace observation plus the required A1 final freshness read');
         assert.equal(separateWorkspaceReadCalls, 0, 'command scope must reuse the shared workspace observation');
         return result;

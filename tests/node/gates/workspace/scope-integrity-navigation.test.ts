@@ -5,7 +5,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as git from '../../../../src/core/git-helpers';
 import * as subprocess from '../../../../src/core/process/subprocess';
-import { resolveNextStep } from '../../../../src/gates/next-step/next-step';
+import { executeNextStepEffects, resolveNextStep } from '../../../../src/gates/next-step/next-step';
 import { readHeadSha } from '../../../../src/gates/workspace/workspace-snapshot-cache';
 import { createNextStepLongHistoryFixture } from '../next-step/next-step-long-history-fixture';
 import { scopeGitFixture } from '../../scope-integrity-fixtures';
@@ -15,6 +15,8 @@ test('P3 native next-step preserves a Git authority failure and recovers on the 
     t.after(() => fs.rmSync(fixture.repoRoot, { recursive: true, force: true }));
     const options = { repoRoot: fixture.repoRoot, taskId: fixture.taskId };
     const before = resolveNextStep(options);
+    const timeline = path.join(fixture.repoRoot, 'garda-agent-orchestrator/runtime/task-events', fixture.taskId + '.jsonl');
+    const retainedTimeline = fs.readFileSync(timeline);
     const original = git.runGitBinary;
     let injected = 0;
     const mocked = t.mock.method(git, 'runGitBinary', (...args: Parameters<typeof original>) => {
@@ -24,8 +26,18 @@ test('P3 native next-step preserves a Git authority failure and recovers on the 
         }
         return original(...args);
     });
-    assert.throws(() => resolveNextStep(options), /git (?:--no-pager )?status .*failed/iu,
-        'The native boundary must preserve the actual failed query instead of accepting an empty scope.');
+    const refused = resolveNextStep(options);
+    assert.equal(refused.status, 'BLOCKED');
+    assert.equal(refused.next_gate, 'git-observation');
+    assert.match(refused.reason, /git (?:--no-pager )?status .*failed/iu,
+        'The native refusal must preserve the actual failed query instead of accepting an empty scope.');
+    assert.deepEqual(refused.review.launchable_review_types, []);
+    assert.equal(refused.commands.length, 1);
+    assert.match(refused.commands[0].command, /next-step/u);
+    const refusedExecution = executeNextStepEffects(options, '0'.repeat(64));
+    assert.equal(refusedExecution.status, 'BLOCKED');
+    assert.equal(refusedExecution.next_gate, refused.next_gate);
+    assert.deepEqual(fs.readFileSync(timeline), retainedTimeline, 'Failed Git authority cannot authorize lifecycle mutations.');
     assert.ok(injected);
     mocked.mock.restore();
     assert.equal(resolveNextStep(options).next_gate, before.next_gate);

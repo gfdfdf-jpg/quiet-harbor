@@ -793,20 +793,22 @@ function buildTaskAuditSummaryFromSnapshot(options: TaskAuditSummaryOptions, ins
         // No current PASS and an observably absent artifact already prove missing evidence.
         // Only navigation may avoid the irrelevant document assessment in this case; explicit
         // audits, existing/uncertain artifacts and completion retain the complete assessment.
+        // Both audit views report the same observed refusal. A document assessment cannot
+        // turn an absent required artifact into acceptable evidence.
+        const missingReason = 'Project memory impact evidence is MISSING. Project memory impact artifact is missing: '
+            + projectMemoryImpactArtifact.artifact_path + '.';
         const memoryGate = gates.find(gate => gate.gate === 'project-memory-impact');
         const observed = lazyReports && !hasCompletionPassEvent && memoryGate?.status === 'MISSING'
             ? readInvocationPathObservation(path.resolve(repoRoot, projectMemoryImpactArtifact.artifact_path)) : null;
         const confirmedMissing = observed && 'error' in observed.stat
             && (observed.stat.error as NodeJS.ErrnoException)?.code === 'ENOENT';
         if (confirmedMissing) {
-            blockers.push({ gate: 'project-memory-impact', reason:
-                'Project memory impact evidence is MISSING. Project memory impact artifact is missing: '
-                + projectMemoryImpactArtifact.artifact_path + '.' });
+            blockers.push({ gate: 'project-memory-impact', reason: missingReason });
         } else {
             const evidence = readProjectMemoryImpactEvidence();
             if (evidence.evidence_status !== 'CURRENT') blockers.push({
-                gate: 'project-memory-impact', reason:
-                    `Project memory impact evidence is ${evidence.evidence_status}. ${evidence.visible_summary_line}`
+                gate: 'project-memory-impact', reason: evidence.evidence_status === 'MISSING' ? missingReason
+                    : `Project memory impact evidence is ${evidence.evidence_status}. ${evidence.visible_summary_line}`
             });
         }
     }
