@@ -1,4 +1,4 @@
-name: Foreign active task regression
+name: Invalid operator input regressions
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   foreign-active-task:
-    name: Foreign active task / Linux / Node 24
+    name: Failed operator input fixtures / Linux / Node 24
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -21,7 +21,7 @@ jobs:
         shell: bash
     env:
       SUT_COMMIT: ${{ inputs.commit }}
-      GARDA_SYNTHETIC_WALK_ONLY: foreign-active-task
+      GARDA_SYNTHETIC_WALK_ONLY: foreign-active-task,split-required-without-owned-latch
       GARDA_SYNTHETIC_WALK_LEVEL: full
       GARDA_SYNTHETIC_WALK_JOBS: '1'
       GARDA_SYNTHETIC_WALK_REPORT: ${{ runner.temp }}/foreign-active-task-check
@@ -39,7 +39,7 @@ jobs:
           node -e 'const cp=require("node:child_process"),a=require("node:assert/strict");a.equal(cp.execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim(),process.env.SUT_COMMIT)'
       - name: Install dependencies
         run: npm ci --no-fund --no-audit
-      - name: Run only the failed native stand scenario
+      - name: Run only the two failed native stand scenarios
         run: |
           node scripts/node-foundation/build-scripts.cjs test.js --garda-shard-timeout-ms 900000 \
             tests/node/synthetic/synthetic-navigator-walk.test.ts
@@ -49,18 +49,19 @@ jobs:
           const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
           const root=process.env.GARDA_SYNTHETIC_WALK_REPORT;
           const report=JSON.parse(fs.readFileSync(path.join(root,'partial-findings.json'),'utf8'));
-          assert.equal(report.partial,true);assert.equal(report.completed,1);assert.equal(report.total,1);
+          assert.equal(report.partial,true);assert.equal(report.completed,2);assert.equal(report.total,2);
           assert.equal(report.coverageComplete,false);assert.deepEqual(report.findings,[]);
-          assert.equal(report.scenarios.length,1);assert.equal(report.scenarios[0].id,'foreign-active-task');
-          assert.equal(report.scenarios[0].outcome,'blocked');assert.deepEqual(report.scenarios[0].findings,[]);
+          assert.equal(report.scenarios.length,2);
+          assert.deepEqual(report.scenarios.map(s=>s.id).sort(),['foreign-active-task','split-required-without-owned-latch']);
+          for(const scenario of report.scenarios){assert.equal(scenario.outcome,'blocked');assert.deepEqual(scenario.findings,[]);}
           const inputs=JSON.parse(fs.readFileSync(path.join(root,'run-inputs.json'),'utf8'));
           assert.equal(inputs.sourceCommit,process.env.SUT_COMMIT);
           NODE
       - name: State the exact scope
         if: always()
         run: |
-          printf 'Diagnostic only: the failed foreign-active-task scenario on Linux Node 24.\n' >> "$GITHUB_STEP_SUMMARY"
-          printf 'Expected native operator-confirmation handoff, zero reviewers. This does not certify the full stand or release.\n' >> "$GITHUB_STEP_SUMMARY"
+          printf 'Diagnostic only: two failed invalid-input fixture scenarios on Linux Node 24.\n' >> "$GITHUB_STEP_SUMMARY"
+          printf 'Expected native repair/operator-confirmation handoffs, zero reviewers. This does not certify the full stand or release.\n' >> "$GITHUB_STEP_SUMMARY"
       - name: Retain diagnostic evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
