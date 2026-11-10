@@ -1,0 +1,82 @@
+name: Failed Windows foreign-active fixture
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Exact fixed public reserve SUT commit
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  foreign-active:
+    name: One failed foreign-active fixture / Windows / Node 24
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      SUT_COMMIT: ${{ inputs.commit }}
+      GARDA_SYNTHETIC_WALK_ONLY: foreign-active-task
+      GARDA_SYNTHETIC_WALK_LEVEL: full
+      GARDA_SYNTHETIC_WALK_JOBS: '1'
+    steps:
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+      - name: Validate exact diagnostic source
+        run: node -e 'if(!/^[a-f0-9]{40}$/.test(process.env.SUT_COMMIT))throw Error("Full commit SHA required")'
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+      - name: Assert the checked-out SUT
+        run: |
+          node -e 'const cp=require("node:child_process"),a=require("node:assert/strict");a.equal(cp.execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim(),process.env.SUT_COMMIT)'
+      - name: Install dependencies
+        run: npm ci --no-fund --no-audit
+      - name: Set isolated diagnostic directory
+        run: printf 'GARDA_SYNTHETIC_WALK_REPORT=%s/windows-foreign-active-check\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - name: Run only the one failed native stand scenario
+        run: |
+          node scripts/node-foundation/build-scripts.cjs test.js --garda-shard-timeout-ms 900000 \
+            tests/node/synthetic/synthetic-navigator-walk.test.ts
+      - name: Refuse skipped, missing or foreign scenario evidence
+        run: |
+          node <<'NODE'
+          const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+          const root=process.env.GARDA_SYNTHETIC_WALK_REPORT;
+          const report=JSON.parse(fs.readFileSync(path.join(root,'partial-findings.json'),'utf8'));
+          assert.equal(report.partial,true);assert.equal(report.completed,1);assert.equal(report.total,1);
+          assert.equal(report.coverageComplete,false);assert.deepEqual(report.findings,[]);
+          assert.equal(report.scenarios.length,1);
+          assert.deepEqual(report.scenarios.map(s=>s.id).sort(),['foreign-active-task']);
+          for(const scenario of report.scenarios){assert.equal(scenario.outcome,'blocked');assert.deepEqual(scenario.findings,[]);}
+          const inputs=JSON.parse(fs.readFileSync(path.join(root,'run-inputs.json'),'utf8'));
+          assert.equal(inputs.sourceCommit,process.env.SUT_COMMIT);
+          const native=JSON.parse(fs.readFileSync(path.join(root,'navigator-walk.json'),'utf8'));
+          assert.equal(native.scenarios.length,1);const actual=native.scenarios[0];
+          assert.equal(actual.id,'foreign-active-task');assert.equal(actual.outcome,'blocked');
+          assert.equal(actual.terminalRoute,'BLOCKED/enter-task-mode');assert.equal(actual.steps,1);
+          assert.deepEqual(actual.reviews,[]);assert.equal(actual.taskEvents,0);
+          assert.match(actual.detail,/T-FOREIGN/);assert.match(actual.detail,/Ask the operator to confirm/);
+          NODE
+      - name: State the exact scope
+        if: always()
+        run: |
+          printf 'Diagnostic only: one failed foreign-active fixture on Windows Node 24.\n' >> "$GITHUB_STEP_SUMMARY"
+          printf 'Expected native repair/operator-confirmation handoffs, zero reviewers. This does not certify the full stand or release.\n' >> "$GITHUB_STEP_SUMMARY"
+      - name: Retain diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: windows-foreign-active-evidence
+          path: |
+            ${{ runner.temp }}/windows-foreign-active-check/**
+            !${{ runner.temp }}/windows-foreign-active-check/run-inputs/**
+          if-no-files-found: warn
+          retention-days: 15
