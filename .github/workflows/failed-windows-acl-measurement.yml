@@ -1,0 +1,62 @@
+name: Failed Windows ACL measurement
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Exact public reserve SUT commit
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  acl-measurement:
+    name: One failed ACL measurement / Windows / Node 22.13.0
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      SUT_COMMIT: ${{ inputs.commit }}
+    steps:
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22.13.0'
+      - name: Validate exact diagnostic source
+        shell: pwsh
+        run: node -e 'if(!/^[a-f0-9]{40}$/.test(process.env.SUT_COMMIT))throw Error("Full commit SHA required")'
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ inputs.commit }}
+      - name: Assert the checked-out SUT
+        shell: pwsh
+        run: node -e 'const cp=require("node:child_process"),a=require("node:assert/strict");a.equal(cp.execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim(),process.env.SUT_COMMIT)'
+      - name: Install dependencies
+        run: npm ci --no-fund --no-audit
+      - name: Run only the failed file with native tracing and V8 coverage
+        shell: pwsh
+        run: |
+          $gardaTrace = (Join-Path $env:GITHUB_WORKSPACE 'scripts/ci/trace-windows-native-failures.cjs').Replace('\', '/')
+          $env:NODE_OPTIONS = (($env:NODE_OPTIONS + ' --require "' + $gardaTrace + '"').Trim())
+          $env:NODE_V8_COVERAGE = Join-Path $env:RUNNER_TEMP 'garda-acl-measurement-coverage'
+          $env:GARDA_TRACE_NATIVE_FAILURES = '1'
+          $env:GARDA_NODE_FOUNDATION_TEST_SHARDS = '1'
+          Write-Output "Diagnostic SUT: $env:SUT_COMMIT; one exact failed file; V8 coverage enabled. Native observation budgets unchanged."
+          node scripts/node-foundation/build-scripts.cjs test.js --garda-shard-timeout-ms 900000 tests/node/gate-runtime/low-noise-runtime-write-measurement.test.ts 2>&1 | Tee-Object -FilePath (Join-Path $env:RUNNER_TEMP 'garda-acl-measurement.log')
+          $gardaTestExit = $LASTEXITCODE
+          exit $gardaTestExit
+      - name: State exact diagnostic scope
+        if: always()
+        shell: pwsh
+        run: |
+          'Only the failed runtime-write measurement on Windows/Node22.13.0, with native call timings and status.' >> $env:GITHUB_STEP_SUMMARY
+          'All original assertions and native ACL budgets remain. This is not full coverage, Release or full-stand acceptance.' >> $env:GITHUB_STEP_SUMMARY
+      - name: Retain diagnostic output
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: failed-windows-acl-measurement
+          path: ${{ runner.temp }}/garda-acl-measurement.log
+          if-no-files-found: warn
+          retention-days: 15
+
