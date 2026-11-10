@@ -70,6 +70,8 @@ runs every deep family on every stack, while Windows, about four times slower on
 runs the complete full level with the seeded deep rotation (about 44% of the `all` navigator steps on seed `1785881697`)
 on more shards. ACL, path and process handling are exercised by every Windows scenario. Each OS merges its own verdict.
 Each OS has one job per shard (`fail-fast: false`, two workers, 330-minute limit) and one 45-minute merge job.
+The preserved-DELTA field performance fixture declares inherited trusted Windows ACL inputs, matching its retained calibration. Before copying the template, only its fresh empty disposable root receives an inheritable allow-list DACL for the native current user, SYSTEM and Administrators. Owner/group/SACL, parents, siblings and the source checkout are preserved. Setup is never repeated during the walk; later explicit grants and mutations remain visible to native guards. The mandatory Windows ACL fixture controls and invocation ACL suite separately exercise explicit grants, fresh principal witnesses, permission mutation, restoration and untrusted writers. No work budget, native guard or review expectation changes with this input setup.
+
 Windows uses Git Bash with native System32/`icacls`, just like local execution. Partial artifacts upload even after
 failure. Only **Verdict / linux** and **Verdict / windows** are acceptance results; their artifacts contain both
 summary formats, raw union and linked shard evidence. Missing or crashed shards fail merge. The job summary displays

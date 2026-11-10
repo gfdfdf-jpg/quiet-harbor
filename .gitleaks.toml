@@ -22,3 +22,38 @@ paths = [
   '''^tests/node/core/redaction\.test\.ts$''',
   '''^node_modules/''',
 ]
+
+
+# These are file digests, not authentication tokens. Match only the complete
+# generated JSON digest entry and only this rule in the exact baseline file.
+[[rules]]
+id = "generic-api-key"
+[[rules.allowlists]]
+description = "SHA-256 file entries in the generated package surface baseline"
+condition = "AND"
+paths = ['''^config/release-package-surface-baseline\.json$''']
+regexTarget = "match"
+regexes = ['''^[a-zA-Z0-9_./-]+\.(?:js|md|json)": "[a-f0-9]{64}"$''']
+
+[[rules.allowlists]]
+description = "Exact public fake AWS key used to exercise runtime redaction"
+condition = "AND"
+paths = ['''^tests/node/gates/review-context/build-review-context-routing\.test\.ts$''']
+regexTarget = "match"
+regexes = ['''^rawAwsKey = 'AKIA1234567890ABCDEF'$''']
+
+[[rules.allowlists]]
+description = "Exact synthetic API reviewer identity, not a credential"
+condition = "AND"
+paths = ['''^tests/node/gates/review/review-output-correction\.test\.ts$''']
+regexTarget = "match"
+regexes = ['''^api:conversation-1'$''']
+
+[[rules]]
+id = "private-key"
+[[rules.allowlists]]
+description = "Exact non-key generator expression used to exercise multiline redaction"
+condition = "AND"
+paths = ['''^tests/node/gates/split-required/split-required-wip-runtime-handoff\.test\.ts$''']
+regexTarget = "match"
+regexes = ['''^-----BEGIN PRIVATE KEY-----',\s*\.\.\.Array\.from\(\{ length: 25 \}, \(\) => 'fixture-private-key-material'\),\s*'-----END PRIVATE KEY-----$''']

@@ -2,6 +2,7 @@ import NATIVE_COUNTER_SHAPES from '../native-counter-input-shapes.json';
 import { hasPreservedDeltaCounterInputs, hasTwoSourceApiCounterInputs, PRESERVED_DELTA_COUNTER_STATE,
     TWO_SOURCE_API_INITIAL_STATE, TWO_SOURCE_API_REMEDIATION_STATE } from './walk-preserved-delta-counter-state';
 import { WALK_CLOCK_OFFSET } from './walk-clock';
+import { prepareEmptyWalkWindowsAcl } from './walk-windows-acl-fixture';
 import { resolveWalkReviewFix, walkRemediationEdits, type WalkRemediationStep } from './walk-remediation-script';
 import { isPlainRecord } from '../../../../src/core/records';
 import { observeStandOracle } from './stand-check-observation';
@@ -79,6 +80,8 @@ export type WalkDisturbance =
 export interface WalkScenario {
     /** Observe the real navigator before the synthetic agent fills placeholders or chooses an action. */
     inspectNavigation?: (result: ReturnType<typeof resolveNextStep>, steps: readonly WalkStep[]) => void;
+    /** Fixed inherited trusted ACL input for a separately calibrated Windows performance fixture. */
+    windowsAclInput?: 'inherited-trusted';
     fixture?: WalkFixtureDescriptor;
     taskTitle?: string;
     taskNotes?: string;
@@ -1390,6 +1393,7 @@ async function walkIsolatedTaskFamily(templateRoot: string, scenario: WalkScenar
     onResult?: (result: WalkResult) => void): Promise<WalkResult[]> {
     const started = performance.now();
     const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'garda-walk-'));
+    if (scenario.windowsAclInput === 'inherited-trusted') prepareEmptyWalkWindowsAcl(repoRoot);
     fs.cpSync(templateRoot, repoRoot, { recursive: true });
     if (scenario.customLane) {
         writeTextFile(path.join(repoRoot, DEFAULT_BUNDLE_NAME, 'live/config/review-catalog.json'), JSON.stringify({

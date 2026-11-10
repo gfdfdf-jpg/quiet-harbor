@@ -86,7 +86,7 @@ export function inspectPreservedDeltaAuthority(root: string, result: WalkResult,
 }
 
 export function preservedDeltaFieldScenario(): WalkScenario {
-    return { id: PRESERVED_DELTA_FIELD_ID,
+    return { id: PRESERVED_DELTA_FIELD_ID, windowsAclInput: 'inherited-trusted',
         edits: [{ path: 'src/app.ts', append: 'export const changed = true;\n' },
             { path: 'src/other.ts', append: 'export const other = true;\n' },
             { path: 'tests/app.test.ts', append: '// covered\n' }],
