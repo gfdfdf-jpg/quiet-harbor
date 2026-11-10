@@ -1,0 +1,64 @@
+name: Failed gate regressions
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Exact fixed public reserve SUT commit
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  failed-gates:
+    name: Four failed gate files / Linux / Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22.13.0', '24']
+    defaults:
+      run:
+        shell: bash
+    env:
+      SUT_COMMIT: ${{ inputs.commit }}
+    steps:
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Validate exact diagnostic source
+        run: node -e 'if(!/^[a-f0-9]{40}$/.test(process.env.SUT_COMMIT))throw Error("Full commit SHA required")'
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ inputs.commit }}
+      - name: Assert the checked-out SUT
+        run: |
+          node -e 'const cp=require("node:child_process"),a=require("node:assert/strict");a.equal(cp.execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim(),process.env.SUT_COMMIT)'
+      - name: Install dependencies
+        run: npm ci --no-fund --no-audit
+      - name: Run only the four failed owning files
+        run: |
+          set -o pipefail
+          node scripts/node-foundation/build-scripts.cjs test.js --garda-shard-timeout-ms 1800000 \
+            tests/node/gates/next-step/next-step-audit-navigation-query.test.ts \
+            tests/node/gates/next-step/next-step-report-projection.test.ts \
+            tests/node/gates/next-step/next-step-review-launch-routing.test.ts \
+            tests/node/gates/workspace/scope-integrity-navigation.test.ts \
+            2>&1 | tee "$RUNNER_TEMP/failed-gate-regressions.log"
+      - name: State the exact scope
+        if: always()
+        run: |
+          printf 'Only four failed Gate Tests files on Linux, Node %s.\n' '${{ matrix.node }}' >> "$GITHUB_STEP_SUMMARY"
+          printf 'SUT commit: %s. This is a diagnostic replay, not a full-suite or release acceptance.\n' "$SUT_COMMIT" >> "$GITHUB_STEP_SUMMARY"
+      - name: Retain diagnostic output
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: failed-gate-regressions-node-${{ matrix.node }}
+          path: ${{ runner.temp }}/failed-gate-regressions.log
+          if-no-files-found: warn
+          retention-days: 15
+
