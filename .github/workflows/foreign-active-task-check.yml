@@ -24,7 +24,6 @@ jobs:
       GARDA_SYNTHETIC_WALK_ONLY: foreign-active-task,split-required-without-owned-latch
       GARDA_SYNTHETIC_WALK_LEVEL: full
       GARDA_SYNTHETIC_WALK_JOBS: '1'
-      GARDA_SYNTHETIC_WALK_REPORT: ${{ runner.temp }}/foreign-active-task-check
     steps:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
@@ -39,6 +38,8 @@ jobs:
           node -e 'const cp=require("node:child_process"),a=require("node:assert/strict");a.equal(cp.execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim(),process.env.SUT_COMMIT)'
       - name: Install dependencies
         run: npm ci --no-fund --no-audit
+      - name: Set isolated diagnostic directory
+        run: printf 'GARDA_SYNTHETIC_WALK_REPORT=%s/foreign-active-task-check\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - name: Run only the two failed native stand scenarios
         run: |
           node scripts/node-foundation/build-scripts.cjs test.js --garda-shard-timeout-ms 900000 \
