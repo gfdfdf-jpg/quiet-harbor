@@ -4,10 +4,10 @@
     "name": "garda-agent-orchestrator",
     "version": "1.4.4"
   },
-  "packedFileManifestSha256": "d9e23d7a8aab6713abb1a48b819d71a06f0f12f1fd748de23f7d2f76169aa760",
-  "tarballSha256": "7d1a13e822e90acf29e22fbb93ea08438bc76e6df780bfb1815a8c4d048a32be",
+  "packedFileManifestSha256": "65a65bffc3431b6166cdc37aab6abe152a7815aaca3c121c8dac02c23b86d36c",
+  "tarballSha256": "e2249645bea524b5a88bc9da9420f9cfd6c9b29a5f5e0085f416d50d9a9fa9fc",
   "tarballSha256ByPlatform": {
-    "win32": "7d1a13e822e90acf29e22fbb93ea08438bc76e6df780bfb1815a8c4d048a32be"
+    "win32": "e2249645bea524b5a88bc9da9420f9cfd6c9b29a5f5e0085f416d50d9a9fa9fc"
   },
   "packedFileSha256": {
     ".gitattributes": "099d1a09ca2f02b2d7d071bcc19fdd2cda5c66f01f133abe9ff9d63294a1055c",
@@ -1490,11 +1490,11 @@
     "docs/release-readiness.md": "d2ed5592499967dedd175ae7f7ae9ea5a402df9c38eda9beffc1ce765323f469",
     "docs/run-methods.md": "35b82d71c12696ea571cc30dfb9099081f739d3b336a1649829f92705a10cab0",
     "docs/sbom.md": "ec0c4630ddabedbc5ecfaa1d1f1ee744eed2c62446c646db866cd85b8e2947af",
-    "docs/secret-scanning.md": "b52472d00a6f35885852ba96143d7a04fa34e5bbf3f2e1bce8db123e148b5c46",
+    "docs/secret-scanning.md": "aba94f4a7731e58cc76f28a6404e5d838e08603b5e3be4227ff4922e0946f802",
     "docs/task-plan-workflow.md": "b4b06047d62f6e54cbcfa3b5ea34828d9aa1d2040aae6e2e16fcee9325aa3396",
     "docs/threat-model.md": "632cae1d4ff4cfe521b80edce95503ccb0d22a2380f886358c00e3e57fa59c34",
     "docs/work-example.md": "e56465c6286a0980ba8277e2cdaf14d41482150c8c34fd58510d59d6b1a942e2",
-    "package.json": "3a7562064ccab402093413fa8efac44e3b29cc3d32012113b5b2647be7be09ab",
+    "package.json": "fde7aaa42f146c6686ced3892c465ea72eec1f66829afa460bc17fe33a9bc538",
     "template/.agents/workflows/start-task.md": "f8ec6b54536387c59127a7fcef8788472f5c0304479fe4889c219254b44ba8e7",
     "template/.antigravity/rules.md": "051561e479a60ab7fedee062e4761c1edc9b31184622f56b753bc4cfd2795eac",
     "template/.github/copilot-instructions.md": "2512cd26d1cab2413567f692f15063e4d5144c5a274cda7317a33b0cfc6cbcfb",
@@ -1708,8 +1708,8 @@
   },
   "metrics": {
     "fileCount": 1695,
-    "unpackedSizeBytes": 30299717,
-    "installedSizeBytes": 30305313,
+    "unpackedSizeBytes": 30300236,
+    "installedSizeBytes": 30305832,
     "productionDependencyCount": 0,
     "lifecycleScripts": {
       "postpack": "node scripts/package-legacy-entrypoint-compat.cjs remove",
@@ -1804,5 +1804,5 @@
       "writeFile": 0
     }
   },
-  "rationale": "Audit-only MISSING evidence diagnostic is now identical between lazy navigation and full task audit; no gate, threshold, dependency, lifecycle or package inclusion policy changes. Recollect exact package bytes for this runtime correction. Collector install stays offline in its external scratch prefix."
+  "rationale": "P12: refresh exact package surface after approved scoped Gitleaks documentation and patched glob/minimatch development tooling; production dependencies remain zero and package budgets unchanged"
 }
