@@ -13,7 +13,7 @@ import {
     getReviewArtifactFindingsEvidence,
     getReviewFindingsEvidenceFromValidationArtifact,
     isTrivialReview
-} from '../completion';
+} from '../completion/completion-verdict-findings';
 import { joinOrchestratorPath, normalizePath, toPlainRecord } from '../shared/helpers';
 import { rememberReviewTimelineSource } from '../review/review-artifact-recovery';
 import {

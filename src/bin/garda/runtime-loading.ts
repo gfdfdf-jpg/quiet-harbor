@@ -130,7 +130,11 @@ function readJsonObject(filePath: string): Record<string, unknown> | null {
     }
 }
 
-function assessRuntimeManifest(runtimeRoot: string): string[] {
+function isUiTranslationAsset(relativePath: string): boolean {
+    return /^src\/reports\/ui\/(?:lang-packs\/garda-ui-|[a-z-]+-text\/lang\/)[a-z0-9_-]+\.json$/iu.test(relativePath);
+}
+
+function assessRuntimeManifest(runtimeRoot: string, validateUiLanguagePacks: boolean): string[] {
     const manifestPath = getRuntimeManifestPath(runtimeRoot);
     if (!fs.existsSync(manifestPath)) {
         return [];
@@ -144,6 +148,7 @@ function assessRuntimeManifest(runtimeRoot: string): string[] {
     const buildRoot = path.dirname(runtimeRoot);
     const missingFiles = manifest.files
         .filter((relativePath): relativePath is string => typeof relativePath === 'string')
+        .filter((relativePath) => validateUiLanguagePacks || !isUiTranslationAsset(relativePath))
         .filter((relativePath) => !isFile(path.join(buildRoot, ...relativePath.split('/'))));
 
     return missingFiles.slice(0, 8).map((relativePath) => (
@@ -222,14 +227,14 @@ function assessRuntimeLanguagePacks(runtimeRoot: string): string[] {
     return diagnostics;
 }
 
-export function assessRuntimeCandidate(runtimeRoot: string): RuntimeCandidateAssessment {
+export function assessRuntimeCandidate(runtimeRoot: string, validateUiLanguagePacks = true): RuntimeCandidateAssessment {
     const missingRequiredFiles = SOURCE_CHECKOUT_RUNTIME_REQUIRED_FILES
         .filter((relativePath) => !isFile(path.join(runtimeRoot, relativePath)))
         .map((relativePath) => `Runtime required file is missing: ${relativePath}`);
     const diagnostics = [
         ...missingRequiredFiles,
-        ...assessRuntimeManifest(runtimeRoot),
-        ...assessRuntimeLanguagePacks(runtimeRoot)
+        ...assessRuntimeManifest(runtimeRoot, validateUiLanguagePacks),
+        ...(validateUiLanguagePacks ? assessRuntimeLanguagePacks(runtimeRoot) : [])
     ];
 
     return {
@@ -302,7 +307,13 @@ export function getRuntimeCandidates(packageRoot: string): string[] {
     return candidates;
 }
 
-export function loadCliMainModule(packageRoot: string): CliMainModule {
+function isNavigationRequest(argv: readonly string[]): boolean {
+    const [command, gate] = argv.filter(arg => arg !== '--no-color' && arg !== '--offline' && arg !== '--force-network');
+    return command?.trim() === 'next-step' || (command?.trim() === 'gate' && gate?.trim() === 'next-step');
+}
+
+export function loadCliMainModule(packageRoot: string, argv: readonly string[] = []): CliMainModule {
+    const validateUiLanguagePacks = !isNavigationRequest(argv);
     const sourceCheckout = looksLikeSourceCheckout(packageRoot);
     const runtimeCandidates = getRuntimeCandidates(packageRoot);
     if (runtimeCandidates.length === 0) {
@@ -327,7 +338,7 @@ export function loadCliMainModule(packageRoot: string): CliMainModule {
         for (let attempt = 0; attempt < RUNTIME_LOAD_MAX_ATTEMPTS; attempt += 1) {
             waitForRuntimeBuildLock(runtimeRoot, runtimeLoadDeadline);
             if (sourceCheckout) {
-                const assessment = assessRuntimeCandidate(runtimeRoot);
+                const assessment = assessRuntimeCandidate(runtimeRoot, validateUiLanguagePacks);
                 if (!assessment.ready) {
                     sourceCheckoutAssessments.push(assessment);
                     clearRuntimeRequireCache(runtimeRoot);

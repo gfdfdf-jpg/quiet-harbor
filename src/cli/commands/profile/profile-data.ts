@@ -5,7 +5,7 @@ import { resolveBundleName } from '../../../core/constants';
 import { lstatFileIdentitySync } from '../../../core/file-stat';
 import { validateProfilesConfig } from '../../../schemas/config-artifacts';
 import { writeTextFileAtomically } from '../../../core/filesystem';
-import { normalizePathValue } from '../cli-helpers';
+import { normalizePathValue } from '../cli-bundle-helpers';
 import { ParsedOptionsRecord, ProfileEntry, ProfilesData } from './profile-types';
 
 const PROFILE_LOCK_MAX_ATTEMPTS = 26;

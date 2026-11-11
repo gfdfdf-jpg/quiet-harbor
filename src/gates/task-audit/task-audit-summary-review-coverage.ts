@@ -1,13 +1,19 @@
 import { navigationQueryForEvents, navigationHasCoverageBinding } from '../../gate-runtime/timeline/task-navigation-query';
 import { countNextStepWork, countNextStepArrayCopy, measureNextStepPhase } from '../../core/next-step-measurement';
+import { isInvocationReadObservationActive } from '../../core/invocation-read-observation';
 import * as path from 'node:path';
 import { getValidationTerminalViolations } from '../review/validation-terminal';
 import {
     buildReviewCoverageContract,
     getReviewCoverageContractViolations,
+    getPreparedReviewCoverageContractViolations,
     getReviewCoverageValidationSummaryContractViolations
 } from '../review/review-coverage-ledger';
-import { buildAuthoritativeReviewCoverageContract, buildDeclaredReviewCoverageContract } from '../review-context/review-context-coverage';
+import {
+    buildAuthoritativeReviewCoverageContract,
+    buildDeclaredReviewCoverageContract,
+    resolveAuthoritativeReviewValidationObligations
+} from '../review-context/review-context-coverage';
 import { resolveCurrentNoOpPreflightPath } from '../task-mode/no-op';
 import { readTaskQueueEntries, type TaskQueueEntry } from '../../core/task-queue-read';
 import { readTaskQueueStatusToken } from '../../core/task-queue/task-queue-status';
@@ -117,6 +123,8 @@ export function buildReviewCoverageAuditSummary(options: {
     taskQueueEntries?: ReadonlyMap<string, TaskQueueEntry>;
 }): ReviewCoverageAuditSummary {
     return measureNextStepPhase('review_coverage', () => {
+    // Explicit audit readers can run outside a filesystem observation and must reacquire scope.
+    const reuseObservedCoverage = isInvocationReadObservationActive();
     const entries: ReviewCoverageAuditEntry[] = [];
     const dispositionEvidence: Record<string, ReturnType<typeof validateReviewFindingsDispositionEvidence> | null> = {};
     const repoRoot = path.resolve(options.reviewsRoot, '..', '..', '..');
@@ -190,13 +198,26 @@ export function buildReviewCoverageAuditSummary(options: {
             : null;
         const violations: string[] = [];
         let validationObligations: Parameters<typeof buildReviewCoverageContract>[0]['validationObligations'];
-        if (preflight) {
+        if (preflight && authoritativeCoverage) {
             try {
-                const declared = buildDeclaredReviewCoverageContract({ reviewType, preflight, repoRoot, preflightPath,
-                    inspection });
-                if (declared.validationObligations && preflightResolutionError) throw preflightResolutionError;
-                authoritativeCoverage = declared;
-                validationObligations = declared.validationObligations;
+                const options: Parameters<typeof resolveAuthoritativeReviewValidationObligations>[0] = { reviewType, preflight, repoRoot, preflightPath, inspection };
+                if (reuseObservedCoverage) {
+                    const declared = resolveAuthoritativeReviewValidationObligations(options);
+                    if (declared !== undefined) {
+                        // Retain native contract construction inside the refusal boundary for malformed obligations.
+                        const declaredContract = buildReviewCoverageContract({ reviewType,
+                            changedFiles: authoritativeCoverage.changedFiles, categoryIds: authoritativeCoverage.categoryIds,
+                            acceptanceCriteria: authoritativeCoverage.acceptanceCriteria, validationObligations: declared });
+                        if (preflightResolutionError) throw preflightResolutionError;
+                        authoritativeCoverage = { ...authoritativeCoverage, contract: declaredContract };
+                    }
+                    validationObligations = declared;
+                } else {
+                    const declared = buildDeclaredReviewCoverageContract(options);
+                    if (declared.validationObligations && preflightResolutionError) throw preflightResolutionError;
+                    authoritativeCoverage = declared;
+                    validationObligations = declared.validationObligations;
+                }
             } catch (error) {
                 violations.push(`Declared review coverage rejected: ${error instanceof Error ? error.message : String(error)}`);
             }
@@ -334,6 +355,8 @@ export function buildReviewCoverageAuditSummary(options: {
         }
         if (!preflight) {
             violations.push('current preflight is missing or unreadable for authoritative coverage reconstruction');
+        } else if (reuseObservedCoverage && authoritativeCoverage && authenticatedReviewExecution?.mode !== 'DELTA') {
+            violations.push(...getPreparedReviewCoverageContractViolations(contract, authoritativeCoverage.contract));
         } else {
             violations.push(...getReviewCoverageContractViolations(contract, {
                 reviewType,

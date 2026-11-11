@@ -160,7 +160,8 @@ interface DeclaredCoverageGraph extends AuthoritativeReviewCoverageContract {
 const DECLARED_COVERAGE_CONTRACT = createInvocationReadMemoKey<DeclaredCoverageGraph>('declared-review-coverage-contract');
 
 export function buildDeclaredReviewCoverageContract(options: Parameters<typeof resolveAuthoritativeReviewValidationObligations>[0]): DeclaredCoverageGraph {
-    const scope = resolveAuthoritativeReviewCoverageScope(options);
+    const { reviewType, preflight, repoRoot } = options;
+    const scope = resolveAuthoritativeReviewCoverageScope({ reviewType, preflight, repoRoot });
     // Keep the live validation facade and its registry synchronization before the pure node.
     const validationObligations = resolveAuthoritativeReviewValidationObligations(options);
     return readReviewValidationNode(DECLARED_COVERAGE_CONTRACT, () => [options, scope, validationObligations], () => {

@@ -8,7 +8,6 @@ import {
     PRODUCT_NAME
 } from '../../core/constants';
 import { buildDefaultRetentionPolicy, RETENTION_POLICY_DEFAULTS } from '../../lifecycle/cleanup/cleanup-defaults';
-import { formatLocalUiLanguageCliChoices } from '../../reports/ui/ui-i18n';
 import { bold, cyan, dim, green, padRight, red, yellow } from './cli-colors';
 import { COMMAND_SUMMARY } from './cli-constants';
 import type { PackageJsonLike } from './cli-types';
@@ -306,10 +305,13 @@ export const COMMAND_HELP: Readonly<Record<CommandHelpName, CommandHelpDescripto
     }),
     ui: Object.freeze({
         summary: 'Start a localhost UI with lazy task-detail loading and optional allow-listed actions.',
-        usage: Object.freeze([
-            `${PRIMARY_CLI_NAME} ui [--target-root PATH] [--port PORT] [--language ${formatLocalUiLanguageCliChoices()}] [--idle-minutes N] [--idle-warning-seconds N] [--no-idle-shutdown] [--read-only] [--actions]`,
-            `${PRIMARY_CLI_NAME} ui --target-root "."`
-        ]),
+        get usage(): readonly string[] {
+            const { formatLocalUiLanguageCliChoices } = require('../../reports/ui/ui-i18n') as typeof import('../../reports/ui/ui-i18n');
+            return Object.freeze([
+                `${PRIMARY_CLI_NAME} ui [--target-root PATH] [--port PORT] [--language ${formatLocalUiLanguageCliChoices()}] [--idle-minutes N] [--idle-warning-seconds N] [--no-idle-shutdown] [--read-only] [--actions]`,
+                `${PRIMARY_CLI_NAME} ui --target-root "."`
+            ]);
+        },
         examples: Object.freeze([
             `${PRIMARY_CLI_NAME} ui`,
             `${PRIMARY_CLI_NAME} ui --target-root "."`,

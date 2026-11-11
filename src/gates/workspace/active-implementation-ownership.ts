@@ -1,11 +1,13 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { endsProtectedTaskContinuation } from '../../core/auth/protected-task-continuation';
+import { endsProtectedTaskContinuation, PROTECTED_TASK_CONTINUATION_END_TYPES } from '../../core/auth/protected-task-continuation';
 import { isTaskQueueActiveStatus } from '../../core/active-task-state';
 import { readTaskQueueEntries, type TaskQueueEntry } from '../../core/task-queue-read';
 import { parseOperatorConfirmationYes, validateFreshOperatorConfirmation } from '../../core/operator-confirmation';
 import { inspectTaskEventFile, readTaskTimelineJsonlEntries } from '../../gate-runtime/task-events';
+import { readInvocationVerifiedEventIndex } from '../../gate-runtime/timeline/task-events-integrity';
+import { verifiedEventPosition } from '../../gate-runtime/timeline/task-verified-event-index';
 import { acquireFilesystemLock, releaseFilesystemLock, type LockHandle } from '../../gate-runtime/task-events-locking';
 import { isPathRealpathInsideRoot, joinOrchestratorPath, resolvePathInsideRepo } from '../shared/helpers';
 import { getNoOpEvidence, getCurrentNoOpEventSha256 } from '../task-mode/no-op';
@@ -23,6 +25,13 @@ export function readImplementationTaskMode(repoRoot: string, taskId: string, art
         : mode;
 }
 
+const ACTIVE_TASK_APPROVAL_END_TYPES = [...PROTECTED_TASK_CONTINUATION_END_TYPES, 'COMPLETION_GATE_PASSED'];
+
+function endsActiveTaskApproval(event: Readonly<Record<string, unknown>>): boolean {
+    return event.event_type === 'COMPLETION_GATE_PASSED'
+        || endsProtectedTaskContinuation(String(event.event_type), event.details);
+}
+
 function readActiveTaskApproval(repoRoot: string, taskId: string, artifactPath = '',
     entries: ReadonlyMap<string, TaskQueueEntry> = readTaskQueueEntries(repoRoot)): ActiveTaskApproval | null {
     if (!isTaskQueueActiveStatus(entries.get(taskId)?.status ?? null)) return null;
@@ -31,13 +40,28 @@ function readActiveTaskApproval(repoRoot: string, taskId: string, artifactPath =
     const timelinePath = joinOrchestratorPath(repoRoot, `runtime/task-events/${taskId}.jsonl`);
     const inspection = inspectTaskEventFile(timelinePath, taskId);
     if (inspection.status !== 'PASS' && inspection.status !== 'PASS_WITH_LEGACY_PREFIX') return null;
-    const timelineEntries = readTaskTimelineJsonlEntries(timelinePath);
-    let eventIndex = timelineEntries.length - 1;
-    while (eventIndex >= 0 && timelineEntries[eventIndex].record?.event_type !== 'TASK_MODE_ENTERED') eventIndex--;
-    if (timelineEntries.slice(eventIndex + 1).some(entry => entry.record
-        && (endsProtectedTaskContinuation(String(entry.record.event_type), entry.record.details)
-            || entry.record.event_type === 'COMPLETION_GATE_PASSED'))) return null;
-    const event = timelineEntries[eventIndex]?.record;
+    const index = readInvocationVerifiedEventIndex(timelinePath, taskId);
+    let event: Readonly<Record<string, unknown>> | null | undefined;
+    if (index) {
+        const entryPosition = index.lastIndexByType.TASK_MODE_ENTERED;
+        if (entryPosition === undefined) return null;
+        // Use physical journal order, as the legacy scan does, even when timestamps are out of order.
+        for (const type of ACTIVE_TASK_APPROVAL_END_TYPES) {
+            const candidates = index.byType[type] ?? [];
+            for (let i = candidates.length - 1; i >= 0; i--) {
+                const candidate = candidates[i];
+                if (verifiedEventPosition(candidate)! <= entryPosition) break;
+                if (endsActiveTaskApproval(candidate)) return null;
+            }
+        }
+        event = index.events[entryPosition];
+    } else {
+        const timelineEntries = readTaskTimelineJsonlEntries(timelinePath);
+        let eventIndex = timelineEntries.length - 1;
+        while (eventIndex >= 0 && timelineEntries[eventIndex].record?.event_type !== 'TASK_MODE_ENTERED') eventIndex--;
+        if (timelineEntries.slice(eventIndex + 1).some(entry => entry.record && endsActiveTaskApproval(entry.record))) return null;
+        event = timelineEntries[eventIndex]?.record;
+    }
     const details = event?.details as Record<string, unknown> | undefined;
     const approval = details?.active_task_approval as (ActiveTaskApproval & { task_mode_sha256?: string }) | undefined;
     if (!approval || approval.task_mode_sha256 !== mode.evidence_hash

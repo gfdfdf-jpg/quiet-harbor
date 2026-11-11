@@ -206,11 +206,8 @@ import {
 } from '../rule-pack/rule-pack-selection';
 import { readFailedTaskModePublicationRecoveryRoute, readLostTaskModePolicyRecoveryRoute, readTaskModeProtectedManifestRecoveryRoute, readTaskTimelineIntegrityRoute, type NextStepStartupRouteOptions } from './next-step-startup-routing';
 import { readReviewPolicyAdoption } from '../required-reviews/required-reviews-check-contracts';
-import { hasAuthenticatedZeroDiffAuditScope } from './next-step-preflight-workspace-readiness';
-import {
-    readCompileReadiness,
-    readPreflightWorkspaceReadiness
-} from './next-step-compile-full-suite-readiness';
+import { createPreflightWorkspaceReadinessReader, hasAuthenticatedZeroDiffAuditScope } from './next-step-preflight-workspace-readiness';
+import { readCompileReadiness } from './next-step-compile-full-suite-readiness';
 import {
     getReviewCapabilities
 } from '../preflight/classify-change-config';
@@ -3948,17 +3945,16 @@ export function resolveNextStepDecisionRoute(
     }
     const docImpactPath = readinessArtifacts.paths.docImpactPath;
     const closeoutTimelineSnapshot = readNextStepCloseoutTimelineSnapshot(eventsRoot, taskId);
-    const preflightWorkspaceReadiness = preflight
-        ? readPreflightWorkspaceReadiness(repoRoot, preflight, {
-            failedReviewType: null,
-            failedReviewVerdict: null,
+    const readWorkspaceReadiness: ReturnType<typeof createPreflightWorkspaceReadinessReader> = preflight
+        ? createPreflightWorkspaceReadinessReader(repoRoot, preflight, {
             docImpactPath,
             plannedChangedFiles: getTaskModePlannedChangedFiles(taskMode),
             dirtyWorkspaceBaselineChangedFiles: getTaskModeDirtyWorkspaceBaselineChangedFiles(repoRoot, taskMode),
             dirtyWorkspaceBaselineFileHashes: getTaskModeDirtyWorkspaceBaselineFileHashes(repoRoot, taskMode),
             workspaceSnapshotRequest
         })
-        : { ready: false, reason: 'No current preflight exists.' };
+        : () => ({ ready: false, reason: 'No current preflight exists.' });
+    const preflightWorkspaceReadiness = readWorkspaceReadiness();
     const zeroDiffProfileGuardrails = isPlainRecord(preflight?.profile_guardrails) ? preflight.profile_guardrails : {};
     const zeroDiffReviewSnapshot = isPlainRecord(preflight?.effective_review_snapshot) ? preflight.effective_review_snapshot : {};
     const zeroDiffReviewInputs = isPlainRecord(zeroDiffReviewSnapshot.inputs) ? zeroDiffReviewSnapshot.inputs : {};
@@ -3980,18 +3976,7 @@ export function resolveNextStepDecisionRoute(
             commands: [{ label: 'Refresh staged audit policy', command: refreshCommand }]
         });
     }
-    const strictPreGuardWorkspaceReadiness = preflight
-        ? readPreflightWorkspaceReadiness(repoRoot, preflight, {
-            failedReviewType: null,
-            failedReviewVerdict: null,
-            docImpactPath,
-            plannedChangedFiles: getTaskModePlannedChangedFiles(taskMode),
-            dirtyWorkspaceBaselineChangedFiles: getTaskModeDirtyWorkspaceBaselineChangedFiles(repoRoot, taskMode),
-            dirtyWorkspaceBaselineFileHashes: getTaskModeDirtyWorkspaceBaselineFileHashes(repoRoot, taskMode),
-            workspaceSnapshotRequest,
-            allowDocsOnlyDelta: false
-        })
-        : { ready: false, reason: 'No current preflight exists.' };
+    const strictPreGuardWorkspaceReadiness = readWorkspaceReadiness({ allowDocsOnlyDelta: false });
     const staleCompletionFailureDocCloseoutAllowance =
         buildStaleCompletionFailureDocCloseoutAllowance(
             repoRoot,
@@ -4019,28 +4004,15 @@ export function resolveNextStepDecisionRoute(
     const failedCurrentReviewStateForPreflight = failedReviewStateFromLaunchPlan
         ?? resolveAuthenticatedFixNowRemediationState(reviewStates, reviewLaunchPlan.next_review_type)
         ?? undefined;
+    const failedReviewWorkspacePolicy = {
+        failedReviewType: failedCurrentReviewStateForPreflight?.reviewType,
+        failedReviewVerdict: failedCurrentReviewStateForPreflight?.verdictToken || failedCurrentReviewStateForPreflight?.failToken
+    };
     const effectivePreflightWorkspaceReadiness = preflight && failedCurrentReviewStateForPreflight
-        ? readPreflightWorkspaceReadiness(repoRoot, preflight, {
-            failedReviewType: failedCurrentReviewStateForPreflight?.reviewType || null,
-            failedReviewVerdict: failedCurrentReviewStateForPreflight?.verdictToken || failedCurrentReviewStateForPreflight?.failToken || null,
-            docImpactPath,
-            plannedChangedFiles: getTaskModePlannedChangedFiles(taskMode),
-            dirtyWorkspaceBaselineChangedFiles: getTaskModeDirtyWorkspaceBaselineChangedFiles(repoRoot, taskMode),
-            dirtyWorkspaceBaselineFileHashes: getTaskModeDirtyWorkspaceBaselineFileHashes(repoRoot, taskMode),
-            workspaceSnapshotRequest
-        })
+        ? readWorkspaceReadiness(failedReviewWorkspacePolicy)
         : preflightWorkspaceReadiness;
     const effectiveStrictPreGuardWorkspaceReadiness = preflight && failedCurrentReviewStateForPreflight
-        ? readPreflightWorkspaceReadiness(repoRoot, preflight, {
-            failedReviewType: failedCurrentReviewStateForPreflight?.reviewType || null,
-            failedReviewVerdict: failedCurrentReviewStateForPreflight?.verdictToken || failedCurrentReviewStateForPreflight?.failToken || null,
-            docImpactPath,
-            plannedChangedFiles: getTaskModePlannedChangedFiles(taskMode),
-            dirtyWorkspaceBaselineChangedFiles: getTaskModeDirtyWorkspaceBaselineChangedFiles(repoRoot, taskMode),
-            dirtyWorkspaceBaselineFileHashes: getTaskModeDirtyWorkspaceBaselineFileHashes(repoRoot, taskMode),
-            workspaceSnapshotRequest,
-            allowDocsOnlyDelta: false
-        })
+        ? readWorkspaceReadiness({ ...failedReviewWorkspacePolicy, allowDocsOnlyDelta: false })
         : strictPreGuardWorkspaceReadiness;
 
     // Declared roles refresh the diagnostic prefix too, even when workspace bytes have not changed.

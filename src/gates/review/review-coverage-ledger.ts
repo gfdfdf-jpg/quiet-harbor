@@ -230,8 +230,14 @@ export function getReviewCoverageContractViolations(
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
         return ['Review context is missing the required coverage_contract object.'];
     }
+    return getPreparedReviewCoverageContractViolations(value, buildReviewCoverageContract(expected));
+}
+
+export function getPreparedReviewCoverageContractViolations(value: unknown, deterministic: ReviewCoverageContract): string[] {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return ['Review context is missing the required coverage_contract object.'];
+    }
     const actual = value as ReviewCoverageContract;
-    const deterministic = buildReviewCoverageContract(expected);
     const actualJson = JSON.stringify(actual);
     if (actualJson === JSON.stringify(deterministic)) {
         return [];

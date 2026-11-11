@@ -8,7 +8,7 @@ import {
 } from '../../core/constants';
 import { isOrchestratorSourceCheckout } from '../../gates/shared/helpers';
 import { REVIEW_REMEDIATION_IMPACT_ANALYSIS_TEMPLATE } from '../../gates/review-remediation/review-remediation-impact-template';
-import { bold, cyan, dim, green, styleHelpCommandLine } from './cli-format-output';
+import { bold, cyan, dim, green } from './cli-colors';
 
 interface GateHelpEntry {
     summary: string;
@@ -681,6 +681,7 @@ function resolveSuggestedCommand(entry: GateHelpEntry, mistakenTaskId: string | 
 }
 
 export function buildGateCommandOverviewText(repoRoot = process.cwd()): string {
+    const { styleHelpCommandLine } = require('./cli-help-output') as typeof import('./cli-help-output');
     const resolvedRepoRoot = resolveGateHelpRepoRoot(repoRoot);
     const { cliPrefix } = buildGateHelpCatalogContext(resolvedRepoRoot);
     return [
@@ -702,6 +703,7 @@ export function buildGateCommandOverviewText(repoRoot = process.cwd()): string {
 }
 
 export function buildGateHelpText(gateName: string, repoRoot = process.cwd()): string {
+    const { styleHelpCommandLine } = require('./cli-help-output') as typeof import('./cli-help-output');
     const entry = getGateHelpEntry(gateName, repoRoot);
     if (!entry) {
         throw new Error(`Unknown gate: ${gateName}`);

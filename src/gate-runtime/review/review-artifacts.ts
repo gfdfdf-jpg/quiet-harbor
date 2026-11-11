@@ -674,6 +674,13 @@ function freezeReviewArtifactJson(value: unknown): unknown {
     return Object.freeze(value);
 }
 
+const frozenReviewArtifactProjections = new WeakSet<object>();
+
+/** Branded only after the complete private JSON projection is frozen. */
+export function isFrozenReviewArtifactProjection(value: object): boolean {
+    return frozenReviewArtifactProjections.has(value);
+}
+
 // JSON payloads contain only primitives, arrays and ordinary own data properties.
 // Iteration preserves fresh identities without structuredClone's lower depth limit.
 function cloneFrozenReviewArtifactJson(value: unknown): unknown {
@@ -694,6 +701,7 @@ function cloneFrozenReviewArtifactJson(value: unknown): unknown {
         }
         Object.freeze(target);
     }
+    frozenReviewArtifactProjections.add(root);
     return root;
 }
 

@@ -12,6 +12,7 @@ import { bindTaskTestFileRoles, declaredFileRole, isTestScopePath } from '../../
 import { isClassifiedProductCodePath } from '../preflight/classify-change-scope-category';
 
 import { matchAnyRegex } from '../../gate-runtime/text-utils';
+import { isFrozenReviewArtifactProjection } from '../../gate-runtime/review/review-artifacts';
 import {
     readStagedBlobFingerprints,
     type StagedBlobFingerprints
@@ -882,6 +883,14 @@ const nativeMapGet = Map.prototype.get;
 const nativeMapForEach = Map.prototype.forEach;
 const nativeMapIterator = Map.prototype[Symbol.iterator];
 
+const privateCloseoutPreflights = new WeakSet<object>();
+const immutableScopeKeys = new WeakMap<object, { repoRoot: string; key: string | null }>();
+const immutablePreflightDescriptions = new WeakMap<object, ReturnType<typeof describeProcessInputs>>();
+
+function isOwnedFrozenPreflight(preflight: object): boolean {
+    return privateCloseoutPreflights.has(preflight) || isFrozenReviewArtifactProjection(preflight);
+}
+
 function scopeInputKey(preflight: Record<string, unknown>, repoRoot: string,
     config?: ResolvedClassificationConfig, staged?: StagedBlobFingerprints): string | null {
     let entries: Array<[string, string]> | null = null;
@@ -896,9 +905,15 @@ function scopeInputKey(preflight: Record<string, unknown>, repoRoot: string,
             countNextStepWork('visit:review_scope_key_staged_entry'); entries!.push([key, value]);
         }]);
     }
-    const identity = describeProcessInputs([path.resolve(repoRoot), preflight, config, entries]);
+    const absoluteRoot = path.resolve(repoRoot);
+    const reuseEncoding = config === undefined && staged === undefined && isOwnedFrozenPreflight(preflight);
+    const retained = reuseEncoding ? immutableScopeKeys.get(preflight) : undefined;
+    if (retained?.repoRoot === absoluteRoot) return retained.key;
+    const identity = describeProcessInputs([absoluteRoot, preflight, config, entries]);
     countNextStepWork('review_scope_key_characters', identity.text.length);
-    return identity.opaque ? null : identity.text;
+    const key = identity.opaque ? null : identity.text;
+    if (reuseEncoding) immutableScopeKeys.set(preflight, { repoRoot: absoluteRoot, key });
+    return key;
 }
 
 function readCommonReviewScopeFacts(preflight: Record<string, unknown>, repoRoot: string,
@@ -1091,10 +1106,19 @@ function resolveReviewPreflightWithoutCloseout(preflight: Record<string, unknown
         return { ...preflight, changed_files: changedFiles };
     };
     if (!isInvocationReadObservationActive()) return build();
-    const identity = describeProcessInputs(preflight);
-    countNextStepWork('review_scope_key_characters', identity.text.length);
+    const reuseEncoding = isOwnedFrozenPreflight(preflight);
+    let identity = reuseEncoding ? immutablePreflightDescriptions.get(preflight) : undefined;
+    if (!identity) {
+        identity = describeProcessInputs(preflight);
+        countNextStepWork('review_scope_key_characters', identity.text.length);
+        if (reuseEncoding) immutablePreflightDescriptions.set(preflight, identity);
+    }
     if (identity.opaque) return build();
-    return memoizeInvocationRead(WITHOUT_CLOSEOUT_SCOPE, identity.text, () => cloneFrozenJson(build())).value;
+    return memoizeInvocationRead(WITHOUT_CLOSEOUT_SCOPE, identity.text, () => {
+        const projection = cloneFrozenJson(build());
+        privateCloseoutPreflights.add(projection);
+        return projection;
+    }).value;
 }
 
 export function computeReviewRelevantScopeWithoutCloseout(

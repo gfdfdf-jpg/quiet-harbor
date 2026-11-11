@@ -5,12 +5,8 @@ import {
 } from '../../validators/workspace-layout';
 import { assertOfflinePolicy } from '../../policy/offline-mode';
 import { EXIT_VALIDATION_FAILURE } from '../exit-codes';
-import {
-    buildParityBlockedCommandText,
-    buildParityWarningCommandText
-} from './cli-help-output';
 import { isFailedValidationResult } from './shared-command-utils';
-import { PackageJsonLike, printHelp } from './cli-helpers';
+import type { PackageJsonLike } from './cli-types';
 import {
     buildParityHelpText,
     isHelpOnlyRequest,
@@ -40,6 +36,7 @@ export async function dispatchCliCommand(options: DispatchCliCommandOptions): Pr
 
     if (commandName === 'help') {
         if (!printHelpCommand(commandArgv, packageJson)) {
+            const { printHelp } = await import('./cli-help-output');
             printHelp(packageJson);
         }
         return;
@@ -59,6 +56,7 @@ export async function dispatchCliCommand(options: DispatchCliCommandOptions): Pr
         const parityRoot = parityPolicy.root;
         const parityResult = detectSourceBundleParity(parityRoot);
         if (parityResult.isStale && !(isHelpOnly && isMissingDeployedBundleOnlyParityBlock(parityResult.violations))) {
+            const { buildParityBlockedCommandText, buildParityWarningCommandText } = await import('./cli-help-output');
             if (parityPolicy.mode === 'block') {
                 throw new Error(
                     buildParityBlockedCommandText({

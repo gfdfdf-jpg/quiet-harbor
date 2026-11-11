@@ -5,8 +5,9 @@ import test, { type TestContext } from 'node:test';
 import { withInvocationReadObservation } from '../../../../src/core/invocation-read-observation';
 import { withInvocationGitReadObservation } from '../../../../src/core/invocation-git-observation';
 import { readCurrentProtectedScopeBeforePreflight } from '../../../../src/gates/next-step/next-step-protected-scope';
-import { readPreflightWorkspaceReadiness } from '../../../../src/gates/next-step/next-step-preflight-workspace-readiness';
+import { createPreflightWorkspaceReadinessReader, readPreflightWorkspaceReadiness } from '../../../../src/gates/next-step/next-step-preflight-workspace-readiness';
 import { getWorkspaceSnapshot } from '../../../../src/gates/compile/compile-gate';
+import { createDeferredWorkspaceSnapshotRequest } from '../../../../src/gates/workspace/workspace-snapshot-cache';
 import { initGitRepo } from '../git-fixtures';
 import { makeTempRepo, fileSha256, writeJson, TASK_ID } from './next-step-completion-fixtures';
 
@@ -143,4 +144,41 @@ test('an additional Git change remains outside the accepted explicit preflight',
     const result = observed(() => readPreflightWorkspaceReadiness(root, evidence));
     assert.equal(result.ready, false);
     assert.match(result.reason, /preflight|scope|changed/iu);
+});
+
+test('shared preflight workspace facts cannot survive an observed scope mutation', () => {
+    const root = fixture(), evidence = preflight(root);
+    const readReadiness = createPreflightWorkspaceReadinessReader(root, evidence, {
+        workspaceSnapshotRequest: createDeferredWorkspaceSnapshotRequest(root, () => {})
+    });
+    assert.throws(() => observed(() => {
+        assert.equal(readReadiness().ready, true);
+        assert.equal(readReadiness({ allowDocsOnlyDelta: false }).ready, true);
+        fs.appendFileSync(path.join(root, 'src/app.ts'), 'export const concurrentChange = 3;\n');
+    }), /changed|identity|observation|fresh|current/iu);
+    const fresh = observed(() => readPreflightWorkspaceReadiness(root, evidence, { allowDocsOnlyDelta: false, failedReviewType: 'test' }));
+    assert.equal(fresh.ready, false);
+    assert.match(fresh.reason, /Stale failed review detected: 'test'/u);
+});
+
+test('shared workspace facts keep docs, strict, and failed-review policies distinct', () => {
+    const root = fixture(), evidence = preflight(root);
+    const readReadiness = createPreflightWorkspaceReadinessReader(root, evidence, {});
+    fs.mkdirSync(path.join(root, 'docs'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'docs/guide.md'), '# Guide\n');
+
+    observed(() => {
+        const docs = readReadiness();
+        assert.equal(docs.ready, true, docs.reason);
+        assert.deepEqual(docs.acceptedDocsOnlyDeltaFiles, ['docs/guide.md']);
+        const strict = readReadiness({ allowDocsOnlyDelta: false });
+        assert.equal(strict.ready, false);
+        const failedReview = readReadiness({ allowDocsOnlyDelta: false, failedReviewType: 'test' });
+        assert.equal(failedReview.ready, false);
+        assert.match(failedReview.reason, /Stale failed review detected: 'test'/u);
+    });
+
+    fs.appendFileSync(path.join(root, 'src/app.ts'), 'export const laterChange = 3;\n');
+    const nextInvocation = observed(() => readReadiness());
+    assert.equal(nextInvocation.ready, false, nextInvocation.reason);
 });
