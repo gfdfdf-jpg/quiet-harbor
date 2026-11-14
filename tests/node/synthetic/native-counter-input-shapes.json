@@ -1,0 +1,208 @@
+{
+  "schema": 1,
+  "shapes": [
+    {
+      "id": "native-v4-task--code+test",
+      "base_state": null,
+      "review_types": [
+        "code",
+        "test"
+      ]
+    },
+    {
+      "id": "native-v4-declared-recipe-task-local-reviewed",
+      "base_state": "declared-recipe-task-local-reviewed",
+      "review_types": null
+    },
+    {
+      "id": "native-v4-pre-entry",
+      "base_state": null,
+      "review_types": null
+    },
+    {
+      "id": "native-v4-declared-recipe-task-local-docs-only",
+      "base_state": "declared-recipe-task-local-docs-only",
+      "review_types": null
+    },
+    {
+      "id": "native-v4-task--test",
+      "base_state": null,
+      "review_types": [
+        "test"
+      ]
+    },
+    {
+      "id": "native-v4-failed-review-path-candidate",
+      "base_state": "failed-review-path-candidate",
+      "review_types": null
+    },
+    {
+      "id": "native-v4-task--no-reviews",
+      "base_state": null,
+      "review_types": []
+    },
+    {
+      "id": "native-v4-optional-skill-activation",
+      "base_state": "optional-skill-activation",
+      "review_types": null
+    },
+    {
+      "id": "native-v4-native-child-tree",
+      "base_state": "native-child-tree",
+      "review_types": null
+    },
+    {
+      "id": "native-v4-test-selection-module",
+      "base_state": "test-selection-module",
+      "review_types": null
+    },
+    {
+      "id": "native-v4-task--code+custom-quality+test",
+      "base_state": null,
+      "review_types": [
+        "code",
+        "custom-quality",
+        "test"
+      ]
+    },
+    {
+      "id": "native-v4-task--code+db+test",
+      "base_state": null,
+      "review_types": [
+        "code",
+        "db",
+        "test"
+      ]
+    },
+    {
+      "id": "native-v4-task--code+dependency+test",
+      "base_state": null,
+      "review_types": [
+        "code",
+        "dependency",
+        "test"
+      ]
+    },
+    {
+      "id": "native-v4-task--preflight-pending",
+      "base_state": null,
+      "review_types": null
+    },
+    {
+      "id": "native-v4-stack-fixture-spring-maven-a1-a6",
+      "base_state": "stack-fixture-spring-maven-a1-a6",
+      "review_types": null
+    },
+    {
+      "id": "native-v4-task--code+infra+test",
+      "base_state": null,
+      "review_types": [
+        "code",
+        "infra",
+        "test"
+      ]
+    },
+    {
+      "id": "native-v4-task--code+performance+test",
+      "base_state": null,
+      "review_types": [
+        "code",
+        "performance",
+        "test"
+      ]
+    },
+    {
+      "id": "native-v4-task--code+db+performance+security+test",
+      "base_state": null,
+      "review_types": [
+        "code",
+        "db",
+        "performance",
+        "security",
+        "test"
+      ]
+    },
+    {
+      "id": "native-v4-task--code+performance+security+test",
+      "base_state": null,
+      "review_types": [
+        "code",
+        "performance",
+        "security",
+        "test"
+      ]
+    },
+    {
+      "id": "native-v4-task--code+refactor+test",
+      "base_state": null,
+      "review_types": [
+        "code",
+        "refactor",
+        "test"
+      ]
+    },
+    {
+      "id": "native-v4-task--code+security+test",
+      "base_state": null,
+      "review_types": [
+        "code",
+        "security",
+        "test"
+      ]
+    },
+    {
+      "id": "native-v4-task--code+refactor+security+test",
+      "base_state": null,
+      "review_types": [
+        "code",
+        "refactor",
+        "security",
+        "test"
+      ]
+    },
+    {
+      "id": "native-v4-stack-four-lane-task",
+      "base_state": "stack-four-lane-task",
+      "review_types": null
+    },
+    {
+      "id": "native-v4-task-test-failure-repair",
+      "base_state": "task-test-failure-repair",
+      "review_types": null
+    },
+    {
+      "id": "native-v4-task--api+code+test",
+      "base_state": null,
+      "review_types": [
+        "api",
+        "code",
+        "test"
+      ]
+    },
+    {
+      "id": "native-v4-stack-fixture-unknown-quartz-a1-a6",
+      "base_state": "stack-fixture-unknown-quartz-a1-a6",
+      "review_types": null
+    },
+    {
+      "id": "native-v4-task-local-full-suite-child-tree",
+      "base_state": "task-local-full-suite-child-tree",
+      "review_types": null
+    },
+    {
+      "id": "native-v4-preserved-delta-origin-chain",
+      "base_state": "preserved-delta-origin-chain",
+      "review_types": null
+    },
+    {
+      "id": "native-v4-two-source-api-initial",
+      "base_state": "two-source-api-initial",
+      "review_types": null
+    },
+    {
+      "id": "native-v4-two-source-api-remediation",
+      "base_state": "two-source-api-remediation",
+      "review_types": null
+    }
+  ]
+}

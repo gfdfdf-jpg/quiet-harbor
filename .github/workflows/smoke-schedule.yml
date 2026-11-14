@@ -1,0 +1,192 @@
+# Manual smoke matrix for Garda Agent Orchestrator.
+# Runs only the explicitly authorized OS/runtime selection at the exact run SHA.
+name: Manual Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: Exact current owner/repository
+        required: true
+        type: string
+      commit:
+        description: Full lowercase SHA of the selected workflow ref
+        required: true
+        type: string
+      authorization:
+        description: Type I authorize this selected run
+        required: true
+        type: string
+      job:
+        description: Smoke validation selection
+        required: true
+        type: choice
+        default: smoke
+        options: [smoke, all]
+      os:
+        description: Hosted smoke runner selection
+        required: true
+        type: choice
+        default: ubuntu-latest
+        options: [ubuntu-latest, windows-latest, macos-latest, all]
+      runtime:
+        description: Node version for the selected smoke runners
+        required: true
+        type: choice
+        default: '24'
+        options: ['22.13.0', '24', all]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.run_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  authorize:
+    name: Authorize Smoke selection
+    runs-on: ubuntu-latest
+    outputs:
+      selection: ${{ steps.selection.outputs.selection }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '24'
+      - name: Authorize selected jobs
+        id: selection
+        env:
+          MANUAL_WORKFLOW: smoke-schedule
+          MANUAL_REPOSITORY: ${{ inputs.repository }}
+          MANUAL_COMMIT: ${{ inputs.commit }}
+          MANUAL_AUTHORIZATION: ${{ inputs.authorization }}
+          MANUAL_JOB: ${{ inputs.job }}
+          MANUAL_OS: ${{ inputs.os }}
+          MANUAL_RUNTIME: ${{ inputs.runtime }}
+        run: node scripts/manual-workflow-authorization.cjs
+
+  smoke:
+    name: Smoke / ${{ matrix.os }} / Node ${{ matrix.node-version }}
+    runs-on: ${{ matrix.os }}
+    needs: [authorize]
+    if: ${{ !cancelled() && needs.authorize.result == 'success' && fromJSON(needs.authorize.outputs.selection).jobs['smoke'].enabled }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.authorize.outputs.selection).jobs['smoke'].matrix }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-fund --no-audit
+
+      - name: Build
+        run: npm run build
+
+      - name: Build staged node-foundation test graph
+        run: npm run build:node-foundation
+
+      - name: Pack and install smoke test
+        run: node --test .node-build/tests/node/packaging/pack-smoke.test.js
+
+      - name: Lifecycle smoke (cross-platform E2E install → update → uninstall)
+        id: lifecycle-smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SMOKE_TEMP_ROOT="$(node -p 'require("node:fs").realpathSync.native(require("node:os").tmpdir()).split(require("node:path").sep).join("/")')"
+          export TMPDIR="$SMOKE_TEMP_ROOT" TEMP="$SMOKE_TEMP_ROOT" TMP="$SMOKE_TEMP_ROOT"
+          SMOKE_DIR="$(mktemp -d)"
+          SMOKE_DIR="$(node -p 'require("node:fs").realpathSync.native(process.argv[1]).split(require("node:path").sep).join("/")' "$SMOKE_DIR")"
+          echo "smoke_dir=$SMOKE_DIR" >> "$GITHUB_OUTPUT"
+          SMOKE_BRANCH="garda-ci-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git -C "$GITHUB_WORKSPACE" branch --force "$SMOKE_BRANCH" "$GITHUB_SHA"
+          git -C "$GITHUB_WORKSPACE" add -f -- dist bin/garda.js
+          git -C "$GITHUB_WORKSPACE" -c user.name='Garda CI' -c user.email='ci@garda.invalid' commit -m 'test: stage prebuilt Git update bundle' -- dist bin/garda.js
+          git -C "$GITHUB_WORKSPACE" branch --force "$SMOKE_BRANCH" HEAD
+          CLI="node ${GITHUB_WORKSPACE}/bin/garda.js"
+
+          echo "::group::1. Setup (built source checkout)"
+          # T-806 makes compile_gate.command fail closed when project discovery
+          # cannot prove a compile/build/type-check command. The smoke workspace
+          # is synthetic, so seed a tiny project-specific build script before
+          # setup and let normal discovery materialize `npm run build`.
+          cat > "$SMOKE_DIR/package.json" <<'JSON'
+          {"private":true,"scripts":{"build":"node --check index.js"}}
+          JSON
+          echo 'module.exports = {};' > "$SMOKE_DIR/index.js"
+          GIT_URL="$GITHUB_WORKSPACE"
+          $CLI setup --target-root "$SMOKE_DIR" --no-prompt --assistant-language "English" --assistant-brevity "concise" --source-of-truth "Antigravity" --enforce-no-auto-commit false --claude-orchestrator-full-access false --token-economy-enabled true --active-agent-files ".antigravity/rules.md"
+          node scripts/ci/finalize-smoke-workspace.cjs "$SMOKE_DIR"
+          echo "::endgroup::"
+
+          echo "::group::2. Update (git clone flow)"
+          $CLI update git --target-root "$SMOKE_DIR" --repo-url "$GIT_URL" --branch "$SMOKE_BRANCH" --no-prompt --trust-override
+          echo "::endgroup::"
+
+          echo "::group::3. Doctor"
+          $CLI doctor --target-root "$SMOKE_DIR"
+          echo "::endgroup::"
+
+          echo "::group::4. Uninstall"
+          $CLI uninstall --target-root "$SMOKE_DIR" --no-prompt
+          echo "::endgroup::"
+
+          rm -rf "$SMOKE_DIR"
+          echo "Lifecycle smoke PASSED on $RUNNER_OS"
+
+      # ── Failure forensics ────────────────────────────────────────────────────
+      - name: Collect smoke failure evidence
+        if: failure()
+        shell: bash
+        run: |
+          mkdir -p smoke-failure-evidence
+
+          for log in "$HOME"/.npm/_logs/*.log; do
+            [ -f "$log" ] && cp "$log" smoke-failure-evidence/ || true
+          done
+
+          [ -d dist ] && cp -r dist smoke-failure-evidence/dist || true
+          [ -f bin/garda.js ] && cp bin/garda.js smoke-failure-evidence/ || true
+
+          SMOKE_DIR="${{ steps.lifecycle-smoke.outputs.smoke_dir }}"
+          if [ -n "$SMOKE_DIR" ] && [ -d "$SMOKE_DIR" ]; then
+            if [ -d "$SMOKE_DIR/garda-agent-orchestrator/runtime" ]; then
+              cp -r "$SMOKE_DIR/garda-agent-orchestrator/runtime" smoke-failure-evidence/smoke-runtime
+            fi
+            if [ -d "$SMOKE_DIR/garda-agent-orchestrator/live/config" ]; then
+              cp -r "$SMOKE_DIR/garda-agent-orchestrator/live/config" smoke-failure-evidence/smoke-config
+            fi
+            for f in "$SMOKE_DIR"/.antigravity/rules.md "$SMOKE_DIR"/.agents/workflows/start-task.md; do
+              [ -f "$f" ] && cp "$f" smoke-failure-evidence/ || true
+            done
+          fi
+
+          {
+            echo "runner_os=$RUNNER_OS"
+            echo "node_version=$(node --version 2>/dev/null || echo 'unavailable')"
+            echo "npm_version=$(npm --version 2>/dev/null || echo 'unavailable')"
+            echo "date_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo 'unavailable')"
+            echo "smoke_dir=$SMOKE_DIR"
+          } > smoke-failure-evidence/runner-env.txt
+
+      - name: Upload smoke failure evidence
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: smoke-failure-evidence-${{ matrix.os }}-node${{ matrix.node-version }}
+          path: smoke-failure-evidence/
+          retention-days: 15
+          if-no-files-found: ignore

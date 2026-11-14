@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "id": "cmake",
+  "title": "C++ / CMake / CTest",
+  "adapter": null,
+  "technologies": [
+    {
+      "id": "cmake",
+      "executable": "tools/ctest",
+      "compileArgv": [
+        "--build",
+        "out/build"
+      ],
+      "firstArgv": [
+        "--test-dir",
+        "out/build",
+        "--output-on-failure",
+        "-R",
+        "^(order_test)$"
+      ],
+      "allArgv": [
+        "--test-dir",
+        "out/build",
+        "--output-on-failure",
+        "-R",
+        "^(order_test|partner_test)$"
+      ],
+      "broadArgv": [
+        "--test-dir",
+        "out/build",
+        "--output-on-failure"
+      ],
+      "report": "text",
+      "secondArgv": [
+        "--test-dir",
+        "out/build",
+        "--output-on-failure",
+        "-R",
+        "^(partner_test)$"
+      ],
+      "compileExecutable": "tools/cmake"
+    }
+  ],
+  "suites": [
+    {
+      "id": "orders",
+      "technology": "cmake",
+      "source": "src/orders/service.cpp",
+      "target": "tests/orders/order_test.cpp",
+      "case": "task-contract",
+      "comment": "//"
+    },
+    {
+      "id": "partners",
+      "technology": "cmake",
+      "source": "src/partners/service.cpp",
+      "target": "tests/partners/partner_test.cpp",
+      "case": "task-contract",
+      "comment": "//"
+    }
+  ],
+  "helpers": []
+}

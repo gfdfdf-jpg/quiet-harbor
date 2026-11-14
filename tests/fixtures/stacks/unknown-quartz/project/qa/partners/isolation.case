@@ -1,0 +1,3 @@
+case task-contract
+  given partner-1
+  expect total(2) equals 2

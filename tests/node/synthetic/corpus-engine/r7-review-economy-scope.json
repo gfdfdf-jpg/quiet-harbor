@@ -1,0 +1,215 @@
+[
+  {
+    "note": "Configured path scopes still apply to dependency manifests; documents do not excuse removed production scope.",
+    "scenario": {
+      "id": "seed-989105",
+      "stack": "kotlin-gradle",
+      "failedLane": "api",
+      "requiredLanes": [
+        "code",
+        "security",
+        "refactor",
+        "api",
+        "infra",
+        "dependency",
+        "test"
+      ],
+      "scope": [
+        {
+          "role": "AUTH",
+          "path": "src/main/kotlin/orders/auth/Session.kt",
+          "lines": 17
+        },
+        {
+          "role": "UNIT_TEST",
+          "path": "src/test/kotlin/orders/InvoiceTest.kt",
+          "lines": 64
+        },
+        {
+          "role": "PROD",
+          "path": "src/main/kotlin/orders/Invoice.kt",
+          "lines": 48
+        },
+        {
+          "role": "DEP_MANIFEST",
+          "path": "settings.gradle.kts",
+          "lines": 59
+        },
+        {
+          "role": "TEST_FIXTURE",
+          "path": "src/test/resources/fixtures/invoice.json",
+          "lines": 28
+        },
+        {
+          "role": "DEP_MANIFEST",
+          "path": "build.gradle.kts",
+          "lines": 11
+        },
+        {
+          "role": "INFRA",
+          "path": ".github/workflows/ci.yml",
+          "lines": 42
+        },
+        {
+          "role": "API",
+          "path": "src/main/kotlin/orders/routes/InvoiceRoutes.kt",
+          "lines": 55
+        }
+      ],
+      "fix": [
+        {
+          "role": "DEP_MANIFEST",
+          "path": "settings.gradle.kts",
+          "operation": "modified",
+          "changedLines": 51
+        }
+      ]
+    }
+  },
+  {
+    "note": "Configured path scopes still apply to dependency manifests; documents do not excuse removed production scope.",
+    "scenario": {
+      "id": "seed-989211",
+      "stack": "cpp-cmake",
+      "failedLane": "dependency",
+      "requiredLanes": [
+        "code",
+        "api",
+        "dependency",
+        "test"
+      ],
+      "scope": [
+        {
+          "role": "GENERATED",
+          "path": "build/gen/invoice.pb.cc",
+          "lines": 8
+        },
+        {
+          "role": "DOCS",
+          "path": "docs/setup.md",
+          "lines": 12
+        },
+        {
+          "role": "DEP_MANIFEST",
+          "path": "CMakeLists.txt",
+          "lines": 29
+        },
+        {
+          "role": "API",
+          "path": "src/api/invoice_handler.cpp",
+          "lines": 43
+        }
+      ],
+      "fix": [
+        {
+          "role": "DOCS",
+          "path": "docs/setup.md",
+          "operation": "deleted",
+          "changedLines": 12
+        }
+      ],
+      "leftScope": "build/gen/invoice.pb.cc"
+    }
+  },
+  {
+    "note": "Configured path scopes still apply to dependency manifests; documents do not excuse removed production scope.",
+    "scenario": {
+      "id": "seed-989426",
+      "stack": "kotlin-gradle",
+      "failedLane": "db",
+      "requiredLanes": [
+        "code",
+        "db",
+        "test"
+      ],
+      "scope": [
+        {
+          "role": "DB_MIGRATION",
+          "path": "src/main/resources/db/migration/V1__init.sql",
+          "lines": 52
+        }
+      ],
+      "fix": [
+        {
+          "role": "DOCS",
+          "path": "docs/orders.md",
+          "operation": "added",
+          "changedLines": 10
+        }
+      ],
+      "leftScope": "src/main/resources/db/migration/V1__init.sql"
+    }
+  },
+  {
+    "note": "A real dependency manifest under tests is production scope expansion; fixture manifests remain test data.",
+    "scenario": {
+      "id": "r7-manifest-under-tests",
+      "stack": "node-ts",
+      "failedLane": "test",
+      "requiredLanes": [
+        "code",
+        "dependency",
+        "test"
+      ],
+      "scope": [
+        {
+          "role": "PROD",
+          "path": "src/app.ts",
+          "lines": 10
+        },
+        {
+          "role": "UNIT_TEST",
+          "path": "tests/app.test.ts",
+          "lines": 10
+        }
+      ],
+      "fix": [
+        {
+          "role": "DEP_MANIFEST",
+          "path": "tests/package.json",
+          "operation": "added",
+          "changedLines": 2
+        }
+      ]
+    }
+  },
+  {
+    "note": "The preflight-safe document predicate also applies inside test folders; documentation adds no review scope or delta size.",
+    "scenario": {
+      "id": "r7-document-under-tests",
+      "stack": "node-ts",
+      "failedLane": "code",
+      "requiredLanes": [
+        "code",
+        "refactor",
+        "test"
+      ],
+      "scope": [
+        {
+          "role": "PROD",
+          "path": "src/app.ts",
+          "lines": 10
+        },
+        {
+          "role": "DOCS",
+          "path": "tests/README.md",
+          "lines": 10
+        }
+      ],
+      "fix": [
+        {
+          "role": "PROD",
+          "path": "src/app.ts",
+          "operation": "modified",
+          "changedLines": 2
+        },
+        {
+          "role": "DOCS",
+          "path": "tests/README.md",
+          "operation": "modified",
+          "changedLines": 450
+        }
+      ]
+    }
+  }
+]

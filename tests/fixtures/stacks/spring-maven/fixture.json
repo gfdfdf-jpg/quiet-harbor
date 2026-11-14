@@ -1,0 +1,73 @@
+{
+  "schema": 1,
+  "id": "spring-maven",
+  "title": "Maven / Spring Boot",
+  "adapter": "maven-surefire-v1",
+  "technologies": [
+    {
+      "id": "maven",
+      "executable": "mvnw",
+      "compileArgv": [
+        "-f",
+        "pom.xml",
+        "-pl",
+        "application,partners-module",
+        "-am",
+        "-DskipTests",
+        "compile"
+      ],
+      "firstArgv": [
+        "-f",
+        "pom.xml",
+        "-pl",
+        "application",
+        "-am",
+        "-Dtest=OrderServiceTest",
+        "test"
+      ],
+      "allArgv": [
+        "-f",
+        "pom.xml",
+        "-pl",
+        "application,partners-module",
+        "-am",
+        "-Dtest=OrderServiceTest,PartnerServiceTest",
+        "test"
+      ],
+      "broadArgv": [
+        "-f",
+        "pom.xml",
+        "test"
+      ],
+      "report": "junit",
+      "secondArgv": [
+        "-f",
+        "pom.xml",
+        "-pl",
+        "partners-module",
+        "-am",
+        "-Dtest=PartnerServiceTest",
+        "test"
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "orders",
+      "technology": "maven",
+      "source": "application/src/main/java/example/OrderService.java",
+      "target": "application/src/test/java/example/OrderServiceTest.java",
+      "case": "task-contract",
+      "comment": "//"
+    },
+    {
+      "id": "partners",
+      "technology": "maven",
+      "source": "partners-module/src/main/java/example/PartnerService.java",
+      "target": "partners-module/src/test/java/example/PartnerServiceTest.java",
+      "case": "task-contract",
+      "comment": "//"
+    }
+  ],
+  "helpers": []
+}

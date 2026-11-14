@@ -1,0 +1,114 @@
+# Concept rule IDs (sections 2–7)
+
+Stable clause inventory of stack-universal-validation-concept.md (binding review source, November 2026). IDs identify clauses, not a second product implementation. The shared product API remains src/core/task-validation-plan.ts. History-work wording incorporates the binding phase-2 operator decision: linear event work is allowed with one read/verification per event and a growth tolerance.
+
+When the concept changes, add a stable ID here before mapping its property in stand-properties.json. The meta-test enumerates this inventory independently of property mappings, and rejects missing IDs and new gates. Never delete a failed rule or weaken an expectation to obtain green.
+
+Each bracketed token in this literal inventory is a stable clause identifier.
+
+```text
+- [C2.1] Own tests only: run and fix only the task tests; never impose the project-wide command.
+- [C2.2] Generic mode is the base of every gate and requires no stack knowledge.
+- [C2.3] Adapters add evidence only; missing, uncertain or unrecognized adapters fall back and never downgrade admission or PASS.
+- [C2.4] Every refusal names the missing fact and an executable route; only real integrity, authority or scope decisions may need an operator.
+- [C2.5] All validation gates use the shared evidence contract without private stack-specific preconditions.
+- [C2.6] Capture facts at selection/execution; navigation and completion compare stored bindings without new Git/ACL processes, manifest walks or report scans.
+- [C3.1] Mechanically distinguish declared task-bound selection (A), actual execution (B), and semantic suitability judged by the test reviewer (C).
+- [C3.2] Runner recognition and exit code alone never prove the right assertions ran.
+- [C3.1.1] Declare exact command argv, test targets and the task behavior they verify.
+- [C3.1.2] Automatically require every changed task test and every carried regression target.
+- [C3.1.3] An unchanged regression target has an explicit relationship to a changed task file.
+- [C3.1.4] Targets are contained repository paths without traversal or symlinks.
+- [C3.1.5] Literal target association is an exact argv element or list item, never a substring.
+- [C3.1.6] Symbolic entrypoints require an explicit mapping and requires_semantic_review.
+- [C3.1.7] Selection is bound to task cycle, preflight scope and content; later changes make it stale.
+- [C3.1.8] Equality with the configured project command grants no admission privilege.
+- [C3.1.9] Allow several declared commands, each with its own targets; execute and verify each separately and require all to pass.
+- [C3.1.10] Task tests may combine arbitrary technologies; no single command or shell chain is required.
+- [C3.1.11] Declared unknown extensions remain task tests without a global regex or file-role change.
+- [C3.2.1] The orchestrator executes the declared command and retains argv, start/end, exit, timeout/cancel, output digest, selection digest and before/after scope.
+- [C3.2.2] Exit zero with intact process evidence is generic selected-test PASS.
+- [C3.2.3] Adapters may add per-case run/skip/failure and source facts.
+- [C3.2.4] Missing, stale, malformed or unsupported adapter reports never downgrade generic PASS.
+- [C3.2.5] Contradictory adapter facts are visible reviewer findings, not automatic refusals.
+- [C3.2.6] Damaged core process records, bindings or chronology remain integrity violations.
+- [C3.3.1] Own-test failure routes to fix, refresh and rerun the same selection without dropping required targets.
+- [C3.3.2] A failed broad command may narrow to own tests without runner-output attribution.
+- [C3.3.3] Narrowing keeps all changed tests and carried targets.
+- [C3.3.4] Retain the whole broad command, artifact and failure event in a grouped follow-up, marked not attributed when attribution is absent.
+- [C3.3.5] Older unattributed evidence narrows without another broad run.
+- [C3.3.6] Adapter attribution is informational only.
+- [C3.4.1] Selection prefills changed and carried targets with an explicit command placeholder and shows the project command only as reference.
+- [C3.4.2] Run guidance says Selected task test command and matches the command actually offered.
+- [C3.4.3] A recorded project command with own tests offers a second command to select only those tests.
+- [C3.4.4] Refusals preserve the real inner reason and name its repair rather than replacing it with a generic explanation.
+- [C4.1] Discovery/init invents nothing for an unknown stack; commands may be declared task-locally.
+- [C4.2] Compile accepts a task-local declaration or justified not applicable when there is no separate compile phase.
+- [C4.3] Task test selection applies claim A.
+- [C4.4] Task test execution applies claim B.
+- [C4.5] Failure handling and narrowing use the same generic evidence contract.
+- [C4.6] Focused validation after a finding uses that contract with one or more targets.
+- [C4.7] Expected RED and GREEN use the same declared command and bound targets.
+- [C4.8] Quality checklist cases bind declared cases to targets and executed commands.
+- [C4.9] Completion consumes all bound obligations and materialized follow-ups for broad failures.
+- [C4.10] Generated-output mappings bind explicit producers and sources without directory-name magic.
+- [C5.1] Test review compares selected targets with the diff and task criteria to catch irrelevant tests.
+- [C5.2] Test-source and retained execution review catches no-op runners; adapter zero-case facts remain visible.
+- [C5.3] Changed runnable tests remain required and helper/fixture mappings are reviewed.
+- [C5.4] Broad failures cannot disappear: preserve failed attempts in follow-ups while own tests pass.
+- [C5.5] Editing tests after selection makes content bindings stale.
+- [C5.6] Generic evidence proves process and binding; independent review judges test semantics.
+- [C5.1.1] RED fails on declared targets before implementation and binds test bytes and pre-implementation source.
+- [C5.1.2] GREEN passes the same command and targets after implementation.
+- [C5.1.3] Enforce RED before implementation before GREEN; forbid backdating or reuse across changed tests.
+- [C5.1.4] The agent and test reviewer judge why RED failed; missing case-level adapters never block.
+- [C6.1.1] Derive required lanes from classification/task profile and freeze policy at task entry.
+- [C6.1.2] Launch a new clean-context reviewer for every current context; never reuse a session across contexts and close it after its receipt.
+- [C6.1.3] Bind review context to diff, task criteria, validation selections/executions/adapter facts/failures and upstream results with a recorded digest.
+- [C6.1.4] Bind each receipt to context digest, reviewer launch and provider invocation; reject missing, forged and mismatched receipts.
+- [C6.1.5] Enforce the declared lane dependency graph at review and completion through one shared rule.
+- [C6.2.1] Keep passed reviews while their bound context is unchanged.
+- [C6.2.2] Use DELTA for eligible small changes; large changes or lost contexts require FULL.
+- [C6.2.3] Repeat only affected lanes and declared dependents once after edits or lost/corrupt/stale inputs.
+- [C6.2.4] Approved policy adoption keeps passed reviews. Changed acceptance criteria, task-row scope, linked criteria artifacts, attached plans or unapproved policy changes rerun all required lanes FULL. Rewording/refining task intent with unchanged scope, criteria and verification requirements keeps passed reviews; audit the new wording against the task and show it to later reviewers without rewriting earlier review evidence. If intent is the only requirement source, or activates different verification obligations, fail closed to FULL.
+- [C6.2.5] Ask the same reachable reviewer to correct malformed reports; FULL rerun only when unreachable.
+- [C6.2.6] Test reselection/rerun invalidates only lanes whose validation inputs changed, normally the test lane.
+- [C6.2.7] Wrong gates, repeated commands and stale locks cost no extra reviews.
+- [C6.3.1] Findings support fix now, follow-up, or ignore with a reason.
+- [C6.3.2] Accepted follow-ups and broad test failures materialize grouped authenticated child tasks.
+- [C6.3.3] Fixed findings are rechecked by the affected lane with eligible DELTA and generic focused validation on one or more targets.
+- [C7.1] The single report has pass/fail for navigator correctness, stack independence, review logic and speed.
+- [C7.2] Navigator correctness rejects dead ends, loops and unreachable routes and checks recovery after disturbances.
+- [C7.3] Stack independence is proved by the unknown contract and stack/task matrix within synthetic limits.
+- [C7.4] Review logic checks counts/modes/reuse/affected lanes/order/findings/follow-ups on each stack and archetype.
+- [C7.5] Speed is guarded by deterministic work budgets and separately measured step timing.
+- [C7.1.1] The unknown project uses invented extensions, opaque runner output and no recognized manifest.
+- [C7.1.2] The long native tour covers discovery, compile declaration, unknown tests plus helper/data mappings, RED and own GREEN.
+- [C7.1.3] The tour includes an unattributed broad failure, target-preserving narrowing, checklist and several review lanes.
+- [C7.1.4] The tour includes two-target focused validation after a finding, a materialized follow-up and DONE.
+- [C7.1.5] Unknown stacks must not cause operator handoffs, missing commands, repeated unchanged refusals, substituted known-stack tests or global regex/config changes.
+- [C7.1.6] Renaming executable, extensions and layout preserves DONE.
+- [C7.1.7] Negative controls damage source hashes, execution bindings and chronology and require real integrity refusals.
+- [C7.1.8] Explicit validation-gate ownership plus source-derived route instrumentation makes new uncovered test/build gates fail.
+- [C7.2.1] Fixtures model Maven multi-module/external parent/excludes/list selectors, Gradle, Kotlin, .NET, Go, Rust, Python, Node, PHP, frontend, Ruby, Elixir, Swift, CMake and unknown stacks.
+- [C7.2.2] At least two polyglot combinations contain tasks with two technologies and separately executed commands.
+- [C7.2.3] Each project covers production+test, test-only, two modules, docs-only, repaired own failure, broad failure+narrowing, TDD, security/refactor reviews and decomposition.
+- [C7.2.4] Every task reaches DONE or declared handoff with review counts and modes checked.
+- [C7.2.5] Adapter mode is the same or stronger than generic and never introduces a refusal; matrix shapes are not a supported-stack whitelist.
+- [C7.3.1] Every walk checks fresh reviewer launch counts and FULL/DELTA modes against independent scenario expectations.
+- [C7.3.2] Every walk checks passed-review reuse, rule-derived disturbance bounds and finding follow-ups.
+- [C7.3.3] Changed counts or modes are regressions; expectation changes need an explicit rule-derived reason.
+- [C7.4.1] Each navigator/gate step records Git/ACL subprocesses, file probes, hashes, payload reads and timeline bytes/events/clones.
+- [C7.4.2] Every route has a justified deterministic budget independent of machine load.
+- [C7.4.3] Never raise subprocess ceilings; newly measured route entries name concrete required inputs.
+- [C7.4.4] History-only work may grow linearly within tolerance with each event read/verified once per call; repeated clones/parses or constant-work/subprocess growth fails.
+- [C7.4.5] On a quiet machine compare next-step median and p95 per route with the stored prior-release baseline and report growth.
+- [C7.4.6] Timing is isolated from other heavy work; unavailable quiet evidence is inconclusive.
+- [C7.5.1] Short runs the contract and representative walks per pillar; full runs all scenarios and the whole matrix; release sweep adds disturbances.
+- [C7.5.2] Persist each completed scenario atomically, print progress/counts/ETA after each and retain partial findings while running.
+- [C7.5.3] Resume only with unchanged seed, level, provider, scenario manifest, fixture and input hashes.
+- [C7.5.4] Long runs retain a heartbeat without fixed short timeouts.
+- [C7.5.5] One summary contains pass/fail per pillar and links to all details.
+- [C7.5.6] Change budgets, timing baselines and expectations only with a written reason, never to hide a red result.
+- [C7.5.7] Isolate long runs from other heavy work; full test groups belong to external manual CI.
+```

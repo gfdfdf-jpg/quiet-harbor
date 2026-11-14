@@ -1,0 +1,592 @@
+{
+  "local-commit-enabled": {
+    "label": "Permesso di commit locale",
+    "description": "L'attivazione esplicita e verificata concede a questo spazio un permesso duraturo per le attività completate e verificate. La disattivazione lo revoca. Test, revisioni e verifica dopo il commit restano obbligatori; nessun permesso per push o CI.",
+    "options": {
+      "true": {
+        "label": "Attivo",
+        "description": "Consentire commit nativi di attività completate e verificate."
+      },
+      "false": {
+        "label": "Disattivo",
+        "description": "Bloccare i commit locali e revocare i permessi precedenti."
+      }
+    }
+  },
+  "compact-enabled": {
+    "label": "Output compatto",
+    "description": "Impostazione compact. Le modifiche richiedono conferma; i segreti non vengono mascherati.",
+    "options": {
+      "true": {
+        "label": "Attivo",
+        "description": "Impostazione compact. Le modifiche richiedono conferma; i segreti non vengono mascherati. Attivo"
+      },
+      "false": {
+        "label": "Disattivo",
+        "description": "Impostazione compact. Le modifiche richiedono conferma; i segreti non vengono mascherati. Disattivo"
+      }
+    }
+  },
+  "compact-git": {
+    "label": "Git tramite compact",
+    "description": "Impostazione compact. Le modifiche richiedono conferma; i segreti non vengono mascherati.",
+    "options": {
+      "true": {
+        "label": "Attivo",
+        "description": "Impostazione compact. Le modifiche richiedono conferma; i segreti non vengono mascherati. Attivo"
+      },
+      "false": {
+        "label": "Disattivo",
+        "description": "Impostazione compact. Le modifiche richiedono conferma; i segreti non vengono mascherati. Disattivo"
+      }
+    }
+  },
+  "compact-file": {
+    "label": "File tramite compact",
+    "description": "Impostazione compact. Le modifiche richiedono conferma; i segreti non vengono mascherati.",
+    "options": {
+      "true": {
+        "label": "Attivo",
+        "description": "Impostazione compact. Le modifiche richiedono conferma; i segreti non vengono mascherati. Attivo"
+      },
+      "false": {
+        "label": "Disattivo",
+        "description": "Impostazione compact. Le modifiche richiedono conferma; i segreti non vengono mascherati. Disattivo"
+      }
+    }
+  },
+  "compact-rg": {
+    "label": "Ricerca tramite compact",
+    "description": "Impostazione compact. Le modifiche richiedono conferma; i segreti non vengono mascherati.",
+    "options": {
+      "true": {
+        "label": "Attivo",
+        "description": "Impostazione compact. Le modifiche richiedono conferma; i segreti non vengono mascherati. Attivo"
+      },
+      "false": {
+        "label": "Disattivo",
+        "description": "Impostazione compact. Le modifiche richiedono conferma; i segreti non vengono mascherati. Disattivo"
+      }
+    }
+  },
+  "compact-preview-lines": {
+    "label": "Righe di anteprima",
+    "description": "Impostazione compact. Le modifiche richiedono conferma; i segreti non vengono mascherati."
+  },
+  "compact-preview-chars": {
+    "label": "Caratteri di anteprima",
+    "description": "Impostazione compact. Le modifiche richiedono conferma; i segreti non vengono mascherati."
+  },
+  "compact-exact-bytes": {
+    "label": "Byte dell’intervallo selezionato",
+    "description": "Byte dell’intervallo selezionato. Impostazione compact. Le modifiche richiedono conferma; i segreti non vengono mascherati."
+  },
+  "compact-read-bytes": {
+    "label": "Byte per pagina di lettura",
+    "description": "Byte per pagina di lettura. Impostazione compact. Le modifiche richiedono conferma; i segreti non vengono mascherati."
+  },
+  "compact-search-context": {
+    "label": "Righe di contesto della ricerca",
+    "description": "Righe di contesto della ricerca. Impostazione compact. Le modifiche richiedono conferma; i segreti non vengono mascherati."
+  },
+  "compact-run-bytes": {
+    "label": "Limite byte per acquisizione",
+    "description": "Impostazione compact. Le modifiche richiedono conferma; i segreti non vengono mascherati."
+  },
+  "compact-task-bytes": {
+    "label": "Limite byte cache attività",
+    "description": "Impostazione compact. Le modifiche richiedono conferma; i segreti non vengono mascherati."
+  },
+  "compact-workspace-bytes": {
+    "label": "Limite byte cache progetto",
+    "description": "Impostazione compact. Le modifiche richiedono conferma; i segreti non vengono mascherati."
+  },
+  "compact-max-runs": {
+    "label": "Numero massimo di acquisizioni",
+    "description": "Impostazione compact. Le modifiche richiedono conferma; i segreti non vengono mascherati."
+  },
+  "compile-gate-command": {
+    "label": "Comando compile-gate",
+    "description": "Comando eseguito da compile-gate per la validazione di compilazione, build e type-check. Se non è impostato in workflow-config, compile-gate fallisce in modalità fail-closed finché non viene configurato un comando specifico del progetto."
+  },
+  "compile-gate-command-fallback": {
+    "description": "Non impostato in workflow-config; compile-gate fallisce in modalità fail-closed finché non viene configurato un comando specifico del progetto."
+  },
+  "full-suite-enabled": {
+    "label": "Validazione completa obbligatoria",
+    "description": "Determina se il comando di test completo configurato fa parte del ciclo di vita del task.",
+    "options": {
+      "true": {
+        "label": "Attivo",
+        "description": "Il comando di suite completa configurato è obbligatorio nel ciclo di vita del task."
+      },
+      "false": {
+        "label": "Disattivo",
+        "description": "Il gate della suite completa viene saltato salvo che un altro percorso del workflow lo richieda."
+      }
+    }
+  },
+  "task-test-selection-require-operator-confirmation": {
+    "label": "Conferma la scelta dei test",
+    "description": "Richiede conferma per scegliere i test del compito attivo. Disattivato per impostazione predefinita. Modificare questa impostazione richiede comunque conferma; test e revisioni obbligatori restano invariati.",
+    "options": {
+      "true": {
+        "label": "Attivato",
+        "description": "Chiedi conferma prima di ogni scelta dei test del compito."
+      },
+      "false": {
+        "label": "Disattivato",
+        "description": "Consenti una scelta motivata e registrata per il compito attivo senza altre domande."
+      }
+    }
+  },
+  "full-suite-command": {
+    "label": "Comando suite completa",
+    "description": "Comando eseguito dal gate della suite completa quando la validazione completa obbligatoria è attiva."
+  },
+  "full-suite-timeout-ms": {
+    "label": "Timeout suite completa",
+    "description": "Tempo massimo di esecuzione del comando di suite completa, in millisecondi."
+  },
+  "full-suite-green-summary-max-lines": {
+    "label": "Dimensione riepilogo riuscito",
+    "description": "Quante righe di output riuscito della suite completa restano visibili nelle prove compatte del task."
+  },
+  "full-suite-red-failure-chunk-lines": {
+    "label": "Dimensione blocco errore",
+    "description": "Quante righe fallite della suite completa vengono conservate per ogni blocco di errore compatto."
+  },
+  "full-suite-out-of-scope-failure-policy": {
+    "label": "Errori fuori dallo scope del task",
+    "description": "Cosa fa il workflow quando la suite completa rileva un errore fuori dallo scope del task corrente.",
+    "options": {
+      "AUDIT_AND_BLOCK": {
+        "label": "Registra e blocca",
+        "description": "Registra l'errore e arresta il workflow finché non viene risolto."
+      },
+      "AUDIT_AND_WARN": {
+        "label": "Registra e avvisa",
+        "description": "Registra l'errore ma consente al workflow di continuare con un avviso."
+      }
+    }
+  },
+  "full-suite-placement": {
+    "label": "Posizione della suite completa",
+    "description": "In quale fase del ciclo di vita del task viene eseguito il gate obbligatorio della suite completa.",
+    "options": {
+      "after_compile_before_reviews": {
+        "label": "Dopo la compilazione, prima dei review",
+        "description": "Esegue la suite completa dopo una compilazione riuscita e prima dell'inizio dei review."
+      },
+      "before_test_review": {
+        "label": "Prima del review test",
+        "description": "Esegue la suite completa subito prima che la review lane test richieda le proprie prove."
+      },
+      "before_completion": {
+        "label": "Prima del completamento",
+        "description": "Rimanda la suite completa al percorso finale di completamento."
+      }
+    }
+  },
+  "review-execution-policy": {
+    "label": "Modalità esecuzione review",
+    "description": "Controlla se le review lane richieste vengono eseguite in parallelo, attendono il code review o procedono in sequenza.",
+    "options": {
+      "parallel_all": {
+        "label": "Tutto in parallelo",
+        "description": "Tutti i tipi di review possono essere preparati in modo indipendente; non si applicano dipendenze upstream di avvio."
+      },
+      "test_after_code": {
+        "label": "Test dopo code",
+        "description": "Solo test attende un PASS code del ciclo corrente; gli altri tipi di review restano indipendenti."
+      },
+      "code_first_optional": {
+        "label": "Code prima per gli opzionali",
+        "description": "API, performance, infra e dependency attendono un PASS code; test resta downstream di tutti i review upstream richiesti."
+      },
+      "strict_sequential": {
+        "label": "Strettamente sequenziale",
+        "description": "Tutti i review richiesti seguono l'ordine canonico uno alla volta nel ciclo corrente."
+      }
+    }
+  },
+  "scope-budget-enabled": {
+    "label": "Controllo budget di scope",
+    "description": "Avvisa o blocca quando un task supera il budget del profilo configurato.",
+    "options": {
+      "true": {
+        "label": "Attivo",
+        "description": "I controlli del budget di scope avvisano o bloccano quando un task supera il budget del profilo configurato."
+      },
+      "false": {
+        "label": "Disattivo",
+        "description": "I limiti del budget di scope non vengono applicati nelle decisioni sulla dimensione del task."
+      }
+    }
+  },
+  "scope-budget-action": {
+    "label": "Legacy max_* compatibility mode",
+    "description": "Old max_* compatibility only; explicit block_* thresholds still produce BLOCK and route to split-required.",
+    "options": {
+      "BLOCK_FOR_SPLIT": {
+        "label": "max_* maps to block_*",
+        "description": "Old max_* values are treated as blocking thresholds; explicit block_* thresholds still block in every mode."
+      },
+      "WARN_ONLY": {
+        "label": "max_* maps to warn_*",
+        "description": "Old max_* values are treated as warning thresholds; explicit block_* thresholds still block in every mode."
+      }
+    }
+  },
+  "scope-budget-profiles": {
+    "label": "Profili budget di scope",
+    "description": "Profili di task a cui si applica il controllo del budget di scope. I valori legacy sconosciuti vengono mostrati esplicitamente invece di essere rimossi silenziosamente."
+  },
+  "scope-budget-max-files": {
+    "label": "Limite file",
+    "description": "Numero massimo di file modificati prima che reagisca il controllo del budget di scope."
+  },
+  "scope-budget-max-changed-lines": {
+    "label": "Limite righe modificate",
+    "description": "Numero massimo di righe modificate prima che reagisca il controllo del budget di scope."
+  },
+  "scope-budget-max-required-reviews": {
+    "label": "Limite dei tipi di review obbligatori",
+    "description": "Numero massimo di tipi di review distinti richiesti dal preflight corrente prima che reagisca il controllo del budget di scope. Una capability di review disattivata non diventa obbligatoria solo perché sono cambiati file corrispondenti; il conteggio riguarda i tipi di review, non reviewer, tentativi o cicli di review."
+  },
+  "scope-budget-max-review-tokens": {
+    "label": "Previsione token di review",
+    "description": "Budget massimo stimato di token di review prima che reagisca il controllo del budget di scope."
+  },
+  "review-cycle-enabled": {
+    "label": "Controllo cicli di review",
+    "description": "Rileva loop di review non-test ripetuti prima che consumino troppo lavoro.",
+    "options": {
+      "true": {
+        "label": "Attivo",
+        "description": "I loop di review non-test ripetuti vengono rilevati prima che il closeout prosegua."
+      },
+      "false": {
+        "label": "Disattivo",
+        "description": "La pressione del review-cycle non viene verificata da questo controllo."
+      }
+    }
+  },
+  "review-cycle-action": {
+    "label": "Azione su ciclo di review",
+    "description": "Cosa succede quando i tentativi di review ripetuti superano i limiti configurati.",
+    "options": {
+      "BLOCK_FOR_OPERATOR_DECISION": {
+        "label": "Attendi decisione operatore",
+        "description": "Arresta i loop di review ripetuti finché un operatore non sceglie il percorso di recupero."
+      },
+      "WARN_ONLY": {
+        "label": "Solo avviso",
+        "description": "Segnala la pressione del review-cycle ma lascia proseguire il workflow."
+      }
+    }
+  },
+  "review-cycle-max-failed-non-test-reviews": {
+    "label": "Limite review non-test falliti",
+    "description": "Numero massimo di tentativi di review non-test falliti prima che reagisca il controllo."
+  },
+  "review-cycle-max-total-non-test-reviews": {
+    "label": "Limite totale review non-test",
+    "description": "Numero totale massimo di tentativi di review non-test prima che reagisca il controllo."
+  },
+  "review-cycle-excluded-review-types": {
+    "label": "Tipi di review esclusi",
+    "description": "Scelta multipla: i tipi di review selezionati sono esclusi dal conteggio del controllo review-cycle.",
+    "options": {
+      "code": {
+        "label": "Revisione del codice"
+      },
+      "db": {
+        "label": "Revisione del database"
+      },
+      "security": {
+        "label": "Revisione di sicurezza"
+      },
+      "refactor": {
+        "label": "Revisione del refactoring"
+      },
+      "api": {
+        "label": "Revisione API"
+      },
+      "test": {
+        "label": "Revisione dei test"
+      },
+      "performance": {
+        "label": "Revisione delle prestazioni"
+      },
+      "infra": {
+        "label": "Revisione dell'infrastruttura"
+      },
+      "dependency": {
+        "label": "Revisione delle dipendenze"
+      }
+    }
+  },
+  "review-cycle-auto-split-enabled": {
+    "label": "Suggerimento suddivisione automatica",
+    "description": "Consente alla pressione del review-cycle di emettere un suggerimento auto-split quando l'azione è BLOCK_FOR_OPERATOR_DECISION. Non ha effetto bloccante mentre l'azione è WARN_ONLY.",
+    "options": {
+      "true": {
+        "label": "Attivo",
+        "description": "La pressione del review-cycle può emettere il suggerimento auto-split quando l'azione è BLOCK_FOR_OPERATOR_DECISION."
+      },
+      "false": {
+        "label": "Disattivo",
+        "description": "La pressione del review-cycle non emette mai il suggerimento auto-split."
+      }
+    }
+  },
+  "project-memory-enabled": {
+    "label": "Manutenzione memoria progetto",
+    "description": "Attiva il controllo al closeout dell'impatto sulla memoria persistente del progetto.",
+    "options": {
+      "true": {
+        "label": "Attivo",
+        "description": "Il closeout verifica se sono necessarie prove di impatto sulla memoria del progetto."
+      },
+      "false": {
+        "label": "Disattivo",
+        "description": "Il closeout non esegue controlli di manutenzione della memoria del progetto."
+      }
+    }
+  },
+  "project-memory-mode": {
+    "label": "Modalità memoria progetto",
+    "description": "Quanto rigorosamente il workflow impone il lavoro sulla project memory.",
+    "options": {
+      "off": {
+        "label": "Disattivo",
+        "description": "Non eseguire manutenzione project-memory durante il closeout."
+      },
+      "check": {
+        "label": "Verifica",
+        "description": "Verificare se servono aggiornamenti di memoria senza scrivere file."
+      },
+      "update": {
+        "label": "Aggiorna",
+        "description": "Consentire al workflow di aggiornare i file project-memory mirati quando necessario."
+      },
+      "strict": {
+        "label": "Rigoroso",
+        "description": "Richiedere prove di memoria prima di un closeout riuscito."
+      }
+    }
+  },
+  "project-memory-run-before-final-closeout": {
+    "label": "Verifica memoria prima del closeout finale",
+    "description": "Esegue la manutenzione della memoria del progetto prima del passo finale di completamento.",
+    "options": {
+      "true": {
+        "label": "Attivo",
+        "description": "La manutenzione della memoria del progetto viene eseguita prima del passo finale di completamento."
+      },
+      "false": {
+        "label": "Disattivo",
+        "description": "La manutenzione della memoria del progetto non viene inserita prima del closeout finale."
+      }
+    }
+  },
+  "project-memory-require-user-approval-for-writes": {
+    "label": "Approvazione scritture memoria",
+    "description": "Richiede il consenso esplicito dell'utente prima che il workflow scriva file di memoria del progetto.",
+    "options": {
+      "true": {
+        "label": "Attivo",
+        "description": "Le scritture in memoria del progetto richiedono il consenso esplicito dell'utente prima di modificare i file."
+      },
+      "false": {
+        "label": "Disattivo",
+        "description": "Le scritture in memoria del progetto possono procedere nella modalità di manutenzione configurata senza un passaggio di approvazione aggiuntivo."
+      }
+    }
+  },
+  "project-memory-max-compact-summary-chars": {
+    "label": "Dimensione riepilogo compatto memoria",
+    "description": "Dimensione massima del riepilogo compatto di memoria del progetto generato, in caratteri."
+  },
+  "project-memory-read-strategy": {
+    "label": "Strategia lettura memoria",
+    "description": "Come gli agenti devono leggere la memoria persistente all'avvio del task.",
+    "options": {
+      "index_first": {
+        "label": "Indice prima",
+        "description": "Leggere prima l'indice di memoria e aprire i file dettagliati solo quando l'indice vi rimanda."
+      }
+    }
+  },
+  "project-memory-impact-retention-days": {
+    "label": "Conservazione artefatti impatto memoria",
+    "description": "Per quanti giorni vengono conservati gli artefatti di impatto della memoria del progetto."
+  },
+  "task-reset-enabled": {
+    "label": "Comandi reset task",
+    "description": "Consente mutazioni confermate di reset o scarto dei task.",
+    "options": {
+      "true": {
+        "label": "Attivo",
+        "description": "I comandi confermati di reset e scarto task sono disponibili tramite percorsi protetti."
+      },
+      "false": {
+        "label": "Disattivo",
+        "description": "Le mutazioni di reset e scarto task non sono disponibili."
+      }
+    }
+  },
+  "auto-backup-enabled": {
+    "label": "Backup automatici programmati",
+    "description": "Consente al trigger di manutenzione giornaliera di creare backup di rollback programmati quando scade l'intervallo.",
+    "options": {
+      "true": {
+        "label": "Attivo",
+        "description": "La manutenzione giornaliera può creare backup di rollback programmati quando scade l'intervallo."
+      },
+      "false": {
+        "label": "Disattivo",
+        "description": "La manutenzione giornaliera non crea backup di rollback programmati."
+      }
+    }
+  },
+  "auto-backup-interval-days": {
+    "label": "Intervallo backup",
+    "description": "Numero minimo di giorni tra backup programmati riusciti."
+  },
+  "auto-backup-keep-latest": {
+    "label": "Conservazione backup",
+    "description": "Numero di backup più recenti da conservare dopo la creazione di un backup programmato."
+  },
+  "garda-self-guard": {
+    "label": "Protezione Garda self-guard",
+    "description": "Determina se gli agenti possono entrare direttamente nel lavoro protetto del control-plane Garda.",
+    "options": {
+      "deny_agent_entry": {
+        "label": "Attivo",
+        "description": "Gli agenti non possono accedere al lavoro protetto del control-plane senza il percorso dell'operatore."
+      },
+      "require_operator_confirmation": {
+        "label": "Conferma operatore",
+        "description": "L'accesso al control-plane protetto richiede conferma esplicita dell'operatore."
+      }
+    }
+  },
+  "full-suite-timeout-blocker": {
+    "label": "Blocco timeout full-suite",
+    "description": "Controlla se timeout full-suite ripetuti bloccano l’attività e propongono una riparazione, o proseguono come avviso finale.",
+    "options": {
+      "true": {
+        "label": "true",
+        "description": "Timeout full-suite ripetuti bloccano il completamento e propongono una riparazione."
+      },
+      "false": {
+        "label": "false",
+        "description": "Timeout full-suite ripetuti sono riportati come avviso e non bloccano il completamento."
+      }
+    }
+  },
+  "full-suite-timeout-retry-count": {
+    "label": "Retry timeout full-suite",
+    "description": "Quante volte il comando full-suite viene ritentato dopo un timeout prima di applicare la policy."
+  },
+  "optional-checks-enabled": {
+    "label": "Controlli qualità opzionali",
+    "description": "Controlla se le regole consultive di autoverifica vengono eseguite prima di compilazione, review e validazione full-suite. Le modifiche alle regole usano lo stesso percorso auditato workflow set.",
+    "options": {
+      "true": {
+        "label": "Attivo",
+        "description": "Gli agenti eseguono le regole consultive configurate prima dei gate costosi."
+      },
+      "false": {
+        "label": "Disattivo",
+        "description": "Il gate opzionale quality-checklist viene saltato senza sostituire i gate obbligatori di compilazione, review o full-suite."
+      }
+    }
+  },
+  "optional-checks-review-failure-cadence-interval": {
+    "label": "Revisioni non riuscite tra i controlli qualità",
+    "description": "Numero di tentativi di review falliti registrati tra le esecuzioni obbligatorie delle risposte quality-checklist. Il contatore avanza solo con risultati review FAIL registrati; next-step o refresh preflight ripetuti non lo avanzano."
+  },
+  "optional-skill-selection-mode": {
+    "label": "Modalita di selezione skill specialistiche",
+    "description": "Controlla se il matching delle skill specialistiche all avvio del task e disattivato, optional o mandatory. I valori legacy advisory/required/strict restano compatibili in lettura e vengono salvati come modalita canoniche.",
+    "options": {
+      "off": {
+        "label": "Disattivato",
+        "description": "Non suggerisce ne richiede skill specialistiche all avvio del task."
+      },
+      "optional": {
+        "label": "Facoltativo",
+        "description": "Mostra suggerimenti di skill specialistiche e pacchetti consigliati senza bloccare il lavoro ordinario."
+      },
+      "mandatory": {
+        "label": "Obbligatorio",
+        "description": "Richiede una skill specialistica installata prima dell implementazione quando la policy ne seleziona una."
+      },
+      "advisory": {
+        "label": "Valore legacy: advisory -> optional",
+        "description": "Alias di compatibilita per optional; al salvataggio viene scritto optional."
+      },
+      "required": {
+        "label": "Valore legacy: required -> mandatory",
+        "description": "Alias di compatibilita per mandatory; al salvataggio viene scritto mandatory."
+      },
+      "strict": {
+        "label": "Valore legacy: strict -> mandatory",
+        "description": "Alias di compatibilita per mandatory; al salvataggio viene scritto mandatory."
+      }
+    }
+  },
+  "optional-check-rule-management": {
+    "label": "Regola opzionale di controllo qualità",
+    "description": "Aggiunge, aggiorna o rimuove una regola opzionale e consultiva di controllo qualità tramite il percorso auditato delle impostazioni del workflow."
+  },
+  "scope-budget-warn-files": {
+    "label": "budget di scope: file modificati - avviso WARN",
+    "description": "avviso WARN: file modificati above threshold; la continuazione resta consentita; keep it below blocco BLOCK."
+  },
+  "scope-budget-block-files": {
+    "label": "budget di scope: file modificati - blocco BLOCK",
+    "description": "blocco BLOCK: file modificati above threshold; next-step passa a split-required."
+  },
+  "scope-budget-warn-changed-lines": {
+    "label": "budget di scope: righe modificate - avviso WARN",
+    "description": "avviso WARN: righe modificate above threshold; la continuazione resta consentita; keep it below blocco BLOCK."
+  },
+  "scope-budget-block-changed-lines": {
+    "label": "budget di scope: righe modificate - blocco BLOCK",
+    "description": "blocco BLOCK: righe modificate above threshold; next-step passa a split-required."
+  },
+  "scope-budget-warn-required-reviews": {
+    "label": "budget di scope: tipi di review obbligatori - avviso WARN",
+    "description": "avviso WARN: tipi di review obbligatori above threshold; la continuazione resta consentita; keep it below blocco BLOCK."
+  },
+  "scope-budget-block-required-reviews": {
+    "label": "budget di scope: tipi di review obbligatori - blocco BLOCK",
+    "description": "blocco BLOCK: tipi di review obbligatori above threshold; next-step passa a split-required."
+  },
+  "scope-budget-warn-review-tokens": {
+    "label": "budget di scope: token review - avviso WARN",
+    "description": "avviso WARN: token review above threshold; la continuazione resta consentita; keep it below blocco BLOCK."
+  },
+  "scope-budget-block-review-tokens": {
+    "label": "budget di scope: token review - blocco BLOCK",
+    "description": "blocco BLOCK: token review above threshold; next-step passa a split-required."
+  },
+  "parent-audit-enabled": {
+    "label": "Verifica e revisione della fase principale",
+    "description": "Per le attività suddivise durante il lavoro: una verifica complessiva dopo l’accettazione delle sottoattività. Tutti i problemi confluiscono in un’attività F, la cui accettazione chiude la principale. I gruppi manuali creati all’inizio si chiudono automaticamente. Vale per le suddivisioni future.",
+    "options": {
+      "true": {
+        "label": "Attivo",
+        "description": "Verificare il risultato complessivo una sola volta."
+      },
+      "false": {
+        "label": "Disattivo",
+        "description": "Chiudere automaticamente dopo l’accettazione delle sottoattività."
+      }
+    }
+  }
+}

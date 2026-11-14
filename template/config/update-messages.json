@@ -1,0 +1,52 @@
+{
+  "messages": [
+    {
+      "version": "1.0.0",
+      "title": "First public Garda release",
+      "body": [
+        "Visible release history was reset to the Garda 1.0.0 baseline.",
+        "The public project line now uses the Garda name."
+      ]
+    },
+    {
+      "version": "1.1.0",
+      "title": "Project memory refresh",
+      "body": [
+        "Project memory mode was updated in 1.1.0.",
+        "Before starting task work, let your agent execute the project-memory refresh prompt so local project memory is current for the new workflow.",
+        "New or refreshed workflow configs now default full-suite validation placement to after_compile_before_reviews; existing explicit placement settings are preserved.",
+        "Garda self-guard is enabled by default for application workspaces: agents can no longer self-escalate into --orchestrator-work for protected Garda bundle edits. Operators can change the policy with garda workflow set --garda-self-guard on|off."
+      ]
+    },
+    {
+      "version": "1.2.0",
+      "title": "Optional quality gate controls",
+      "body": [
+        "Garda now includes an optional quality gate for project-specific self-check rules before expensive validation work.",
+        "After updating, run garda ui --actions and open the Quality Gate settings to review the default rules, adjust test-only exclusions, and add rules that match your project.",
+        "This gate is advisory and does not replace mandatory compile, full-suite, or independent review gates."
+      ]
+    },
+    {
+      "version": "1.3.0",
+      "title": "Review finding actions, F-task policies, and faster navigation",
+      "body": [
+        "Profiles can now decide by finding severity and residual risk whether review feedback uses fix_now, create_follow_up, or ignore; critical findings always remain fix_now.",
+        "F-task materialization is now policy-driven: grouped_by_parent creates one pending F-task after all required review lanes finish, while per_finding creates one F-task for each deferred item.",
+        "After updating, open garda ui --actions to review each profile's Review Finding Disposition settings; garda profile current also shows the active ReviewFollowUpPolicy, and profile changes apply only to future tasks.",
+        "next-step now batches and reuses Git and workspace reads, reducing repeated navigation work on large repositories.",
+        "Garda now uses a workspace-local SQLite projection for large task-activity and project-memory searches, with automatic canonical-file fallback when SQLite or FTS5 is unavailable."
+      ]
+    },
+    {
+      "version": "1.4.2",
+      "title": "Extensible reviews and safer remediation",
+      "body": [
+        "Garda 1.4.2 adds a guarded review catalog for custom review lanes, profile states, and dependency graphs, with matching CLI and local UI controls.",
+        "Review remediation can now reuse authenticated evidence or run a bounded DELTA review; stale, ambiguous, protected, oversized, or dependency-invalidated changes continue through a full review.",
+        "After updating, run garda review-catalog validate --target-root \".\" to inspect the effective configuration. Existing workspaces remain compatible without a mandatory migration.",
+        "Use garda review-catalog migrate --target-root \".\" only to preview an explicit normalized catalog for a legacy workspace; the preview is read-only and custom lanes remain disabled until deliberately configured."
+      ]
+    }
+  ]
+}

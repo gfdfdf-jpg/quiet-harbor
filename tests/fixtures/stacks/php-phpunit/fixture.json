@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "id": "php-phpunit",
+  "title": "PHP / Composer / PHPUnit",
+  "adapter": null,
+  "technologies": [
+    {
+      "id": "phpunit",
+      "executable": "vendor/bin/phpunit",
+      "compileArgv": [
+        "-l",
+        "src/Orders/Service.php"
+      ],
+      "firstArgv": [
+        "tests/Orders/ServiceTest.php",
+        "--filter",
+        "testTaskContract"
+      ],
+      "allArgv": [
+        "tests/Orders/ServiceTest.php",
+        "tests/Partners/ServiceTest.php",
+        "--filter",
+        "testTaskContract"
+      ],
+      "broadArgv": [
+        "--testsuite",
+        "unit"
+      ],
+      "report": "junit",
+      "secondArgv": [
+        "tests/Partners/ServiceTest.php",
+        "--filter",
+        "testTaskContract"
+      ],
+      "compileExecutable": "tools/php"
+    }
+  ],
+  "suites": [
+    {
+      "id": "orders",
+      "technology": "phpunit",
+      "source": "src/Orders/Service.php",
+      "target": "tests/Orders/ServiceTest.php",
+      "case": "task-contract",
+      "comment": "//"
+    },
+    {
+      "id": "partners",
+      "technology": "phpunit",
+      "source": "src/Partners/Service.php",
+      "target": "tests/Partners/ServiceTest.php",
+      "case": "task-contract",
+      "comment": "//"
+    }
+  ],
+  "helpers": []
+}

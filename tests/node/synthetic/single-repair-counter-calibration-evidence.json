@@ -1,0 +1,2752 @@
+{
+  "schema": 1,
+  "source": {
+    "repository": "gfdfdf-jpg/quiet-harbor",
+    "run": 42521995498,
+    "source_commit": "54dad397fbead469ba9f341f5ebb326cef32e422"
+  },
+  "state": "native-v4-task-local-full-suite-child-tree",
+  "parent": "task-local-full-suite-child-tree",
+  "route": "BLOCKED/child-task",
+  "reason": "Previously missing single-child native handoff route. Add only an independently admitted shape/route. All existing budgets are unchanged; every required file is hashed once. Gates and parent/child SOURCE authority are unchanged.",
+  "previous": {
+    "win32": {
+      "routes_sha256": "1310559878c9c71b698a20b5277304ce03916a5b8568e1f836b60e01b79b04f0",
+      "state_ids": [
+        "test-first-recorded-red",
+        "optional-skill-activation",
+        "strict-split-decision",
+        "failed-review-path-candidate",
+        "native-child-tree",
+        "full-suite-child-tree",
+        "declared-recipe-docs-only",
+        "declared-recipe-reviewed",
+        "stack-fixture-spring-maven-a1-a6",
+        "stack-fixture-unknown-quartz-a1-a6",
+        "stack-fixture-polyglot-maven-ts-a1-a6",
+        "stack-fixture-polyglot-maven-ts-a3",
+        "stack-fixture-unknown-quartz-gate-tour",
+        "stack-decomposition-planning",
+        "stack-four-lane-native-child-tree",
+        "stack-five-lane-native-child-tree",
+        "leaf-test-review-reuse",
+        "task-test-failure-repair",
+        "retained-task-test-failure",
+        "stack-fixture-cmake-planning",
+        "stack-retained-broad-failure",
+        "stack-four-lane-task",
+        "task-local-full-suite-child-tree",
+        "task-local-expected-red",
+        "declared-recipe-task-local-reviewed",
+        "declared-recipe-task-local-docs-only",
+        "matrix-test-review-reuse",
+        "stack-fixture-spring-maven-two-modules",
+        "native-api-selected-initial",
+        "native-api-selected-remediation",
+        "native-v4-task--code+test",
+        "native-v4-declared-recipe-task-local-reviewed",
+        "native-v4-pre-entry",
+        "native-v4-declared-recipe-task-local-docs-only",
+        "native-v4-task--test",
+        "native-v4-failed-review-path-candidate",
+        "native-v4-task--no-reviews",
+        "native-v4-optional-skill-activation",
+        "native-v4-native-child-tree",
+        "native-v4-test-selection-module",
+        "native-v4-task--code+custom-quality+test",
+        "native-v4-task--code+db+test",
+        "native-v4-task--code+dependency+test",
+        "native-v4-task--preflight-pending",
+        "native-v4-stack-fixture-spring-maven-a1-a6",
+        "native-v4-task--code+infra+test",
+        "native-v4-task--code+performance+test",
+        "native-v4-task--code+db+performance+security+test",
+        "native-v4-task--code+performance+security+test",
+        "native-v4-task--code+refactor+test",
+        "native-v4-task--code+security+test",
+        "native-v4-task--code+refactor+security+test",
+        "native-v4-stack-four-lane-task",
+        "native-v4-task-test-failure-repair",
+        "native-v4-task--api+code+test",
+        "native-v4-stack-fixture-unknown-quartz-a1-a6"
+      ],
+      "states_sha256": "6bc914eb0a91258228e5aa1b5c296f377a0e31161111efa64bc4c33e7bc9703a"
+    },
+    "linux": {
+      "routes_sha256": "53db84391e05ee69d6f9015aef0a1831538c2f4b1714bcfc8c331bbf83ba32a6",
+      "state_ids": [
+        "test-first-recorded-red",
+        "optional-skill-activation",
+        "strict-split-decision",
+        "failed-review-path-candidate",
+        "native-child-tree",
+        "full-suite-child-tree",
+        "declared-recipe-docs-only",
+        "declared-recipe-reviewed",
+        "stack-fixture-spring-maven-a1-a6",
+        "stack-fixture-unknown-quartz-a1-a6",
+        "stack-fixture-polyglot-maven-ts-a1-a6",
+        "stack-fixture-polyglot-maven-ts-a3",
+        "stack-fixture-unknown-quartz-gate-tour",
+        "stack-decomposition-planning",
+        "stack-four-lane-native-child-tree",
+        "stack-five-lane-native-child-tree",
+        "leaf-test-review-reuse",
+        "task-test-failure-repair",
+        "retained-task-test-failure",
+        "stack-fixture-cmake-planning",
+        "stack-retained-broad-failure",
+        "stack-four-lane-task",
+        "task-local-full-suite-child-tree",
+        "task-local-expected-red",
+        "declared-recipe-task-local-reviewed",
+        "declared-recipe-task-local-docs-only",
+        "matrix-test-review-reuse",
+        "stack-fixture-spring-maven-two-modules",
+        "native-api-selected-initial",
+        "native-api-selected-remediation",
+        "native-v4-task--code+test",
+        "native-v4-declared-recipe-task-local-reviewed",
+        "native-v4-pre-entry",
+        "native-v4-declared-recipe-task-local-docs-only",
+        "native-v4-task--test",
+        "native-v4-failed-review-path-candidate",
+        "native-v4-task--no-reviews",
+        "native-v4-optional-skill-activation",
+        "native-v4-native-child-tree",
+        "native-v4-test-selection-module",
+        "native-v4-task--code+custom-quality+test",
+        "native-v4-task--code+db+test",
+        "native-v4-task--code+dependency+test",
+        "native-v4-task--preflight-pending",
+        "native-v4-stack-fixture-spring-maven-a1-a6",
+        "native-v4-task--code+infra+test",
+        "native-v4-task--code+performance+test",
+        "native-v4-task--code+db+performance+security+test",
+        "native-v4-task--code+performance+security+test",
+        "native-v4-task--code+refactor+test",
+        "native-v4-task--code+security+test",
+        "native-v4-task--code+refactor+security+test",
+        "native-v4-stack-four-lane-task",
+        "native-v4-task-test-failure-repair",
+        "native-v4-task--api+code+test",
+        "native-v4-stack-fixture-unknown-quartz-a1-a6"
+      ],
+      "states_sha256": "b1bcac9efae7278f1e6df4843c3bdc0cf979002bdbcc1e1f7edb5f73556caa92"
+    }
+  },
+  "measurements": [
+    {
+      "platform": "win32",
+      "artifact": 13639907795,
+      "scenario": "coverage-full-suite-wip-restoration",
+      "counters": {
+        "subprocess:icacls.exe": 4,
+        "subprocess:powershell.exe": 4,
+        "payload_reads": 43,
+        "timeline_capture:file": 1,
+        "timeline_payload_read:file": 1,
+        "timeline_bytes": 115644,
+        "timeline_verify": 1,
+        "file_hash:file": 28,
+        "timeline_parse": 1,
+        "timeline_events": 21,
+        "json_parse_verified_timeline_event": 21,
+        "visit:verified_timeline_index_event": 21,
+        "timeline_revalidate": 1,
+        "timeline_revalidate:file": 1,
+        "file_probes:lstatSync": 555,
+        "file_probes:realpathSync": 48,
+        "file_probes:existsSync": 186,
+        "file_probes:statSync": 75,
+        "file_probes:realpathSync.native": 462,
+        "file_probes:fstatSync": 67
+      },
+      "hashInputs": [
+        {
+          "id": "file_hash:garda-agent-orchestrator/runtime/task-events/T-WALK.cadence-head.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:.git/garda-private/review-history-key",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-task-mode.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-preflight.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-rule-pack.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-validation.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:TASK.md",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/live/config/profiles.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/live/config/review-capabilities.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/live/config/review-catalog.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/live/config/token-economy.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/live/config/skill-packs.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/live/config/paths.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-optional-skill-selection.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/live/config/optional-skill-selection-policy.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/live/config/workflow-config.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-compile-gate.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:package.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/live/config/isolation-mode.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-handshake.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-shell-smoke.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-output.log",
+          "count": 1
+        },
+        {
+          "id": "file_hash:src/app.ts",
+          "count": 1
+        },
+        {
+          "id": "file_hash:tests/app.test.ts",
+          "count": 1
+        },
+        {
+          "id": "file_hash:.git/config",
+          "count": 1
+        },
+        {
+          "id": "file_hash:.git/HEAD",
+          "count": 1
+        },
+        {
+          "id": "file_hash:.git/refs/heads/master",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-split-required.json",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "platform": "linux",
+      "artifact": 13640661885,
+      "scenario": "coverage-full-suite-wip-restoration",
+      "counters": {
+        "payload_reads": 43,
+        "timeline_capture:file": 1,
+        "timeline_payload_read:file": 1,
+        "timeline_bytes": 115561,
+        "timeline_verify": 1,
+        "file_hash:file": 28,
+        "timeline_parse": 1,
+        "timeline_events": 21,
+        "json_parse_verified_timeline_event": 21,
+        "visit:verified_timeline_index_event": 21,
+        "timeline_revalidate": 1,
+        "timeline_revalidate:file": 1,
+        "file_probes:lstatSync": 547,
+        "file_probes:realpathSync": 140,
+        "file_probes:existsSync": 186,
+        "file_probes:statSync": 75,
+        "file_probes:realpathSync.native": 366,
+        "file_probes:fstatSync": 67
+      },
+      "hashInputs": [
+        {
+          "id": "file_hash:garda-agent-orchestrator/runtime/task-events/T-WALK.cadence-head.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:.git/garda-private/review-history-key",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-task-mode.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-preflight.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-rule-pack.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-validation.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:TASK.md",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/live/config/profiles.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/live/config/review-capabilities.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/live/config/review-catalog.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/live/config/token-economy.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/live/config/skill-packs.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/live/config/paths.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-optional-skill-selection.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/live/config/optional-skill-selection-policy.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/live/config/workflow-config.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-compile-gate.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:package.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/live/config/isolation-mode.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-handshake.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-shell-smoke.json",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-output.log",
+          "count": 1
+        },
+        {
+          "id": "file_hash:src/app.ts",
+          "count": 1
+        },
+        {
+          "id": "file_hash:tests/app.test.ts",
+          "count": 1
+        },
+        {
+          "id": "file_hash:.git/config",
+          "count": 1
+        },
+        {
+          "id": "file_hash:.git/HEAD",
+          "count": 1
+        },
+        {
+          "id": "file_hash:.git/refs/heads/master",
+          "count": 1
+        },
+        {
+          "id": "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-split-required.json",
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "history": [
+    {
+      "platform": "win32",
+      "node": "v24.22.1",
+      "appendedEvents": 5,
+      "commandsEqual": true,
+      "increases": [],
+      "initial": {
+        "subprocess:icacls.exe": 4,
+        "payload_reads": 43,
+        "timeline_capture:file": 1,
+        "timeline_payload_read:file": 1,
+        "timeline_bytes": 115644,
+        "timeline_verify": 1,
+        "file_hash:file": 28,
+        "timeline_parse": 1,
+        "timeline_events": 21,
+        "json_parse_verified_timeline_event": 21,
+        "visit:verified_timeline_index_event": 21,
+        "timeline_revalidate": 1,
+        "timeline_revalidate:file": 1,
+        "file_probes:lstatSync": 555,
+        "file_probes:realpathSync": 48,
+        "file_probes:existsSync": 186,
+        "file_probes:statSync": 75,
+        "file_probes:realpathSync.native": 450,
+        "file_probes:fstatSync": 67
+      },
+      "before": {
+        "subprocess:icacls.exe": 4,
+        "payload_reads": 43,
+        "timeline_capture:file": 1,
+        "timeline_payload_read:file": 1,
+        "timeline_bytes": 116268,
+        "timeline_verify": 1,
+        "file_hash:file": 28,
+        "timeline_parse": 1,
+        "timeline_events": 22,
+        "json_parse_verified_timeline_event": 22,
+        "visit:verified_timeline_index_event": 22,
+        "timeline_revalidate": 1,
+        "timeline_revalidate:file": 1,
+        "file_probes:lstatSync": 555,
+        "file_probes:realpathSync": 48,
+        "file_probes:existsSync": 186,
+        "file_probes:statSync": 75,
+        "file_probes:realpathSync.native": 450,
+        "file_probes:fstatSync": 67
+      },
+      "after": {
+        "subprocess:icacls.exe": 4,
+        "payload_reads": 43,
+        "timeline_capture:file": 1,
+        "timeline_payload_read:file": 1,
+        "timeline_bytes": 119383,
+        "timeline_verify": 1,
+        "file_hash:file": 28,
+        "timeline_parse": 1,
+        "timeline_events": 27,
+        "json_parse_verified_timeline_event": 27,
+        "visit:verified_timeline_index_event": 27,
+        "timeline_revalidate": 1,
+        "timeline_revalidate:file": 1,
+        "file_probes:lstatSync": 555,
+        "file_probes:realpathSync": 48,
+        "file_probes:existsSync": 186,
+        "file_probes:statSync": 75,
+        "file_probes:realpathSync.native": 450,
+        "file_probes:fstatSync": 67
+      },
+      "beforeInputs": [
+        [
+          "acl_probe:final:garda-agent-orchestrator/runtime/task-events",
+          1
+        ],
+        [
+          "acl_probe:final:garda-agent-orchestrator/runtime/task-events/T-WALK.jsonl",
+          1
+        ],
+        [
+          "acl_probe:initial:garda-agent-orchestrator/runtime/task-events",
+          1
+        ],
+        [
+          "acl_probe:initial:garda-agent-orchestrator/runtime/task-events/T-WALK.jsonl",
+          1
+        ],
+        [
+          "file_hash:.git/HEAD",
+          1
+        ],
+        [
+          "file_hash:.git/config",
+          1
+        ],
+        [
+          "file_hash:.git/garda-private/review-history-key",
+          1
+        ],
+        [
+          "file_hash:.git/refs/heads/master",
+          1
+        ],
+        [
+          "file_hash:TASK.md",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/isolation-mode.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/optional-skill-selection-policy.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/paths.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/profiles.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/review-capabilities.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/review-catalog.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/skill-packs.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/token-economy.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/workflow-config.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-compile-gate.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-output.log",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-validation.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-handshake.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-optional-skill-selection.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-preflight.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-rule-pack.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-shell-smoke.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-split-required.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-task-mode.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/task-events/T-WALK.cadence-head.json",
+          1
+        ],
+        [
+          "file_hash:package.json",
+          1
+        ],
+        [
+          "file_hash:src/app.ts",
+          1
+        ],
+        [
+          "file_hash:tests/app.test.ts",
+          1
+        ],
+        [
+          "payload_read:.git/HEAD",
+          1
+        ],
+        [
+          "payload_read:.git/config",
+          1
+        ],
+        [
+          "payload_read:.git/garda-private/review-history-key",
+          1
+        ],
+        [
+          "payload_read:.git/refs/heads/master",
+          1
+        ],
+        [
+          "payload_read:TASK.md",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/isolation-mode.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/optional-skill-selection-policy.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/paths.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/profiles.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/review-capabilities.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/review-catalog.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/skill-packs.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/token-economy.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/workflow-config.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.release-intent.clearing-<ephemeral-owner>",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.release-intent.clearing-<ephemeral-owner>",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.releasing-<ephemeral-owner>/owner.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.releasing-<ephemeral-owner>/owner.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock/owner.json",
+          4
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/metrics/full-suite-validation-duration-history.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-compile-gate.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-output.log",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-repair-task.json",
+          2
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-validation.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-handshake.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-optional-skill-selection.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-preflight.json",
+          2
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-rule-pack.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-shell-smoke.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-split-required.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-task-mode.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/task-events/T-WALK.cadence-head.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/task-events/T-WALK.jsonl",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/wip/T-WALK/full-suite-repair/2026-11-09T01-24-30-351Z/manifest.json",
+          2
+        ],
+        [
+          "payload_read:package.json",
+          1
+        ],
+        [
+          "payload_read:src/app.ts",
+          1
+        ],
+        [
+          "payload_read:tests/app.test.ts",
+          1
+        ],
+        [
+          "process:spawnSync:icacls.exe:85b347d5537c8f0d62ba44c0f9b9e2c08d3f362d009b2fac3d8560bdd2ef544b",
+          2
+        ],
+        [
+          "process:spawnSync:icacls.exe:c95582179211fdcd0471c8ac3f885099a5b800051f2c34c09a8c7c08b8c8d7aa",
+          2
+        ]
+      ],
+      "afterInputs": [
+        [
+          "acl_probe:final:garda-agent-orchestrator/runtime/task-events",
+          1
+        ],
+        [
+          "acl_probe:final:garda-agent-orchestrator/runtime/task-events/T-WALK.jsonl",
+          1
+        ],
+        [
+          "acl_probe:initial:garda-agent-orchestrator/runtime/task-events",
+          1
+        ],
+        [
+          "acl_probe:initial:garda-agent-orchestrator/runtime/task-events/T-WALK.jsonl",
+          1
+        ],
+        [
+          "file_hash:.git/HEAD",
+          1
+        ],
+        [
+          "file_hash:.git/config",
+          1
+        ],
+        [
+          "file_hash:.git/garda-private/review-history-key",
+          1
+        ],
+        [
+          "file_hash:.git/refs/heads/master",
+          1
+        ],
+        [
+          "file_hash:TASK.md",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/isolation-mode.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/optional-skill-selection-policy.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/paths.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/profiles.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/review-capabilities.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/review-catalog.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/skill-packs.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/token-economy.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/workflow-config.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-compile-gate.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-output.log",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-validation.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-handshake.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-optional-skill-selection.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-preflight.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-rule-pack.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-shell-smoke.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-split-required.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-task-mode.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/task-events/T-WALK.cadence-head.json",
+          1
+        ],
+        [
+          "file_hash:package.json",
+          1
+        ],
+        [
+          "file_hash:src/app.ts",
+          1
+        ],
+        [
+          "file_hash:tests/app.test.ts",
+          1
+        ],
+        [
+          "payload_read:.git/HEAD",
+          1
+        ],
+        [
+          "payload_read:.git/config",
+          1
+        ],
+        [
+          "payload_read:.git/garda-private/review-history-key",
+          1
+        ],
+        [
+          "payload_read:.git/refs/heads/master",
+          1
+        ],
+        [
+          "payload_read:TASK.md",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/isolation-mode.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/optional-skill-selection-policy.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/paths.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/profiles.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/review-capabilities.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/review-catalog.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/skill-packs.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/token-economy.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/workflow-config.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.release-intent.clearing-<ephemeral-owner>",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.release-intent.clearing-<ephemeral-owner>",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.releasing-<ephemeral-owner>/owner.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.releasing-<ephemeral-owner>/owner.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock/owner.json",
+          4
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/metrics/full-suite-validation-duration-history.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-compile-gate.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-output.log",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-repair-task.json",
+          2
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-validation.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-handshake.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-optional-skill-selection.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-preflight.json",
+          2
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-rule-pack.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-shell-smoke.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-split-required.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-task-mode.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/task-events/T-WALK.cadence-head.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/task-events/T-WALK.jsonl",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/wip/T-WALK/full-suite-repair/2026-11-09T01-24-30-351Z/manifest.json",
+          2
+        ],
+        [
+          "payload_read:package.json",
+          1
+        ],
+        [
+          "payload_read:src/app.ts",
+          1
+        ],
+        [
+          "payload_read:tests/app.test.ts",
+          1
+        ],
+        [
+          "process:spawnSync:icacls.exe:85b347d5537c8f0d62ba44c0f9b9e2c08d3f362d009b2fac3d8560bdd2ef544b",
+          2
+        ],
+        [
+          "process:spawnSync:icacls.exe:c95582179211fdcd0471c8ac3f885099a5b800051f2c34c09a8c7c08b8c8d7aa",
+          2
+        ]
+      ],
+      "beforeRawInputs": [
+        [
+          "acl_probe:final:garda-agent-orchestrator/runtime/task-events",
+          1
+        ],
+        [
+          "acl_probe:final:garda-agent-orchestrator/runtime/task-events/T-WALK.jsonl",
+          1
+        ],
+        [
+          "acl_probe:initial:garda-agent-orchestrator/runtime/task-events",
+          1
+        ],
+        [
+          "acl_probe:initial:garda-agent-orchestrator/runtime/task-events/T-WALK.jsonl",
+          1
+        ],
+        [
+          "file_hash:.git/config",
+          1
+        ],
+        [
+          "file_hash:.git/garda-private/review-history-key",
+          1
+        ],
+        [
+          "file_hash:.git/HEAD",
+          1
+        ],
+        [
+          "file_hash:.git/refs/heads/master",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/isolation-mode.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/optional-skill-selection-policy.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/paths.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/profiles.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/review-capabilities.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/review-catalog.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/skill-packs.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/token-economy.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/workflow-config.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-compile-gate.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-output.log",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-validation.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-handshake.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-optional-skill-selection.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-preflight.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-rule-pack.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-shell-smoke.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-split-required.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-task-mode.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/task-events/T-WALK.cadence-head.json",
+          1
+        ],
+        [
+          "file_hash:package.json",
+          1
+        ],
+        [
+          "file_hash:src/app.ts",
+          1
+        ],
+        [
+          "file_hash:TASK.md",
+          1
+        ],
+        [
+          "file_hash:tests/app.test.ts",
+          1
+        ],
+        [
+          "payload_read:.git/config",
+          1
+        ],
+        [
+          "payload_read:.git/garda-private/review-history-key",
+          1
+        ],
+        [
+          "payload_read:.git/HEAD",
+          1
+        ],
+        [
+          "payload_read:.git/refs/heads/master",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/isolation-mode.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/optional-skill-selection-policy.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/paths.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/profiles.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/review-capabilities.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/review-catalog.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/skill-packs.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/token-economy.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/workflow-config.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.release-intent.clearing-51256-1794187476705-12a6237c-6c98-447e-b2e8-a00bf18693e5",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.release-intent.clearing-51256-1794187476919-be6c8eae-57f7-4c31-b424-e1eeb2dc4356",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.releasing-51256-1794187476704-12a6237c-6c98-447e-b2e8-a00bf18693e5/owner.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.releasing-51256-1794187476917-be6c8eae-57f7-4c31-b424-e1eeb2dc4356/owner.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock/owner.json",
+          4
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/metrics/full-suite-validation-duration-history.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-compile-gate.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-output.log",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-repair-task.json",
+          2
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-validation.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-handshake.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-optional-skill-selection.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-preflight.json",
+          2
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-rule-pack.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-shell-smoke.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-split-required.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-task-mode.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/task-events/T-WALK.cadence-head.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/task-events/T-WALK.jsonl",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/wip/T-WALK/full-suite-repair/2026-11-09T01-24-30-351Z/manifest.json",
+          2
+        ],
+        [
+          "payload_read:package.json",
+          1
+        ],
+        [
+          "payload_read:src/app.ts",
+          1
+        ],
+        [
+          "payload_read:TASK.md",
+          1
+        ],
+        [
+          "payload_read:tests/app.test.ts",
+          1
+        ],
+        [
+          "process:spawnSync:icacls.exe:85b347d5537c8f0d62ba44c0f9b9e2c08d3f362d009b2fac3d8560bdd2ef544b",
+          2
+        ],
+        [
+          "process:spawnSync:icacls.exe:c95582179211fdcd0471c8ac3f885099a5b800051f2c34c09a8c7c08b8c8d7aa",
+          2
+        ]
+      ],
+      "afterRawInputs": [
+        [
+          "acl_probe:final:garda-agent-orchestrator/runtime/task-events",
+          1
+        ],
+        [
+          "acl_probe:final:garda-agent-orchestrator/runtime/task-events/T-WALK.jsonl",
+          1
+        ],
+        [
+          "acl_probe:initial:garda-agent-orchestrator/runtime/task-events",
+          1
+        ],
+        [
+          "acl_probe:initial:garda-agent-orchestrator/runtime/task-events/T-WALK.jsonl",
+          1
+        ],
+        [
+          "file_hash:.git/config",
+          1
+        ],
+        [
+          "file_hash:.git/garda-private/review-history-key",
+          1
+        ],
+        [
+          "file_hash:.git/HEAD",
+          1
+        ],
+        [
+          "file_hash:.git/refs/heads/master",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/isolation-mode.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/optional-skill-selection-policy.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/paths.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/profiles.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/review-capabilities.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/review-catalog.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/skill-packs.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/token-economy.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/workflow-config.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-compile-gate.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-output.log",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-validation.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-handshake.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-optional-skill-selection.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-preflight.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-rule-pack.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-shell-smoke.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-split-required.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-task-mode.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/task-events/T-WALK.cadence-head.json",
+          1
+        ],
+        [
+          "file_hash:package.json",
+          1
+        ],
+        [
+          "file_hash:src/app.ts",
+          1
+        ],
+        [
+          "file_hash:TASK.md",
+          1
+        ],
+        [
+          "file_hash:tests/app.test.ts",
+          1
+        ],
+        [
+          "payload_read:.git/config",
+          1
+        ],
+        [
+          "payload_read:.git/garda-private/review-history-key",
+          1
+        ],
+        [
+          "payload_read:.git/HEAD",
+          1
+        ],
+        [
+          "payload_read:.git/refs/heads/master",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/isolation-mode.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/optional-skill-selection-policy.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/paths.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/profiles.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/review-capabilities.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/review-catalog.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/skill-packs.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/token-economy.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/workflow-config.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.release-intent.clearing-51256-1794187481233-c27d946e-e031-4f69-a8cc-dab57a9a24c3",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.release-intent.clearing-51256-1794187481420-6c63fe1b-7c3a-4ac1-85e9-9c40cc2a6445",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.releasing-51256-1794187481232-c27d946e-e031-4f69-a8cc-dab57a9a24c3/owner.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.releasing-51256-1794187481419-6c63fe1b-7c3a-4ac1-85e9-9c40cc2a6445/owner.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock/owner.json",
+          4
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/metrics/full-suite-validation-duration-history.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-compile-gate.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-output.log",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-repair-task.json",
+          2
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-validation.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-handshake.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-optional-skill-selection.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-preflight.json",
+          2
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-rule-pack.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-shell-smoke.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-split-required.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-task-mode.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/task-events/T-WALK.cadence-head.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/task-events/T-WALK.jsonl",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/wip/T-WALK/full-suite-repair/2026-11-09T01-24-30-351Z/manifest.json",
+          2
+        ],
+        [
+          "payload_read:package.json",
+          1
+        ],
+        [
+          "payload_read:src/app.ts",
+          1
+        ],
+        [
+          "payload_read:TASK.md",
+          1
+        ],
+        [
+          "payload_read:tests/app.test.ts",
+          1
+        ],
+        [
+          "process:spawnSync:icacls.exe:85b347d5537c8f0d62ba44c0f9b9e2c08d3f362d009b2fac3d8560bdd2ef544b",
+          2
+        ],
+        [
+          "process:spawnSync:icacls.exe:c95582179211fdcd0471c8ac3f885099a5b800051f2c34c09a8c7c08b8c8d7aa",
+          2
+        ]
+      ]
+    },
+    {
+      "platform": "linux",
+      "node": "v24.21.0",
+      "appendedEvents": 5,
+      "commandsEqual": true,
+      "increases": [],
+      "initial": {
+        "payload_reads": 43,
+        "timeline_capture:file": 1,
+        "timeline_payload_read:file": 1,
+        "timeline_bytes": 115561,
+        "timeline_verify": 1,
+        "file_hash:file": 28,
+        "timeline_parse": 1,
+        "timeline_events": 21,
+        "json_parse_verified_timeline_event": 21,
+        "visit:verified_timeline_index_event": 21,
+        "timeline_revalidate": 1,
+        "timeline_revalidate:file": 1,
+        "file_probes:lstatSync": 547,
+        "file_probes:realpathSync": 140,
+        "file_probes:existsSync": 186,
+        "file_probes:statSync": 75,
+        "file_probes:realpathSync.native": 366,
+        "file_probes:fstatSync": 67
+      },
+      "before": {
+        "payload_reads": 43,
+        "timeline_capture:file": 1,
+        "timeline_payload_read:file": 1,
+        "timeline_bytes": 116185,
+        "timeline_verify": 1,
+        "file_hash:file": 28,
+        "timeline_parse": 1,
+        "timeline_events": 22,
+        "json_parse_verified_timeline_event": 22,
+        "visit:verified_timeline_index_event": 22,
+        "timeline_revalidate": 1,
+        "timeline_revalidate:file": 1,
+        "file_probes:lstatSync": 547,
+        "file_probes:realpathSync": 140,
+        "file_probes:existsSync": 186,
+        "file_probes:statSync": 75,
+        "file_probes:realpathSync.native": 366,
+        "file_probes:fstatSync": 67
+      },
+      "after": {
+        "payload_reads": 43,
+        "timeline_capture:file": 1,
+        "timeline_payload_read:file": 1,
+        "timeline_bytes": 119300,
+        "timeline_verify": 1,
+        "file_hash:file": 28,
+        "timeline_parse": 1,
+        "timeline_events": 27,
+        "json_parse_verified_timeline_event": 27,
+        "visit:verified_timeline_index_event": 27,
+        "timeline_revalidate": 1,
+        "timeline_revalidate:file": 1,
+        "file_probes:lstatSync": 547,
+        "file_probes:realpathSync": 140,
+        "file_probes:existsSync": 186,
+        "file_probes:statSync": 75,
+        "file_probes:realpathSync.native": 366,
+        "file_probes:fstatSync": 67
+      },
+      "beforeInputs": [
+        [
+          "file_hash:.git/HEAD",
+          1
+        ],
+        [
+          "file_hash:.git/config",
+          1
+        ],
+        [
+          "file_hash:.git/garda-private/review-history-key",
+          1
+        ],
+        [
+          "file_hash:.git/refs/heads/master",
+          1
+        ],
+        [
+          "file_hash:TASK.md",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/isolation-mode.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/optional-skill-selection-policy.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/paths.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/profiles.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/review-capabilities.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/review-catalog.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/skill-packs.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/token-economy.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/workflow-config.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-compile-gate.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-output.log",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-validation.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-handshake.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-optional-skill-selection.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-preflight.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-rule-pack.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-shell-smoke.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-split-required.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-task-mode.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/task-events/T-WALK.cadence-head.json",
+          1
+        ],
+        [
+          "file_hash:package.json",
+          1
+        ],
+        [
+          "file_hash:src/app.ts",
+          1
+        ],
+        [
+          "file_hash:tests/app.test.ts",
+          1
+        ],
+        [
+          "payload_read:.git/HEAD",
+          1
+        ],
+        [
+          "payload_read:.git/config",
+          1
+        ],
+        [
+          "payload_read:.git/garda-private/review-history-key",
+          1
+        ],
+        [
+          "payload_read:.git/refs/heads/master",
+          1
+        ],
+        [
+          "payload_read:TASK.md",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/isolation-mode.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/optional-skill-selection-policy.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/paths.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/profiles.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/review-capabilities.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/review-catalog.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/skill-packs.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/token-economy.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/workflow-config.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.release-intent.clearing-<ephemeral-owner>",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.release-intent.clearing-<ephemeral-owner>",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.releasing-<ephemeral-owner>/owner.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.releasing-<ephemeral-owner>/owner.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock/owner.json",
+          4
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/metrics/full-suite-validation-duration-history.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-compile-gate.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-output.log",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-repair-task.json",
+          2
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-validation.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-handshake.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-optional-skill-selection.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-preflight.json",
+          2
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-rule-pack.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-shell-smoke.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-split-required.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-task-mode.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/task-events/T-WALK.cadence-head.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/task-events/T-WALK.jsonl",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/wip/T-WALK/full-suite-repair/2026-11-09T01-28-24-135Z/manifest.json",
+          2
+        ],
+        [
+          "payload_read:package.json",
+          1
+        ],
+        [
+          "payload_read:src/app.ts",
+          1
+        ],
+        [
+          "payload_read:tests/app.test.ts",
+          1
+        ]
+      ],
+      "afterInputs": [
+        [
+          "file_hash:.git/HEAD",
+          1
+        ],
+        [
+          "file_hash:.git/config",
+          1
+        ],
+        [
+          "file_hash:.git/garda-private/review-history-key",
+          1
+        ],
+        [
+          "file_hash:.git/refs/heads/master",
+          1
+        ],
+        [
+          "file_hash:TASK.md",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/isolation-mode.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/optional-skill-selection-policy.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/paths.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/profiles.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/review-capabilities.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/review-catalog.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/skill-packs.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/token-economy.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/workflow-config.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-compile-gate.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-output.log",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-validation.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-handshake.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-optional-skill-selection.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-preflight.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-rule-pack.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-shell-smoke.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-split-required.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-task-mode.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/task-events/T-WALK.cadence-head.json",
+          1
+        ],
+        [
+          "file_hash:package.json",
+          1
+        ],
+        [
+          "file_hash:src/app.ts",
+          1
+        ],
+        [
+          "file_hash:tests/app.test.ts",
+          1
+        ],
+        [
+          "payload_read:.git/HEAD",
+          1
+        ],
+        [
+          "payload_read:.git/config",
+          1
+        ],
+        [
+          "payload_read:.git/garda-private/review-history-key",
+          1
+        ],
+        [
+          "payload_read:.git/refs/heads/master",
+          1
+        ],
+        [
+          "payload_read:TASK.md",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/isolation-mode.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/optional-skill-selection-policy.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/paths.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/profiles.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/review-capabilities.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/review-catalog.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/skill-packs.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/token-economy.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/workflow-config.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.release-intent.clearing-<ephemeral-owner>",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.release-intent.clearing-<ephemeral-owner>",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.releasing-<ephemeral-owner>/owner.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.releasing-<ephemeral-owner>/owner.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock/owner.json",
+          4
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/metrics/full-suite-validation-duration-history.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-compile-gate.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-output.log",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-repair-task.json",
+          2
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-validation.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-handshake.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-optional-skill-selection.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-preflight.json",
+          2
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-rule-pack.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-shell-smoke.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-split-required.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-task-mode.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/task-events/T-WALK.cadence-head.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/task-events/T-WALK.jsonl",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/wip/T-WALK/full-suite-repair/2026-11-09T01-28-24-135Z/manifest.json",
+          2
+        ],
+        [
+          "payload_read:package.json",
+          1
+        ],
+        [
+          "payload_read:src/app.ts",
+          1
+        ],
+        [
+          "payload_read:tests/app.test.ts",
+          1
+        ]
+      ],
+      "beforeRawInputs": [
+        [
+          "file_hash:.git/config",
+          1
+        ],
+        [
+          "file_hash:.git/garda-private/review-history-key",
+          1
+        ],
+        [
+          "file_hash:.git/HEAD",
+          1
+        ],
+        [
+          "file_hash:.git/refs/heads/master",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/isolation-mode.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/optional-skill-selection-policy.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/paths.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/profiles.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/review-capabilities.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/review-catalog.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/skill-packs.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/token-economy.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/workflow-config.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-compile-gate.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-output.log",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-validation.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-handshake.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-optional-skill-selection.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-preflight.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-rule-pack.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-shell-smoke.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-split-required.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-task-mode.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/task-events/T-WALK.cadence-head.json",
+          1
+        ],
+        [
+          "file_hash:package.json",
+          1
+        ],
+        [
+          "file_hash:src/app.ts",
+          1
+        ],
+        [
+          "file_hash:TASK.md",
+          1
+        ],
+        [
+          "file_hash:tests/app.test.ts",
+          1
+        ],
+        [
+          "payload_read:.git/config",
+          1
+        ],
+        [
+          "payload_read:.git/garda-private/review-history-key",
+          1
+        ],
+        [
+          "payload_read:.git/HEAD",
+          1
+        ],
+        [
+          "payload_read:.git/refs/heads/master",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/isolation-mode.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/optional-skill-selection-policy.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/paths.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/profiles.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/review-capabilities.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/review-catalog.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/skill-packs.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/token-economy.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/workflow-config.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.release-intent.clearing-594-1794187704788-6a9dd835-e00b-4ec1-9938-edc1d398087d",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.release-intent.clearing-594-1794187704838-95df9eeb-bda7-40e7-bf82-d92737f45243",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.releasing-594-1794187704788-6a9dd835-e00b-4ec1-9938-edc1d398087d/owner.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.releasing-594-1794187704838-95df9eeb-bda7-40e7-bf82-d92737f45243/owner.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock/owner.json",
+          4
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/metrics/full-suite-validation-duration-history.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-compile-gate.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-output.log",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-repair-task.json",
+          2
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-validation.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-handshake.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-optional-skill-selection.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-preflight.json",
+          2
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-rule-pack.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-shell-smoke.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-split-required.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-task-mode.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/task-events/T-WALK.cadence-head.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/task-events/T-WALK.jsonl",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/wip/T-WALK/full-suite-repair/2026-11-09T01-28-24-135Z/manifest.json",
+          2
+        ],
+        [
+          "payload_read:package.json",
+          1
+        ],
+        [
+          "payload_read:src/app.ts",
+          1
+        ],
+        [
+          "payload_read:TASK.md",
+          1
+        ],
+        [
+          "payload_read:tests/app.test.ts",
+          1
+        ]
+      ],
+      "afterRawInputs": [
+        [
+          "file_hash:.git/config",
+          1
+        ],
+        [
+          "file_hash:.git/garda-private/review-history-key",
+          1
+        ],
+        [
+          "file_hash:.git/HEAD",
+          1
+        ],
+        [
+          "file_hash:.git/refs/heads/master",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/isolation-mode.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/optional-skill-selection-policy.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/paths.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/profiles.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/review-capabilities.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/review-catalog.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/skill-packs.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/token-economy.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/live/config/workflow-config.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-compile-gate.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-output.log",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-validation.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-handshake.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-optional-skill-selection.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-preflight.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-rule-pack.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-shell-smoke.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-split-required.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/reviews/T-WALK-task-mode.json",
+          1
+        ],
+        [
+          "file_hash:garda-agent-orchestrator/runtime/task-events/T-WALK.cadence-head.json",
+          1
+        ],
+        [
+          "file_hash:package.json",
+          1
+        ],
+        [
+          "file_hash:src/app.ts",
+          1
+        ],
+        [
+          "file_hash:TASK.md",
+          1
+        ],
+        [
+          "file_hash:tests/app.test.ts",
+          1
+        ],
+        [
+          "payload_read:.git/config",
+          1
+        ],
+        [
+          "payload_read:.git/garda-private/review-history-key",
+          1
+        ],
+        [
+          "payload_read:.git/HEAD",
+          1
+        ],
+        [
+          "payload_read:.git/refs/heads/master",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/isolation-mode.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/optional-skill-selection-policy.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/paths.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/profiles.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/review-capabilities.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/review-catalog.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/skill-packs.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/token-economy.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/live/config/workflow-config.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.release-intent.clearing-594-1794187705208-41ba3dcd-2dc3-40f7-b473-0d3cc0c74369",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.release-intent.clearing-594-1794187705258-482812f2-4a60-4c8d-bf6e-ba4dbc640b5e",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.releasing-594-1794187705208-41ba3dcd-2dc3-40f7-b473-0d3cc0c74369/owner.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock.releasing-594-1794187705258-482812f2-4a60-4c8d-bf6e-ba4dbc640b5e/owner.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/.reviews-transaction.lock/owner.json",
+          4
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/metrics/full-suite-validation-duration-history.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-compile-gate.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-output.log",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-repair-task.json",
+          2
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-full-suite-validation.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-handshake.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-optional-skill-selection.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-preflight.json",
+          2
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-rule-pack.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-shell-smoke.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-split-required.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/reviews/T-WALK-task-mode.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/task-events/T-WALK.cadence-head.json",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/task-events/T-WALK.jsonl",
+          1
+        ],
+        [
+          "payload_read:garda-agent-orchestrator/runtime/wip/T-WALK/full-suite-repair/2026-11-09T01-28-24-135Z/manifest.json",
+          2
+        ],
+        [
+          "payload_read:package.json",
+          1
+        ],
+        [
+          "payload_read:src/app.ts",
+          1
+        ],
+        [
+          "payload_read:TASK.md",
+          1
+        ],
+        [
+          "payload_read:tests/app.test.ts",
+          1
+        ]
+      ]
+    }
+  ],
+  "identityNormalization": "Only the PID/timestamp/UUID in exact native reviews-transaction release lock roles is normalized. Raw input identities and every multiplicity remain in beforeRawInputs/afterRawInputs. Hashed proof identities are unchanged; extra reads or process launches remain failures."
+}

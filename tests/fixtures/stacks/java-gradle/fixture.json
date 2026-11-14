@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "id": "java-gradle",
+  "title": "Java / Gradle",
+  "adapter": null,
+  "technologies": [
+    {
+      "id": "gradle",
+      "executable": "gradlew",
+      "compileArgv": [
+        ":app:classes",
+        ":domain:classes"
+      ],
+      "firstArgv": [
+        ":app:test",
+        "--tests",
+        "example.OrdersTest"
+      ],
+      "allArgv": [
+        ":app:test",
+        ":domain:test",
+        "--tests",
+        "example.OrdersTest",
+        "--tests",
+        "example.PartnersTest"
+      ],
+      "broadArgv": [
+        "test"
+      ],
+      "report": "junit",
+      "secondArgv": [
+        ":domain:test",
+        "--tests",
+        "example.PartnersTest"
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "orders",
+      "technology": "gradle",
+      "source": "app/src/main/java/example/Orders.java",
+      "target": "app/src/test/java/example/OrdersTest.java",
+      "case": "task-contract",
+      "comment": "//"
+    },
+    {
+      "id": "partners",
+      "technology": "gradle",
+      "source": "domain/src/main/java/example/Partners.java",
+      "target": "domain/src/test/java/example/PartnersTest.java",
+      "case": "task-contract",
+      "comment": "//"
+    }
+  ],
+  "helpers": []
+}

@@ -1,0 +1,106 @@
+{
+  "schema": 1,
+  "id": "polyglot-maven-ts",
+  "title": "Maven backend + TypeScript frontend",
+  "adapter": "maven-and-vitest-v1",
+  "technologies": [
+    {
+      "id": "maven",
+      "executable": "mvnw",
+      "compileArgv": [
+        "-f",
+        "pom.xml",
+        "-pl",
+        "application,partners-module",
+        "-am",
+        "-DskipTests",
+        "compile"
+      ],
+      "firstArgv": [
+        "-f",
+        "pom.xml",
+        "-pl",
+        "application",
+        "-am",
+        "-Dtest=OrderServiceTest",
+        "test"
+      ],
+      "allArgv": [
+        "-f",
+        "pom.xml",
+        "-pl",
+        "application",
+        "-am",
+        "-Dtest=OrderServiceTest",
+        "test"
+      ],
+      "broadArgv": [
+        "-f",
+        "pom.xml",
+        "test"
+      ],
+      "report": "junit",
+      "secondArgv": [
+        "-f",
+        "pom.xml",
+        "-pl",
+        "application",
+        "-am",
+        "-Dtest=OrderServiceTest",
+        "test"
+      ]
+    },
+    {
+      "id": "vitest",
+      "executable": "tools/pnpm",
+      "compileArgv": [
+        "exec",
+        "vite",
+        "build"
+      ],
+      "firstArgv": [
+        "exec",
+        "vitest",
+        "run",
+        "src/components/Order.test.tsx"
+      ],
+      "allArgv": [
+        "exec",
+        "vitest",
+        "run",
+        "src/components/Order.test.tsx"
+      ],
+      "broadArgv": [
+        "exec",
+        "vitest",
+        "run"
+      ],
+      "report": "junit",
+      "secondArgv": [
+        "exec",
+        "vitest",
+        "run",
+        "src/components/Order.test.tsx"
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "backend",
+      "technology": "maven",
+      "source": "application/src/main/java/example/OrderService.java",
+      "target": "application/src/test/java/example/OrderServiceTest.java",
+      "case": "task-contract",
+      "comment": "//"
+    },
+    {
+      "id": "frontend",
+      "technology": "vitest",
+      "source": "src/components/Order.tsx",
+      "target": "src/components/Order.test.tsx",
+      "case": "task-contract",
+      "comment": "//"
+    }
+  ],
+  "helpers": []
+}
