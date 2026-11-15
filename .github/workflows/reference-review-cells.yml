@@ -1,0 +1,12 @@
+name: Reference review cells (diagnostic only)
+on:
+  workflow_dispatch:
+    inputs:
+      cells:
+        type: string
+        required: true
+jobs:
+  noop:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok
