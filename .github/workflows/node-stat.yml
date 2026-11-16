@@ -1,0 +1,17 @@
+name: Node executable stat (diagnostic)
+on: push
+jobs:
+  stat:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: ['24', '26']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - shell: bash
+        run: |
+          node -e "const fs=require('fs');const p=process.execPath;const l=fs.lstatSync(p,{bigint:true});const s=fs.statSync(p,{bigint:true});console.log(JSON.stringify({version:process.version,execPath:p,real:fs.realpathSync(p),lstat:{isFile:l.isFile(),isSymlink:l.isSymbolicLink(),nlink:String(l.nlink),size:String(l.size)},stat:{isFile:s.isFile(),nlink:String(s.nlink),size:String(s.size),sizeMiB:Number(s.size)/1048576},limitMiB:128},null,1))"
