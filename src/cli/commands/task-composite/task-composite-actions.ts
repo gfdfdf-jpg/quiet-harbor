@@ -1,0 +1,237 @@
+import * as path from 'node:path';
+import { format } from 'node:util';
+import { executeNextStepEffects } from '../../../gates/next-step';
+import {
+    type NextStepCommandOperation, type NextStepReviewerBookkeepingOperation
+} from '../../../gates/next-step/next-step-command-execution';
+import { captureDirtyWorkspaceBaseline } from '../../../gates/workspace/dirty-worktree-protection';
+import {
+    formatClassifyChangeConsoleOutput,
+    runBindRulePackToPreflightCommand,
+    runBuildReviewContextCommand,
+    runClassifyChangeCommand,
+    runCompileGateCommand,
+    runFullSuiteValidationCommand,
+    runHandshakeDiagnosticsCommand,
+    runQualityChecklistCommand,
+    runShellSmokePreflightCommand
+} from '../gates';
+import { runEnterTaskModeGate } from '../gate-task-handlers';
+import { reviewerLaunchPathsEqual } from '../gate-review-handlers/launch/reviewer-launch-lane-transaction';
+import { findInvalidDefaultPreflight } from '../gate-reset-preflight';
+
+export { COMPOSITE_MECHANICAL_EFFECT_KINDS, selectTaskCompositeAction } from '../../../gates/next-step/next-step-composite-action';
+export type { TaskCompositeMode, TaskCompositeEntryInputs, TaskCompositeStopKind, TaskCompositeAction } from '../../../gates/next-step/next-step-composite-action';
+import type { TaskCompositeEntryInputs, TaskCompositeReviewerInputs } from '../../../gates/next-step/next-step-composite-action';
+
+const OBSERVATION_REFUSAL_GATE = 'git-observation';
+
+/** Files already changed before entry; explicit planned scope is the only accepted isolation for them. */
+export function readUnscopedDirtyWorkspaceFiles(repoRoot: string, entryInputs: TaskCompositeEntryInputs): string[] {
+    if (entryInputs.plannedChangedFiles.length > 0) return [];
+    return [...captureDirtyWorkspaceBaseline(repoRoot).changed_files];
+}
+
+export interface TaskCompositeOperationOutcome {
+    passed: boolean;
+    outputLines: string[];
+}
+
+function splitOutputText(text: string): string[] {
+    return text.split(/\r?\n/u).filter((line, index, lines) => line.length > 0 || index < lines.length - 1);
+}
+
+export interface TaskCompositeOperationContext {
+    repoRoot: string;
+    entryInputs: TaskCompositeEntryInputs | null;
+    reviewerInputs?: TaskCompositeReviewerInputs | null;
+}
+
+function boundPathsMatch(repoRoot: string, actual: string | null, expected: string | null): boolean {
+    if (actual === null || expected === null) return actual === expected;
+    return reviewerLaunchPathsEqual(path.resolve(repoRoot, actual), path.resolve(repoRoot, expected));
+}
+
+async function runReviewerBookkeeping(
+    operation: NextStepReviewerBookkeepingOperation,
+    repoRoot: string,
+    inputs: TaskCompositeReviewerInputs | null | undefined
+): Promise<TaskCompositeOperationOutcome> {
+    const args = operation.arguments;
+    const gate = operation.operation_id;
+    const gateArgv = [
+        `--task-id=${args.task_id}`, `--review-type=${args.review_type}`, `--repo-root=${repoRoot}`,
+        '--reviewer-execution-mode=delegated_subagent',
+        ...(args.task_mode_path ? [`--task-mode-path=${args.task_mode_path}`] : []),
+        ...(gate === 'record-review-result' ? [] : [`--reviewer-launch-artifact-path=${args.launch_artifact_path}`])
+    ];
+    if (gate !== 'prepare-reviewer-launch') {
+        if (!inputs) throw new Error('Explicit reviewer bookkeeping inputs are required.');
+        if (!boundPathsMatch(repoRoot, inputs.launchInputArtifactPath, args.launch_input_artifact_path)
+            || (inputs.phase === 'returned' && !boundPathsMatch(repoRoot, inputs.reviewOutputPath, args.review_output_path))) {
+            throw new Error('Reviewer input or output path does not match the current navigator action.');
+        }
+        gateArgv.push(`--reviewer-identity=${inputs.reviewerIdentity}`);
+        if (gate === 'record-reviewer-delegation-started' || gate === 'complete-reviewer-launch') {
+            gateArgv.push(
+                ...(inputs.providerInvocationId ? [`--provider-invocation-id=${inputs.providerInvocationId}`] : []),
+                ...(inputs.controllerInvocationId ? [`--controller-invocation-id=${inputs.controllerInvocationId}`] : []),
+                `--attestation-source=${inputs.attestationSource}`,
+                `--launch-input-mode=${inputs.launchInputMode}`, `--launch-input-sha256=${inputs.launchInputSha256}`,
+                ...(inputs.launchInputArtifactPath ? [`--launch-input-artifact-path=${inputs.launchInputArtifactPath}`] : []),
+                `--fork-context=${inputs.forkContext}`
+            );
+        } else if (gate === 'record-review-result') {
+            gateArgv.push(`--preflight-path=${args.preflight_path}`, `--review-output-path=${args.review_output_path}`);
+        }
+    }
+    // Gate handlers invoked by the single-command CLI print directly. Preserve those messages in composite JSON too.
+    const outputLines: string[] = [];
+    const originalLog = console.log;
+    console.log = (...values: unknown[]) => outputLines.push(...splitOutputText(format(...values)));
+    try {
+        if (gate !== 'record-review-result') {
+            const preflightError = findInvalidDefaultPreflight(repoRoot, args.task_id);
+            if (preflightError) throw preflightError;
+        }
+        const handlers = await import('../gate-review-handlers');
+        switch (gate) {
+            case 'prepare-reviewer-launch':
+                await handlers.handlePrepareReviewerLaunch(gateArgv);
+                break;
+            case 'record-reviewer-delegation-started':
+                await handlers.handleRecordReviewerDelegationStarted(gateArgv);
+                break;
+            case 'complete-reviewer-launch': {
+                const outputPath = inputs?.reviewOutputPath;
+                if (!outputPath) throw new Error('Reviewer completion requires the returned output path.');
+                await handlers.handleCompleteReviewerLaunch(gateArgv, outputPath);
+                break;
+            }
+            case 'record-review-invocation':
+                await handlers.handleRecordReviewInvocation(gateArgv);
+                break;
+            case 'record-review-result':
+                await handlers.handleRecordReviewResult(gateArgv);
+                break;
+        }
+        return { passed: !process.exitCode, outputLines };
+    } finally {
+        console.log = originalLog;
+    }
+}
+
+/** Runs the existing gate entry point with the descriptor's typed arguments, never with rendered command text. */
+export async function executeTaskCompositeOperation(
+    operation: NextStepCommandOperation,
+    context: TaskCompositeOperationContext
+): Promise<TaskCompositeOperationOutcome> {
+    const repoRoot = path.resolve(context.repoRoot);
+    switch (operation.operation_id) {
+        case 'prepare-reviewer-launch':
+        case 'record-reviewer-delegation-started':
+        case 'complete-reviewer-launch':
+        case 'record-review-invocation':
+        case 'record-review-result':
+            return runReviewerBookkeeping(operation, repoRoot, context.reviewerInputs);
+        case 'enter-task-mode': {
+            const inputs = context.entryInputs;
+            if (!inputs) throw new Error('Task-mode entry requires explicit agent inputs.');
+            const result = await runEnterTaskModeGate({
+                repoRoot,
+                taskId: operation.arguments.task_id,
+                entryMode: operation.arguments.entry_mode,
+                requestedDepth: inputs.requestedDepth ?? operation.arguments.requested_depth,
+                taskSummary: inputs.taskSummary ?? operation.arguments.task_summary,
+                provider: inputs.provider,
+                ...(inputs.routedTo ? { routedTo: inputs.routedTo } : {}),
+                ...(inputs.plannedChangedFiles.length ? { plannedChangedFiles: [...inputs.plannedChangedFiles] } : {}),
+                ...(inputs.orchestratorWork ? { orchestratorWork: true } : {}),
+                ...(inputs.workflowConfigWork ? { workflowConfigWork: true } : {}),
+                ...(inputs.operatorConfirmed ? { operatorConfirmed: inputs.operatorConfirmed } : {}),
+                ...(inputs.operatorConfirmedAtUtc ? { operatorConfirmedAtUtc: inputs.operatorConfirmedAtUtc } : {})
+            });
+            return { passed: result.exitCode === 0, outputLines: result.outputLines };
+        }
+        case 'handshake-diagnostics': {
+            const result = runHandshakeDiagnosticsCommand({ repoRoot, taskId: operation.arguments.task_id });
+            return { passed: result.exitCode === 0, outputLines: result.outputLines };
+        }
+        case 'shell-smoke-preflight': {
+            const result = runShellSmokePreflightCommand({ repoRoot, taskId: operation.arguments.task_id });
+            return { passed: result.exitCode === 0, outputLines: result.outputLines };
+        }
+        case 'classify-change': {
+            const args = operation.arguments;
+            const result = runClassifyChangeCommand({
+                repoRoot,
+                taskId: args.task_id,
+                taskIntent: args.task_intent,
+                ...(args.changed_files.length ? { changedFiles: [...args.changed_files] } : {}),
+                ...(args.detection_source ? { detectionSource: args.detection_source } : {}),
+                ...(args.use_staged ? { useStaged: true } : {}),
+                ...(args.task_mode_path ? { taskModePath: args.task_mode_path } : {}),
+                outputPath: args.output_path
+            });
+            return { passed: true, outputLines: splitOutputText(formatClassifyChangeConsoleOutput(result.outputText, result.preflightPath)) };
+        }
+        case 'bind-rule-pack-to-preflight': {
+            const args = operation.arguments;
+            const result = runBindRulePackToPreflightCommand({
+                repoRoot,
+                taskId: args.task_id,
+                preflightPath: args.preflight_path,
+                ...(args.task_mode_path ? { taskModePath: args.task_mode_path } : {})
+            });
+            return { passed: result.exitCode === 0, outputLines: result.outputLines };
+        }
+        case 'quality-checklist': {
+            const args = operation.arguments;
+            const result = runQualityChecklistCommand({
+                repoRoot, taskId: args.task_id, preflightPath: args.preflight_path, answersPath: args.answers_path
+            });
+            return { passed: result.exitCode === 0, outputLines: result.outputLines };
+        }
+        case 'compile-gate': {
+            const args = operation.arguments;
+            const result = await runCompileGateCommand({
+                repoRoot,
+                taskId: args.task_id,
+                preflightPath: args.preflight_path,
+                ...(args.task_mode_path ? { taskModePath: args.task_mode_path } : {})
+            });
+            return { passed: result.exitCode === 0, outputLines: result.outputLines };
+        }
+        case 'task-test-validation': {
+            const args = operation.arguments;
+            const result = await runFullSuiteValidationCommand({ repoRoot, taskId: args.task_id, preflightPath: args.preflight_path });
+            return { passed: result.exitCode === 0, outputLines: splitOutputText(result.outputText) };
+        }
+        case 'build-review-context': {
+            const args = operation.arguments;
+            // Like the gate command, a refused context throws; the runner reports it as the failed step.
+            const result = await runBuildReviewContextCommand({
+                repoRoot,
+                reviewType: args.review_type,
+                depth: String(args.depth),
+                preflightPath: args.preflight_path,
+                ...(args.task_mode_path ? { taskModePath: args.task_mode_path } : {})
+            });
+            return { passed: true, outputLines: result.outputLines };
+        }
+        case 'execute-next-step-effects': {
+            const result = executeNextStepEffects(
+                { taskId: operation.arguments.task_id, repoRoot },
+                operation.arguments.plan_sha256
+            );
+            // A refused observation executes nothing; it names the retry instead.
+            return result.next_gate === OBSERVATION_REFUSAL_GATE
+                ? { passed: false, outputLines: [result.title, result.reason] }
+                : { passed: true, outputLines: [`EffectsExecuted: ${operation.arguments.effect_kinds.join(', ')}`] };
+        }
+        default: {
+            const unsupported: never = operation;
+            throw new Error(`Unsupported composite operation: ${String((unsupported as { operation_id?: unknown }).operation_id)}.`);
+        }
+    }
+}

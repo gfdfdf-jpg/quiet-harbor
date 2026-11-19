@@ -1,0 +1,263 @@
+{
+  "schema": 1,
+  "source": "C:\\Users\\dshub\\AppData\\Local\\Temp\\garda-sol-merge-2\\short-preparation-final\\walk\\results.json",
+  "source_sha256": "67e899d55510f1fe6fc82c76295218b32723dada3cbff271cd85970dd163e5a4",
+  "source_commit": "893cea6c7a286eac17fccea1824c805cb32b8306",
+  "additional_input": "runtime/reviews/T-WALK-full-suite-output.log",
+  "history_events": 116,
+  "extra_pre_green_context_events": 0,
+  "measurements": [
+    {
+      "step": 42,
+      "route": "BLOCKED/restart-review-cycle/code",
+      "metric": "file_hash:file",
+      "observed": 67,
+      "before": {
+        "expected": 66,
+        "tolerance": 0,
+        "constantWithEvents": true,
+        "growthTolerance": 0,
+        "required_input": "The native TDD tour binds qa/orders/purchase.case and qa/partners/isolation.case, qa/support/membership.fixture, tools/quartz.cmd and both components/*/behavior.qz; runtime/reviews/intermediate-attempts holds retained RED, original GREEN and focused two-target GREEN; F001 code DELTA and broad-failure child evidence are required.",
+        "reason": "Required native binding of this newly admitted input shape; original route and old states remain unchanged. History-only repeat must add no non-history work."
+      }
+    },
+    {
+      "step": 42,
+      "route": "BLOCKED/restart-review-cycle/code",
+      "metric": "file_probes:lstatSync",
+      "observed": 962,
+      "before": {
+        "expected": 954,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "required_input": "The native TDD tour binds qa/orders/purchase.case and qa/partners/isolation.case, qa/support/membership.fixture, tools/quartz.cmd and both components/*/behavior.qz; runtime/reviews/intermediate-attempts holds retained RED, original GREEN and focused two-target GREEN; F001 code DELTA and broad-failure child evidence are required.",
+        "reason": "Required native binding of this newly admitted input shape; original route and old states remain unchanged. History-only repeat must add no non-history work."
+      }
+    },
+    {
+      "step": 42,
+      "route": "BLOCKED/restart-review-cycle/code",
+      "metric": "file_probes:statSync",
+      "observed": 961,
+      "before": {
+        "expected": 957,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "required_input": "The native TDD tour binds qa/orders/purchase.case and qa/partners/isolation.case, qa/support/membership.fixture, tools/quartz.cmd and both components/*/behavior.qz; runtime/reviews/intermediate-attempts holds retained RED, original GREEN and focused two-target GREEN; F001 code DELTA and broad-failure child evidence are required.",
+        "reason": "Required native binding of this newly admitted input shape; original route and old states remain unchanged. History-only repeat must add no non-history work."
+      }
+    },
+    {
+      "step": 42,
+      "route": "BLOCKED/restart-review-cycle/code",
+      "metric": "file_probes:fstatSync",
+      "observed": 147,
+      "before": {
+        "expected": 145,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "required_input": "The native TDD tour binds qa/orders/purchase.case and qa/partners/isolation.case, qa/support/membership.fixture, tools/quartz.cmd and both components/*/behavior.qz; runtime/reviews/intermediate-attempts holds retained RED, original GREEN and focused two-target GREEN; F001 code DELTA and broad-failure child evidence are required.",
+        "reason": "Required native binding of this newly admitted input shape; original route and old states remain unchanged. History-only repeat must add no non-history work."
+      }
+    },
+    {
+      "step": 47,
+      "route": "BLOCKED/run-intermediate-command",
+      "metric": "file_hash:file",
+      "observed": 71,
+      "before": {
+        "expected": 70,
+        "tolerance": 0,
+        "constantWithEvents": true,
+        "growthTolerance": 0,
+        "required_input": "The native TDD tour binds qa/orders/purchase.case and qa/partners/isolation.case, qa/support/membership.fixture, tools/quartz.cmd and both components/*/behavior.qz; runtime/reviews/intermediate-attempts holds retained RED, original GREEN and focused two-target GREEN; F001 code DELTA and broad-failure child evidence are required.",
+        "reason": "Required native binding of this newly admitted input shape; original route and old states remain unchanged. History-only repeat must add no non-history work."
+      }
+    },
+    {
+      "step": 47,
+      "route": "BLOCKED/run-intermediate-command",
+      "metric": "file_probes:lstatSync",
+      "observed": 1093,
+      "before": {
+        "expected": 1079,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "required_input": "The native TDD tour binds qa/orders/purchase.case and qa/partners/isolation.case, qa/support/membership.fixture, tools/quartz.cmd and both components/*/behavior.qz; runtime/reviews/intermediate-attempts holds retained RED, original GREEN and focused two-target GREEN; F001 code DELTA and broad-failure child evidence are required.",
+        "reason": "Required native binding of this newly admitted input shape; original route and old states remain unchanged. History-only repeat must add no non-history work."
+      }
+    },
+    {
+      "step": 47,
+      "route": "BLOCKED/run-intermediate-command",
+      "metric": "file_probes:realpathSync",
+      "observed": 124,
+      "before": {
+        "expected": 123,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "required_input": "The native TDD tour binds qa/orders/purchase.case and qa/partners/isolation.case, qa/support/membership.fixture, tools/quartz.cmd and both components/*/behavior.qz; runtime/reviews/intermediate-attempts holds retained RED, original GREEN and focused two-target GREEN; F001 code DELTA and broad-failure child evidence are required.",
+        "reason": "Required native binding of this newly admitted input shape; original route and old states remain unchanged. History-only repeat must add no non-history work."
+      }
+    },
+    {
+      "step": 47,
+      "route": "BLOCKED/run-intermediate-command",
+      "metric": "file_probes:statSync",
+      "observed": 1040,
+      "before": {
+        "expected": 1027,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "required_input": "The native TDD tour binds qa/orders/purchase.case and qa/partners/isolation.case, qa/support/membership.fixture, tools/quartz.cmd and both components/*/behavior.qz; runtime/reviews/intermediate-attempts holds retained RED, original GREEN and focused two-target GREEN; F001 code DELTA and broad-failure child evidence are required.",
+        "reason": "Required native binding of this newly admitted input shape; original route and old states remain unchanged. History-only repeat must add no non-history work."
+      }
+    },
+    {
+      "step": 47,
+      "route": "BLOCKED/run-intermediate-command",
+      "metric": "file_probes:realpathSync.native",
+      "observed": 898,
+      "before": {
+        "expected": 891,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "required_input": "The native TDD tour binds qa/orders/purchase.case and qa/partners/isolation.case, qa/support/membership.fixture, tools/quartz.cmd and both components/*/behavior.qz; runtime/reviews/intermediate-attempts holds retained RED, original GREEN and focused two-target GREEN; F001 code DELTA and broad-failure child evidence are required.",
+        "reason": "Required native binding of this newly admitted input shape; original route and old states remain unchanged. History-only repeat must add no non-history work."
+      }
+    },
+    {
+      "step": 47,
+      "route": "BLOCKED/run-intermediate-command",
+      "metric": "file_probes:fstatSync",
+      "observed": 150,
+      "before": {
+        "expected": 148,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "required_input": "The native TDD tour binds qa/orders/purchase.case and qa/partners/isolation.case, qa/support/membership.fixture, tools/quartz.cmd and both components/*/behavior.qz; runtime/reviews/intermediate-attempts holds retained RED, original GREEN and focused two-target GREEN; F001 code DELTA and broad-failure child evidence are required.",
+        "reason": "Required native binding of this newly admitted input shape; original route and old states remain unchanged. History-only repeat must add no non-history work."
+      }
+    },
+    {
+      "step": 54,
+      "route": "BLOCKED/build-scoped-diff/security",
+      "metric": "file_probes:realpathSync",
+      "observed": 148,
+      "before": {
+        "expected": 147,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "required_input": "The native TDD tour binds qa/orders/purchase.case and qa/partners/isolation.case, qa/support/membership.fixture, tools/quartz.cmd and both components/*/behavior.qz; runtime/reviews/intermediate-attempts holds retained RED, original GREEN and focused two-target GREEN; F001 code DELTA and broad-failure child evidence are required.",
+        "reason": "Required native binding of this newly admitted input shape; original route and old states remain unchanged. History-only repeat must add no non-history work."
+      }
+    },
+    {
+      "step": 61,
+      "route": "BLOCKED/build-scoped-diff/refactor",
+      "metric": "file_probes:realpathSync",
+      "observed": 186,
+      "before": {
+        "expected": 185,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "required_input": "The native TDD tour binds qa/orders/purchase.case and qa/partners/isolation.case, qa/support/membership.fixture, tools/quartz.cmd and both components/*/behavior.qz; runtime/reviews/intermediate-attempts holds retained RED, original GREEN and focused two-target GREEN; F001 code DELTA and broad-failure child evidence are required.",
+        "reason": "Required native binding of this newly admitted input shape; original route and old states remain unchanged. History-only repeat must add no non-history work."
+      }
+    },
+    {
+      "step": 62,
+      "route": "BLOCKED/build-review-context/refactor",
+      "metric": "file_probes:realpathSync",
+      "observed": 188,
+      "before": {
+        "expected": 187,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "required_input": "The native TDD tour binds qa/orders/purchase.case and qa/partners/isolation.case, qa/support/membership.fixture, tools/quartz.cmd and both components/*/behavior.qz; runtime/reviews/intermediate-attempts holds retained RED, original GREEN and focused two-target GREEN; F001 code DELTA and broad-failure child evidence are required.",
+        "reason": "Required native binding of this newly admitted input shape; original route and old states remain unchanged. History-only repeat must add no non-history work."
+      }
+    },
+    {
+      "step": 63,
+      "route": "BLOCKED/record-review-routing/refactor",
+      "metric": "file_probes:realpathSync",
+      "observed": 198,
+      "before": {
+        "expected": 197,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "required_input": "The native TDD tour binds qa/orders/purchase.case and qa/partners/isolation.case, qa/support/membership.fixture, tools/quartz.cmd and both components/*/behavior.qz; runtime/reviews/intermediate-attempts holds retained RED, original GREEN and focused two-target GREEN; F001 code DELTA and broad-failure child evidence are required.",
+        "reason": "Required native binding of this newly admitted input shape; original route and old states remain unchanged. History-only repeat must add no non-history work."
+      }
+    },
+    {
+      "step": 64,
+      "route": "BLOCKED/prepare-reviewer-launch/refactor",
+      "metric": "file_probes:realpathSync",
+      "observed": 198,
+      "before": {
+        "expected": 197,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "required_input": "The native TDD tour binds qa/orders/purchase.case and qa/partners/isolation.case, qa/support/membership.fixture, tools/quartz.cmd and both components/*/behavior.qz; runtime/reviews/intermediate-attempts holds retained RED, original GREEN and focused two-target GREEN; F001 code DELTA and broad-failure child evidence are required.",
+        "reason": "Required native binding of this newly admitted input shape; original route and old states remain unchanged. History-only repeat must add no non-history work."
+      }
+    },
+    {
+      "step": 65,
+      "route": "BLOCKED/record-reviewer-delegation-started/refactor",
+      "metric": "file_probes:realpathSync",
+      "observed": 200,
+      "before": {
+        "expected": 199,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "required_input": "The native TDD tour binds qa/orders/purchase.case and qa/partners/isolation.case, qa/support/membership.fixture, tools/quartz.cmd and both components/*/behavior.qz; runtime/reviews/intermediate-attempts holds retained RED, original GREEN and focused two-target GREEN; F001 code DELTA and broad-failure child evidence are required.",
+        "reason": "Required native binding of this newly admitted input shape; original route and old states remain unchanged. History-only repeat must add no non-history work."
+      }
+    },
+    {
+      "step": 66,
+      "route": "BLOCKED/complete-reviewer-launch/refactor",
+      "metric": "file_probes:realpathSync",
+      "observed": 200,
+      "before": {
+        "expected": 199,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "required_input": "The native TDD tour binds qa/orders/purchase.case and qa/partners/isolation.case, qa/support/membership.fixture, tools/quartz.cmd and both components/*/behavior.qz; runtime/reviews/intermediate-attempts holds retained RED, original GREEN and focused two-target GREEN; F001 code DELTA and broad-failure child evidence are required.",
+        "reason": "Required native binding of this newly admitted input shape; original route and old states remain unchanged. History-only repeat must add no non-history work."
+      }
+    },
+    {
+      "step": 67,
+      "route": "BLOCKED/record-review-result/refactor",
+      "metric": "file_probes:realpathSync",
+      "observed": 200,
+      "before": {
+        "expected": 199,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0,
+        "required_input": "The native TDD tour binds qa/orders/purchase.case and qa/partners/isolation.case, qa/support/membership.fixture, tools/quartz.cmd and both components/*/behavior.qz; runtime/reviews/intermediate-attempts holds retained RED, original GREEN and focused two-target GREEN; F001 code DELTA and broad-failure child evidence are required.",
+        "reason": "Required native binding of this newly admitted input shape; original route and old states remain unchanged. History-only repeat must add no non-history work."
+      }
+    }
+  ]
+}

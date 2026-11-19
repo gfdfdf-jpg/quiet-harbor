@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.20)
+project(orders LANGUAGES CXX)
+enable_testing()
+add_executable(order_test tests/orders/order_test.cpp)
+add_test(NAME order_test COMMAND order_test)

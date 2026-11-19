@@ -1,0 +1,411 @@
+import { readInvocationFileBytes, readInvocationFileContent } from '../../core/invocation-file-observation';
+import * as path from 'node:path';
+import { createHash } from 'node:crypto';
+import { pathExists } from '../../core/filesystem';
+import { formatJson } from '../../core/json';
+
+import {
+    type SkillsHeadlinesPayload,
+    type SkillsHeadlinePackEntry,
+    type SkillsHeadlineSkillEntry
+} from '../skill-headlines';
+
+export const OPTIONAL_SKILL_SELECTION_POLICY_MODES = Object.freeze([
+    'off',
+    'optional',
+    'mandatory',
+    'advisory',
+    'required',
+    'strict'
+] as const);
+
+export type OptionalSkillSelectionPolicyMode = typeof OPTIONAL_SKILL_SELECTION_POLICY_MODES[number];
+export const CANONICAL_OPTIONAL_SKILL_SELECTION_POLICY_MODES = Object.freeze([
+    'off',
+    'optional',
+    'mandatory'
+] as const);
+export type CanonicalOptionalSkillSelectionPolicyMode = 'off' | 'optional' | 'mandatory';
+
+export const OPTIONAL_SKILL_AS_IS_REASONS = Object.freeze([
+    'policy_off',
+    'no_relevant_installed_skill',
+    'task_too_small',
+    'generic_context_sufficient',
+    'low_confidence_match'
+] as const);
+
+export type OptionalSkillSelectionAsIsReason = typeof OPTIONAL_SKILL_AS_IS_REASONS[number];
+
+export interface OptionalSkillSelectionPolicyConfig {
+    version: number;
+    mode: OptionalSkillSelectionPolicyMode;
+}
+
+export type OptionalSkillSelectionDecision =
+    | 'selected_installed_skills'
+    | 'recommended_missing_packs'
+    | 'as_is';
+
+export const OPTIONAL_SKILL_SELECTION_PHASES = Object.freeze([
+    'pre_implementation',
+    'post_diff'
+] as const);
+
+export type OptionalSkillSelectionPhase = typeof OPTIONAL_SKILL_SELECTION_PHASES[number];
+
+export const OPTIONAL_SKILL_PATH_EVIDENCE_SOURCES = Object.freeze([
+    'none',
+    'planned_changed_files',
+    'task_plan_scope',
+    'explicit_scope',
+    'actual_changed_files'
+] as const);
+
+export type OptionalSkillPathEvidenceSource = typeof OPTIONAL_SKILL_PATH_EVIDENCE_SOURCES[number];
+
+export type OptionalSkillSelectionReasonCode =
+    | 'stack_signals'
+    | 'task_signals'
+    | 'changed_path_signals'
+    | 'project_path_signals'
+    | 'aliases_or_tags';
+
+export interface MatchGroups {
+    stack_signals?: string[];
+    task_signals: string[];
+    changed_path_signals: string[];
+    project_path_signals?: string[];
+    aliases_or_tags?: string[];
+}
+
+export interface OptionalSkillSelectionEntry {
+    id: string;
+    pack: string | null;
+    source: 'installed_optional' | 'custom_live';
+    allowed_skill_path: string;
+    reason_codes: OptionalSkillSelectionReasonCode[];
+    matches: MatchGroups;
+}
+
+export interface OptionalSkillSelectionRecommendedPack {
+    id: string;
+    label: string;
+    ready_skill_ids: string[];
+    reason_codes: OptionalSkillSelectionReasonCode[];
+    matches: MatchGroups;
+}
+
+export interface OptionalSkillSelectionArtifact {
+    schema_version: 1;
+    event_source: 'optional-skill-selection';
+    task_id: string;
+    timestamp_utc: string;
+    policy_mode: OptionalSkillSelectionPolicyMode;
+    decision: OptionalSkillSelectionDecision;
+    selection_phase: OptionalSkillSelectionPhase;
+    path_evidence_source: OptionalSkillPathEvidenceSource;
+    selected_installed_skills: OptionalSkillSelectionEntry[];
+    recommended_missing_packs: OptionalSkillSelectionRecommendedPack[];
+    as_is_reason: OptionalSkillSelectionAsIsReason | null;
+    task_text_present: boolean;
+    task_text_sha256: string | null;
+    changed_paths: string[];
+    preflight_path: string | null;
+    preflight_sha256: string | null;
+    headlines_path: string;
+    headlines_sha256: string | null;
+    selection_fingerprint_sha256?: string | null;
+    visible_summary_line: string;
+}
+
+export interface OptionalSkillSelectionArtifactData {
+    artifactPath: string;
+    payload: OptionalSkillSelectionArtifact;
+    loadedHeadlinesCache?: {
+        headlinesPath: string;
+        headlinesSha256: string | null;
+        materializationNeeded?: boolean;
+        skills: SkillsHeadlineSkillEntry[];
+        optional_packs: SkillsHeadlinePackEntry[];
+        payload?: SkillsHeadlinesPayload | null;
+    } | null;
+}
+
+export interface BuildOptionalSkillSelectionOptions {
+    taskText?: string | null;
+    changedPaths?: string[] | null;
+    targetRoot?: string | null;
+    preflightPath?: string | null;
+    preflightSha256?: string | null;
+    selectionPhase?: OptionalSkillSelectionPhase | string | null;
+    pathEvidenceSource?: OptionalSkillPathEvidenceSource | string | null;
+    loadedHeadlinesCache?: {
+        headlinesPath: string;
+        headlinesSha256: string | null;
+        materializationNeeded?: boolean;
+        skills: SkillsHeadlineSkillEntry[];
+        optional_packs: SkillsHeadlinePackEntry[];
+        payload?: SkillsHeadlinesPayload | null;
+    } | null;
+}
+
+export interface WriteOptionalSkillSelectionOptions extends BuildOptionalSkillSelectionOptions {
+    preparedArtifact?: OptionalSkillSelectionArtifactData | null;
+}
+
+export interface SkillCandidateScore {
+    entry: OptionalSkillSelectionEntry;
+    score: number;
+    strong_match: boolean;
+}
+
+export interface PackCandidateScore {
+    entry: OptionalSkillSelectionRecommendedPack;
+    score: number;
+}
+
+export interface LoadedSkillsHeadlinesData {
+    headlinesPath: string;
+    headlinesSha256: string | null;
+    materializationNeeded: boolean;
+    skills: SkillsHeadlineSkillEntry[];
+    optional_packs: SkillsHeadlinePackEntry[];
+    payload: SkillsHeadlinesPayload;
+}
+
+export interface LoadSkillsHeadlinesOptions {
+    preferPersistedSurface?: boolean;
+}
+
+export interface OptionalSkillSelectionReferenceLoadEvidence {
+    skillId: string | null;
+    referencePath: string;
+    resolvedReferencePath: string;
+    triggerReason: string | null;
+    timestampUtc: string | null;
+    eventSequence?: number | null;
+}
+
+export interface OptionalSkillSelectionActivationEvidence {
+    skillId: string | null;
+    triggerReason: string | null;
+    timestampUtc: string | null;
+    selectionFingerprintSha256?: string | null;
+    eventSequence?: number | null;
+}
+
+export interface OptionalSkillSelectionDeclineEvidence {
+    skillId: string | null;
+    triggerReason: string | null;
+    timestampUtc: string | null;
+    selectionFingerprintSha256?: string | null;
+    reason?: string | null;
+    eventSequence?: number | null;
+}
+
+export interface OptionalSkillSelectionTimelineEvidence {
+    timelinePath: string;
+    exists: boolean;
+    invalidJson: boolean;
+    boundedRead?: {
+        truncated: boolean;
+        bytesRead: number;
+        retainedLineCount: number;
+        parsedEventCount: number;
+        parseAttempts: number;
+        maxBytes: number;
+        maxLines: number;
+        maxEvents: number;
+        maxParseAttempts: number;
+    };
+    eventTypes: Set<string>;
+    latestTaskModeEnteredTimestampUtc: string | null;
+    latestTaskModeEnteredTaskSequence?: number | null;
+    latestCycleBoundaryTimestampUtc: string | null;
+    latestCycleBoundaryTaskSequence?: number | null;
+    latestImplementationStartedTimestampUtc?: string | null;
+    latestImplementationStartedTaskSequence?: number | null;
+    latestCoherentCycleRestartedTimestampUtc?: string | null;
+    latestCoherentCycleRestartedTaskSequence?: number | null;
+    optionalSkillActivations: OptionalSkillSelectionActivationEvidence[];
+    optionalSkillDeclines?: OptionalSkillSelectionDeclineEvidence[];
+    optionalSkillReferenceLoads: OptionalSkillSelectionReferenceLoadEvidence[];
+}
+
+export const DEFAULT_POLICY_CONFIG: OptionalSkillSelectionPolicyConfig = Object.freeze({
+    version: 1,
+    mode: 'optional'
+});
+
+export const MAX_SELECTED_SKILLS = 2;
+export const MAX_RECOMMENDED_PACKS = 3;
+export const SKILL_SELECTION_THRESHOLD = 60;
+export const PACK_RECOMMENDATION_THRESHOLD = 60;
+
+export const COMMON_SIGNAL_STOP_WORDS = new Set([
+    'and', 'for', 'the', 'with', 'into', 'from', 'like', 'work', 'task',
+    'flow', 'mode', 'this', 'that', 'across', 'safety', 'delivery',
+    'production', 'general', 'purpose'
+]);
+
+export function normalizeText(value: unknown): string {
+    return String(value || '').trim().toLowerCase();
+}
+
+export function normalizeOptionalSkillSelectionPolicyMode(value: unknown): CanonicalOptionalSkillSelectionPolicyMode {
+    const mode = normalizeText(value || DEFAULT_POLICY_CONFIG.mode);
+    if (mode === 'off') {
+        return 'off';
+    }
+    if (mode === 'mandatory' || mode === 'required' || mode === 'strict') {
+        return 'mandatory';
+    }
+    return 'optional';
+}
+
+export function normalizeOptionalSkillSelectionPhase(
+    value: unknown,
+    fallback: OptionalSkillSelectionPhase = 'pre_implementation'
+): OptionalSkillSelectionPhase {
+    const phase = normalizeText(value);
+    if ((OPTIONAL_SKILL_SELECTION_PHASES as readonly string[]).includes(phase)) {
+        return phase as OptionalSkillSelectionPhase;
+    }
+    return fallback;
+}
+
+export function normalizeOptionalSkillPathEvidenceSource(
+    value: unknown,
+    fallback: OptionalSkillPathEvidenceSource = 'none'
+): OptionalSkillPathEvidenceSource {
+    const source = normalizeText(value);
+    if ((OPTIONAL_SKILL_PATH_EVIDENCE_SOURCES as readonly string[]).includes(source)) {
+        return source as OptionalSkillPathEvidenceSource;
+    }
+    return fallback;
+}
+
+export function isPostDiffOptionalSkillSelection(payload: {
+    selection_phase?: OptionalSkillSelectionPhase | string | null;
+}): boolean {
+    return normalizeOptionalSkillSelectionPhase(payload.selection_phase, 'pre_implementation') === 'post_diff';
+}
+
+export function isMandatoryOptionalSkillSelectionPolicyMode(value: unknown): boolean {
+    return normalizeOptionalSkillSelectionPolicyMode(value) === 'mandatory';
+}
+
+export function uniqueSorted(items: string[]): string[] {
+    return [...new Set(items.filter(Boolean))].sort();
+}
+
+export function computeOptionalSkillTaskTextSha256(taskText: string): string | null {
+    const normalizedTaskText = String(taskText || '').trim();
+    if (!normalizedTaskText) {
+        return null;
+    }
+    return createHash('sha256').update(normalizedTaskText, 'utf8').digest('hex');
+}
+
+export function computeFileSha256(filePath: string | null | undefined): string | null {
+    if (!filePath || !pathExists(filePath)) {
+        return null;
+    }
+    return readInvocationFileContent(filePath)?.sha256
+        ?? createHash('sha256').update(readInvocationFileBytes(filePath)).digest('hex');
+}
+
+function normalizeSelectedSkillFingerprintEntries(
+    entries: OptionalSkillSelectionEntry[] | null | undefined
+): Array<Record<string, unknown>> {
+    return (Array.isArray(entries) ? entries : [])
+        .map((entry) => ({
+            id: String(entry.id || '').trim(),
+            pack: entry.pack || null,
+            source: entry.source,
+            allowed_skill_path: String(entry.allowed_skill_path || '').trim()
+        }))
+        .sort((left, right) => String(left.id).localeCompare(String(right.id)));
+}
+
+function normalizeRecommendedPackFingerprintEntries(
+    entries: OptionalSkillSelectionRecommendedPack[] | null | undefined
+): Array<Record<string, unknown>> {
+    return (Array.isArray(entries) ? entries : [])
+        .map((entry) => ({
+            id: String(entry.id || '').trim(),
+            ready_skill_ids: uniqueSorted(
+                (Array.isArray(entry.ready_skill_ids) ? entry.ready_skill_ids : [])
+                    .map((skillId) => String(skillId || '').trim())
+                    .filter(Boolean)
+            )
+        }))
+        .sort((left, right) => String(left.id).localeCompare(String(right.id)));
+}
+
+export function computeOptionalSkillSelectionFingerprint(payload: {
+    policy_mode?: OptionalSkillSelectionPolicyMode | string | null;
+    decision?: OptionalSkillSelectionDecision | string | null;
+    selection_phase?: OptionalSkillSelectionPhase | string | null;
+    path_evidence_source?: OptionalSkillPathEvidenceSource | string | null;
+    selected_installed_skills?: OptionalSkillSelectionEntry[] | null;
+    recommended_missing_packs?: OptionalSkillSelectionRecommendedPack[] | null;
+    as_is_reason?: OptionalSkillSelectionAsIsReason | string | null;
+}): string {
+    const selectionPhase = normalizeOptionalSkillSelectionPhase(payload.selection_phase, 'pre_implementation');
+    const normalizedPayload = {
+        policy_mode: String(payload.policy_mode || '').trim(),
+        decision: String(payload.decision || '').trim(),
+        selection_phase: selectionPhase,
+        path_evidence_source: normalizeOptionalSkillPathEvidenceSource(payload.path_evidence_source, 'none'),
+        selected_installed_skills: normalizeSelectedSkillFingerprintEntries(payload.selected_installed_skills),
+        recommended_missing_packs: normalizeRecommendedPackFingerprintEntries(payload.recommended_missing_packs),
+        as_is_reason: payload.as_is_reason || null
+    };
+    return createHash('sha256').update(formatJson(normalizedPayload), 'utf8').digest('hex');
+}
+
+export function computeSkillsHeadlinesPayloadSha256(payload: SkillsHeadlinesPayload): string {
+    return createHash('sha256').update(formatJson(payload), 'utf8').digest('hex');
+}
+
+export function selectLatestTimestamp(
+    currentTimestampUtc: string | null,
+    nextTimestampUtc: string | null
+): string | null {
+    const currentTimestampMs = toTimestampMs(currentTimestampUtc);
+    const nextTimestampMs = toTimestampMs(nextTimestampUtc);
+    if (nextTimestampMs === null) {
+        return currentTimestampUtc;
+    }
+    if (currentTimestampMs === null || nextTimestampMs >= currentTimestampMs) {
+        return nextTimestampUtc;
+    }
+    return currentTimestampUtc;
+}
+
+export function resolvePortableRepoPath(bundleRoot: string, portablePath: string): string {
+    const normalizedPath = String(portablePath || '').trim();
+    if (!normalizedPath) {
+        return '';
+    }
+    if (path.isAbsolute(normalizedPath)) {
+        return path.resolve(normalizedPath);
+    }
+    return path.resolve(path.dirname(path.resolve(bundleRoot)), normalizedPath);
+}
+
+export function toPortableBundlePath(bundleRoot: string, absolutePath: string): string {
+    const orchestratorRoot = path.resolve(bundleRoot);
+    const relative = path.relative(path.dirname(orchestratorRoot), absolutePath).replace(/\\/g, '/');
+    if (relative && !relative.startsWith('../') && !path.isAbsolute(relative)) {
+        return relative;
+    }
+    return absolutePath.replace(/\\/g, '/');
+}
+
+export function toTimestampMs(value: string | null | undefined): number | null {
+    const parsed = Date.parse(String(value || '').trim());
+    return Number.isFinite(parsed) ? parsed : null;
+}

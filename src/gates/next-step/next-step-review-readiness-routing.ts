@@ -1,0 +1,302 @@
+import {
+    isPlannedReviewerIdentity,
+    isResolvedReviewerIdentity
+} from '../../gate-runtime/review/reviewer-identity-contract';
+import {
+    REVIEWER_ONE_SHOT_LAUNCH_DEFAULT_INSTRUCTION
+} from '../../gate-runtime/reviewer-session-contract';
+
+export type DelegatedReviewLaunchArtifactState =
+    'missing_or_invalid'
+    | 'prepared'
+    | 'delegation_start_recovery'
+    | 'delegation_started'
+    | 'completion_recovery'
+    | 'provider_failed'
+    | 'orphaned'
+    | 'launched';
+
+export interface DelegatedReviewReadinessCommand {
+    label: string;
+    command: string;
+}
+
+export interface DelegatedReviewReadinessRoute {
+    status: 'BLOCKED';
+    nextGate: string;
+    title: string;
+    reason: string;
+    commands: DelegatedReviewReadinessCommand[];
+}
+
+export interface DelegatedReviewReadinessRouteOptions {
+    reviewType: string;
+    currentReviewReuseRecorded: boolean;
+    currentReviewEvidenceSatisfied: boolean;
+    currentReviewContextInvocationAttested: boolean;
+    routingCurrent: boolean;
+    artifactExists: boolean;
+    receiptExists: boolean;
+    reviewFailed: boolean;
+    stateReady: boolean;
+    recordedAttemptIsCurrent?: boolean;
+    stateViolationsText: string;
+    reviewerIdentity: string;
+    contextReviewerIdentity: string;
+    reviewerIdentityIsPlanned: boolean;
+    launchArtifactState: DelegatedReviewLaunchArtifactState;
+    launchArtifactOrphanedReason?: string | null;
+    providerLaunchTargetSummary: string;
+    reviewerReadinessChain: string;
+    reviewRoutingChain: string;
+    launchPreparationChain: string;
+    launchCompletionChain: string;
+    reviewInvocationChain: string;
+    reviewResultChain: string;
+    acceptedVerdictTokens: string;
+    hiddenTimingTrustRemediation: string | null;
+    reusedExistingReview: boolean;
+    oneShotLaunchHint: string | null;
+    instructions: {
+        opaqueHandoff: string;
+        freshContextLaunch: string;
+        sessionReuseBoundary: string;
+        realSubagentOrStop: string;
+        cleanupAfterReceipt: string;
+    };
+    commands: {
+        recordRouting: DelegatedReviewReadinessCommand;
+        prepareLaunch: DelegatedReviewReadinessCommand;
+        recordDelegationStartedChoices: DelegatedReviewReadinessCommand[];
+        recordDelegationStarted: DelegatedReviewReadinessCommand;
+        completeLaunch: DelegatedReviewReadinessCommand;
+        recoverOrphanedLaunch: DelegatedReviewReadinessCommand;
+        recoverFailedLaunch: DelegatedReviewReadinessCommand;
+        recordInvocation: DelegatedReviewReadinessCommand;
+        recordResult: DelegatedReviewReadinessCommand;
+    };
+}
+
+export function resolveDelegatedReviewReadinessRoute(
+    options: DelegatedReviewReadinessRouteOptions
+): DelegatedReviewReadinessRoute | null {
+    if (options.hiddenTimingTrustRemediation && options.receiptExists && options.stateReady
+        && options.currentReviewContextInvocationAttested && options.recordedAttemptIsCurrent) {
+        return {
+            status: 'BLOCKED',
+            nextGate: 'restart-review-cycle',
+            title: `Replace '${options.reviewType}' timing-untrusted reviewer evidence.`,
+            reason: `Required review '${options.reviewType}' evidence is not sufficiently trustworthy. `
+                + `${options.hiddenTimingTrustRemediation} The recorded attempt cannot gain a trustworthy work window `
+                + 'by rebuilding its context or recording its output again. Restart through '
+                + 'review-evidence-only recovery, then launch a fresh reviewer and record its result.',
+            commands: [options.commands.recoverFailedLaunch]
+        };
+    }
+    if (
+        !options.currentReviewReuseRecorded
+        && options.launchArtifactState !== 'orphaned'
+        && (
+            !options.contextReviewerIdentity.startsWith('agent:')
+            || !options.routingCurrent
+        )
+    ) {
+        return {
+            status: 'BLOCKED',
+            nextGate: 'record-review-routing',
+            title: `Record '${options.reviewType}' delegated reviewer routing.`,
+            reason:
+                `Required review '${options.reviewType}' needs current REVIEWER_DELEGATION_ROUTED telemetry after the latest compile pass before a review receipt can be recorded. ` +
+                `${options.providerLaunchTargetSummary} ${options.instructions.opaqueHandoff} ` +
+                `${options.instructions.freshContextLaunch} ${options.instructions.sessionReuseBoundary} ` +
+                `${REVIEWER_ONE_SHOT_LAUNCH_DEFAULT_INSTRUCTION} ` +
+                `${options.reviewerReadinessChain} ${options.reviewRoutingChain}`,
+            commands: [options.commands.recordRouting]
+        };
+    }
+
+    if (
+        !options.currentReviewReuseRecorded
+        && !options.currentReviewContextInvocationAttested
+        && (
+            options.launchArtifactState === 'launched'
+            || options.launchArtifactState === 'prepared'
+            || options.launchArtifactState === 'delegation_start_recovery'
+            || options.launchArtifactState === 'delegation_started'
+            || options.launchArtifactState === 'completion_recovery'
+            || options.launchArtifactState === 'provider_failed'
+            || options.launchArtifactState === 'orphaned'
+            || (
+                options.launchArtifactState === 'missing_or_invalid'
+                && options.reviewerIdentityIsPlanned
+            )
+            || !options.artifactExists
+            || !options.receiptExists
+            || (
+                options.reviewerIdentity
+                && options.contextReviewerIdentity
+                && options.reviewerIdentity !== options.contextReviewerIdentity
+                && !(
+                    isPlannedReviewerIdentity(options.contextReviewerIdentity)
+                    && isResolvedReviewerIdentity(options.reviewerIdentity)
+                )
+            )
+            || options.stateReady
+            || options.reviewFailed
+        )
+    ) {
+        if (options.launchArtifactState === 'missing_or_invalid') {
+            return {
+                status: 'BLOCKED',
+                nextGate: 'prepare-reviewer-launch',
+                title: `Prepare '${options.reviewType}' delegated reviewer launch metadata.`,
+                reason:
+                    `Required review '${options.reviewType}' needs task-owned reviewer launch metadata bound to the current routing event and review context before launch. ` +
+                    `This prepares hashes and prompt paths only; it is not completed invocation evidence. ` +
+                    `${REVIEWER_ONE_SHOT_LAUNCH_DEFAULT_INSTRUCTION} ` +
+                    `${options.reviewerIdentityIsPlanned ? 'Routing/prepare use a gate-owned planned reviewer identity until the provider launch returns the resolved reviewer id. ' : ''}` +
+                    `${options.providerLaunchTargetSummary} ${options.reviewerReadinessChain} ${options.launchPreparationChain}`,
+                commands: [options.commands.prepareLaunch]
+            };
+        }
+
+        if (options.launchArtifactState === 'prepared') {
+            return {
+                status: 'BLOCKED',
+                nextGate: 'record-reviewer-delegation-started',
+                title: `Record '${options.reviewType}' delegated reviewer start.`,
+                reason:
+                    `Required review '${options.reviewType}' has prepared launch metadata for the current routing event and review context. ` +
+                    `Launch the delegated reviewer with exactly one opaque handoff mode: either the exact generated CopyPasteReviewerLaunchPrompt or the reviewer-facing ReviewerLaunchInputArtifactPath; treat ReviewerLaunchArtifactPath as main-agent control metadata only. Then run the matching mutually-exclusive record-reviewer-delegation-started command with the provider/controller invocation id so the gate records the real delegation start timestamp before the reviewer returns. Do not mix the two launch-input modes. For launch_artifact_path mode, pass the ReviewerLaunchInputArtifactSha256 value to the CLI flag --launch-input-sha256; do not invent a --launch-input-artifact-sha256 flag. Do not reconstruct reviewer prompts from memory. ` +
+                    `Provider-owned placeholders in the command are --reviewer-identity, --provider-invocation-id, and --attestation-source; replace them with the delegated reviewer launch result after provider launch. If the provider exposes one subagent id, use that resolved id for both --reviewer-identity and --provider-invocation-id. Launch-input artifact path, launch-input hash, review type, and fork-context are already gate-owned command fragments when printed. ` +
+                    `${options.oneShotLaunchHint ? `${options.oneShotLaunchHint} ` : ''}` +
+                    `${REVIEWER_ONE_SHOT_LAUNCH_DEFAULT_INSTRUCTION} ` +
+                    `${options.providerLaunchTargetSummary} ${options.instructions.opaqueHandoff} ${options.instructions.realSubagentOrStop} ` +
+                    `${options.reviewerReadinessChain} ${options.launchCompletionChain}`,
+                commands: options.commands.recordDelegationStartedChoices
+            };
+        }
+
+        if (options.launchArtifactState === 'delegation_start_recovery') {
+            return {
+                status: 'BLOCKED',
+                nextGate: 'record-reviewer-delegation-started',
+                title: `Recover '${options.reviewType}' delegated reviewer start telemetry.`,
+                reason:
+                    `Required review '${options.reviewType}' has a durable delegation-started control artifact, but its matching REVIEWER_DELEGATION_STARTED lifecycle event is absent. ` +
+                    `Retry record-reviewer-delegation-started with the provider/controller identity already preserved in the command; the gate will retain the original start timestamp and append only the missing event. ` +
+                    `${options.providerLaunchTargetSummary} ${options.instructions.opaqueHandoff} ${options.reviewerReadinessChain} ${options.launchCompletionChain}`,
+                commands: [options.commands.recordDelegationStarted]
+            };
+        }
+
+        if (options.launchArtifactState === 'delegation_started') {
+            return {
+                status: 'BLOCKED',
+                nextGate: 'complete-reviewer-launch',
+                title: `Complete '${options.reviewType}' delegated reviewer launch metadata.`,
+                reason:
+                    `Required review '${options.reviewType}' has recorded reviewer delegation start evidence for the current routing event and review context. ` +
+                    `After the delegated reviewer returns, run complete-reviewer-launch so the gate records completion attestation without redefining the reviewer start time. ` +
+                    `Provider-owned placeholders in the command are only --attestation-source; replace it with the delegated reviewer launch result after provider completion. Launch-input artifact path, launch-input hash, reviewer identity, review type, and fork-context are already gate-owned command fragments when printed. ` +
+                    `${options.providerLaunchTargetSummary} ${options.instructions.opaqueHandoff} ${options.reviewerReadinessChain} ${options.launchCompletionChain}`,
+                commands: [options.commands.completeLaunch]
+            };
+        }
+
+        if (options.launchArtifactState === 'completion_recovery') {
+            return {
+                status: 'BLOCKED',
+                nextGate: 'complete-reviewer-launch',
+                title: `Recover '${options.reviewType}' delegated reviewer completion telemetry.`,
+                reason:
+                    `Required review '${options.reviewType}' has a durable launched control artifact, but its matching REVIEWER_LAUNCH_COMPLETED lifecycle event is absent. ` +
+                    `Retry complete-reviewer-launch with the provider/controller identity already preserved in the command; the gate will retain the original completion timestamp and append only the missing event. ` +
+                    `${options.providerLaunchTargetSummary} ${options.instructions.opaqueHandoff} ${options.reviewerReadinessChain} ${options.launchCompletionChain}`,
+                commands: [options.commands.completeLaunch]
+            };
+        }
+
+        if (options.launchArtifactState === 'orphaned') {
+            const orphanedReason = options.launchArtifactOrphanedReason;
+            return {
+                status: 'BLOCKED',
+                nextGate: 'restart-review-cycle',
+                title: `Recover orphaned '${options.reviewType}' delegated reviewer launch.`,
+                reason:
+                    (orphanedReason === 'completed_launch_missing_review_output'
+                        ? `Required review '${options.reviewType}' has completed reviewer launch evidence, but the completed reviewer launch has no bound review output. `
+                        : orphanedReason === 'review_context_changed_before_launch_completed'
+                        ? `Required review '${options.reviewType}' has an open reviewer launch attempt that never completed, but its review context was rebuilt afterwards, so the attempt can no longer complete and routing refuses while it is open. `
+                        : orphanedReason === 'review_context_changed_after_launch_completed'
+                        ? `Required review '${options.reviewType}' has completed reviewer launch evidence, but its original review context was lost or replaced before recording the result. The output cannot be authenticated against the replacement context. `
+                        : orphanedReason === 'launch_input_changed_before_launch_completed'
+                        ? `Required review '${options.reviewType}' has an open reviewer launch attempt that never completed, but its reviewer launch input artifact is missing or no longer matches its authenticated pin. `
+                        : `Required review '${options.reviewType}' has delegated reviewer start evidence, but the current run appears to be a resumed controller session and the prepared review output artifact is still missing. `) +
+                    `Treat this as an abandoned delegated reviewer launch: do not complete the old launch, do not reuse the lost reviewer session, and do not fabricate review output. ` +
+                    `Restart or supersede the review cycle so a fresh delegated reviewer gets new launch/input evidence. ` +
+                    `${options.providerLaunchTargetSummary} ${options.instructions.opaqueHandoff} ${options.instructions.realSubagentOrStop} ` +
+                    `${options.reviewerReadinessChain} ${options.launchCompletionChain}`,
+                commands: [options.commands.recoverOrphanedLaunch]
+            };
+        }
+
+        if (options.launchArtifactState === 'provider_failed') {
+            return {
+                status: 'BLOCKED',
+                nextGate: 'restart-review-cycle',
+                title: `Recover failed '${options.reviewType}' delegated reviewer launch.`,
+                reason:
+                    `Required review '${options.reviewType}' has delegated reviewer start evidence, but the provider recorded a failed launch before review output was available. ` +
+                    `Treat this as a failed delegated reviewer launch: do not complete the old launch, do not reuse the failed reviewer session, and do not fabricate review output. ` +
+                    `Restart or supersede the review cycle so a fresh delegated reviewer gets new launch/input evidence. ` +
+                    `${options.providerLaunchTargetSummary} ${options.instructions.opaqueHandoff} ${options.instructions.realSubagentOrStop} ` +
+                    `${options.reviewerReadinessChain} ${options.launchCompletionChain}`,
+                commands: [options.commands.recoverFailedLaunch]
+            };
+        }
+
+        return {
+            status: 'BLOCKED',
+            nextGate: 'record-review-invocation',
+            title: `Record '${options.reviewType}' delegated reviewer launch attestation.`,
+            reason:
+                `Required review '${options.reviewType}' has launch metadata for the current routing event and review context. ` +
+                `The launch artifact already contains completed launch evidence; record that evidence with record-review-invocation. ` +
+                `${options.reviewerReadinessChain} ${options.reviewInvocationChain}`,
+            commands: [options.commands.recordInvocation]
+        };
+    }
+
+    if (!options.stateReady) {
+        return {
+            status: 'BLOCKED',
+            nextGate: 'record-review-result',
+            title: `Record '${options.reviewType}' review result from a delegated reviewer.`,
+            reason:
+                `Required review '${options.reviewType}' needs a valid delegated artifact and receipt (${options.stateViolationsText}). ` +
+                `${options.acceptedVerdictTokens} ${options.instructions.cleanupAfterReceipt} ` +
+                `${options.reviewerReadinessChain} ${options.reviewResultChain}`,
+            commands: [options.commands.recordResult]
+        };
+    }
+
+    if (!options.currentReviewEvidenceSatisfied) {
+        const missingEvidenceReason = options.hiddenTimingTrustRemediation
+            ? `Required review '${options.reviewType}' evidence is not sufficiently trustworthy. ${options.hiddenTimingTrustRemediation}`
+            : options.reusedExistingReview && !options.currentReviewReuseRecorded
+            ? `Required review '${options.reviewType}' is reused, but current-cycle REVIEW_RECORDED reuse telemetry is missing or does not match the receipt, review artifact, review context, and tree-state provenance, so rerun review reuse materialization or record a fresh delegated review result.`
+            : `Required review '${options.reviewType}' has stale or invalid reviewer_provenance; fresh delegated-review launch evidence is missing, stale, or spoof-like for the current receipt, so launch a fresh delegated reviewer with the printed handoff artifacts and record the exact reviewer output again.`;
+        return {
+            status: 'BLOCKED',
+            nextGate: 'record-review-result',
+            title: `Record '${options.reviewType}' review result from a delegated reviewer.`,
+            reason:
+                `${missingEvidenceReason} ${options.acceptedVerdictTokens} ` +
+                `${options.instructions.cleanupAfterReceipt} ${options.reviewerReadinessChain}`,
+            commands: [options.commands.recordResult]
+        };
+    }
+
+    return null;
+}

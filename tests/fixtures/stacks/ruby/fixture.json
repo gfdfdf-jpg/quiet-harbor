@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "id": "ruby",
+  "title": "Ruby / RSpec",
+  "adapter": null,
+  "technologies": [
+    {
+      "id": "ruby",
+      "executable": "tools/bundle",
+      "compileArgv": [
+        "exec",
+        "ruby",
+        "-c",
+        "lib/orders/service.rb"
+      ],
+      "firstArgv": [
+        "exec",
+        "rspec",
+        "spec/orders/service_spec.rb",
+        "--example",
+        "task contract"
+      ],
+      "allArgv": [
+        "exec",
+        "rspec",
+        "spec/orders/service_spec.rb",
+        "spec/partners/service_spec.rb",
+        "--example",
+        "task contract"
+      ],
+      "broadArgv": [
+        "exec",
+        "rspec"
+      ],
+      "report": "text",
+      "secondArgv": [
+        "exec",
+        "rspec",
+        "spec/partners/service_spec.rb",
+        "--example",
+        "task contract"
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "orders",
+      "technology": "ruby",
+      "source": "lib/orders/service.rb",
+      "target": "spec/orders/service_spec.rb",
+      "case": "task-contract",
+      "comment": "#"
+    },
+    {
+      "id": "partners",
+      "technology": "ruby",
+      "source": "lib/partners/service.rb",
+      "target": "spec/partners/service_spec.rb",
+      "case": "task-contract",
+      "comment": "#"
+    }
+  ],
+  "helpers": [
+    "spec/support/shared_examples.rb"
+  ]
+}

@@ -1,0 +1,592 @@
+{
+  "local-commit-enabled": {
+    "label": "স্থানীয় কমিটের অনুমতি",
+    "description": "নিরীক্ষিত স্পষ্ট চালু সেটিং এই ওয়ার্কস্পেসে সম্পূর্ণ ও নিরীক্ষিত কাজ কমিট করার স্থায়ী অনুমতি দেয়। বন্ধ করলে তা প্রত্যাহার হয়। পরীক্ষা ও পর্যালোচনা আবশ্যক; push বা CI অনুমোদিত নয়।",
+    "options": {
+      "true": {
+        "label": "চালু",
+        "description": "সম্পূর্ণ ও নিরীক্ষিত কাজের পরিসর কমিট করতে দিন।"
+      },
+      "false": {
+        "label": "বন্ধ",
+        "description": "স্থানীয় কমিট বন্ধ করে পুরনো অনুমতি প্রত্যাহার করুন।"
+      }
+    }
+  },
+  "compact-enabled": {
+    "label": "সংক্ষিপ্ত আউটপুট",
+    "description": "compact সেটিং। পরিবর্তনের জন্য নিশ্চিতকরণ প্রয়োজন; গোপন তথ্য আড়াল করা হয় না।",
+    "options": {
+      "true": {
+        "label": "চালু",
+        "description": "compact সেটিং। পরিবর্তনের জন্য নিশ্চিতকরণ প্রয়োজন; গোপন তথ্য আড়াল করা হয় না। চালু"
+      },
+      "false": {
+        "label": "বন্ধ",
+        "description": "compact সেটিং। পরিবর্তনের জন্য নিশ্চিতকরণ প্রয়োজন; গোপন তথ্য আড়াল করা হয় না। বন্ধ"
+      }
+    }
+  },
+  "compact-git": {
+    "label": "compact দিয়ে Git",
+    "description": "compact সেটিং। পরিবর্তনের জন্য নিশ্চিতকরণ প্রয়োজন; গোপন তথ্য আড়াল করা হয় না।",
+    "options": {
+      "true": {
+        "label": "চালু",
+        "description": "compact সেটিং। পরিবর্তনের জন্য নিশ্চিতকরণ প্রয়োজন; গোপন তথ্য আড়াল করা হয় না। চালু"
+      },
+      "false": {
+        "label": "বন্ধ",
+        "description": "compact সেটিং। পরিবর্তনের জন্য নিশ্চিতকরণ প্রয়োজন; গোপন তথ্য আড়াল করা হয় না। বন্ধ"
+      }
+    }
+  },
+  "compact-file": {
+    "label": "compact দিয়ে ফাইল",
+    "description": "compact সেটিং। পরিবর্তনের জন্য নিশ্চিতকরণ প্রয়োজন; গোপন তথ্য আড়াল করা হয় না।",
+    "options": {
+      "true": {
+        "label": "চালু",
+        "description": "compact সেটিং। পরিবর্তনের জন্য নিশ্চিতকরণ প্রয়োজন; গোপন তথ্য আড়াল করা হয় না। চালু"
+      },
+      "false": {
+        "label": "বন্ধ",
+        "description": "compact সেটিং। পরিবর্তনের জন্য নিশ্চিতকরণ প্রয়োজন; গোপন তথ্য আড়াল করা হয় না। বন্ধ"
+      }
+    }
+  },
+  "compact-rg": {
+    "label": "compact দিয়ে অনুসন্ধান",
+    "description": "compact সেটিং। পরিবর্তনের জন্য নিশ্চিতকরণ প্রয়োজন; গোপন তথ্য আড়াল করা হয় না।",
+    "options": {
+      "true": {
+        "label": "চালু",
+        "description": "compact সেটিং। পরিবর্তনের জন্য নিশ্চিতকরণ প্রয়োজন; গোপন তথ্য আড়াল করা হয় না। চালু"
+      },
+      "false": {
+        "label": "বন্ধ",
+        "description": "compact সেটিং। পরিবর্তনের জন্য নিশ্চিতকরণ প্রয়োজন; গোপন তথ্য আড়াল করা হয় না। বন্ধ"
+      }
+    }
+  },
+  "compact-preview-lines": {
+    "label": "প্রিভিউ লাইন",
+    "description": "compact সেটিং। পরিবর্তনের জন্য নিশ্চিতকরণ প্রয়োজন; গোপন তথ্য আড়াল করা হয় না।"
+  },
+  "compact-preview-chars": {
+    "label": "প্রিভিউ অক্ষর",
+    "description": "compact সেটিং। পরিবর্তনের জন্য নিশ্চিতকরণ প্রয়োজন; গোপন তথ্য আড়াল করা হয় না।"
+  },
+  "compact-exact-bytes": {
+    "label": "নির্বাচিত পরিসরের বাইট",
+    "description": "নির্বাচিত পরিসরের বাইট. compact সেটিং। পরিবর্তনের জন্য নিশ্চিতকরণ প্রয়োজন; গোপন তথ্য আড়াল করা হয় না।"
+  },
+  "compact-read-bytes": {
+    "label": "পড়ার পৃষ্ঠার বাইট",
+    "description": "পড়ার পৃষ্ঠার বাইট. compact সেটিং। পরিবর্তনের জন্য নিশ্চিতকরণ প্রয়োজন; গোপন তথ্য আড়াল করা হয় না।"
+  },
+  "compact-search-context": {
+    "label": "অনুসন্ধান প্রসঙ্গের লাইন",
+    "description": "অনুসন্ধান প্রসঙ্গের লাইন. compact সেটিং। পরিবর্তনের জন্য নিশ্চিতকরণ প্রয়োজন; গোপন তথ্য আড়াল করা হয় না।"
+  },
+  "compact-run-bytes": {
+    "label": "প্রতি ক্যাপচারে বাইট সীমা",
+    "description": "compact সেটিং। পরিবর্তনের জন্য নিশ্চিতকরণ প্রয়োজন; গোপন তথ্য আড়াল করা হয় না।"
+  },
+  "compact-task-bytes": {
+    "label": "কাজের ক্যাশ বাইট সীমা",
+    "description": "compact সেটিং। পরিবর্তনের জন্য নিশ্চিতকরণ প্রয়োজন; গোপন তথ্য আড়াল করা হয় না।"
+  },
+  "compact-workspace-bytes": {
+    "label": "প্রকল্পের ক্যাশ বাইট সীমা",
+    "description": "compact সেটিং। পরিবর্তনের জন্য নিশ্চিতকরণ প্রয়োজন; গোপন তথ্য আড়াল করা হয় না।"
+  },
+  "compact-max-runs": {
+    "label": "ক্যাপচারের সংখ্যা সীমা",
+    "description": "compact সেটিং। পরিবর্তনের জন্য নিশ্চিতকরণ প্রয়োজন; গোপন তথ্য আড়াল করা হয় না।"
+  },
+  "compile-gate-command": {
+    "label": "compile-gate কমান্ড",
+    "description": "কম্পাইল/বিল্ড/টাইপ-চেক যাচাইয়ের জন্য compile-gate যে কমান্ড চালায়। workflow-config-এ কনফিগার না থাকলে, প্রকল্প-নির্দিষ্ট কমান্ড সেট না হওয়া পর্যন্ত compile-gate fail-closed শেষ হয়।"
+  },
+  "compile-gate-command-fallback": {
+    "description": "workflow-config-এ সেট নেই; প্রকল্প-নির্দিষ্ট কমান্ড কনফিগার না হওয়া পর্যন্ত compile-gate fail-closed শেষ হয়।"
+  },
+  "full-suite-enabled": {
+    "label": "বাধ্যতামূলক ফুল-স্যুট যাচাই",
+    "description": "কনফিগার করা ফুল-স্যুট টেস্ট কমান্ড টাস্ক লাইফসাইকেলের অংশ হবে কিনা তা নিয়ন্ত্রণ করে।",
+    "options": {
+      "true": {
+        "label": "চালু",
+        "description": "কনফিগার করা ফুল-স্যুট কমান্ড টাস্ক লাইফসাইকেলে বাধ্যতামূলক।"
+      },
+      "false": {
+        "label": "বন্ধ",
+        "description": "অন্য ওয়ার্কফ্লো পথে প্রয়োজন না হলে ফুল-স্যুট গেট এড়িয়ে যায়।"
+      }
+    }
+  },
+  "task-test-selection-require-operator-confirmation": {
+    "label": "কাজের পরীক্ষা নির্বাচন নিশ্চিত করুন",
+    "description": "সক্রিয় কাজের পরীক্ষা নির্বাচনে অপারেটরের অনুমোদন চাইবে। ডিফল্টে বন্ধ। এই সেটিং বদলাতে অনুমোদন লাগবেই; বাধ্যতামূলক পরীক্ষা ও রিভিউ অপরিবর্তিত থাকে।",
+    "options": {
+      "true": {
+        "label": "চালু",
+        "description": "প্রতিবার কাজের পরীক্ষা বাছার আগে অনুমোদন চাইবে।"
+      },
+      "false": {
+        "label": "বন্ধ",
+        "description": "অতিরিক্ত প্রশ্ন ছাড়া সক্রিয় কাজের যুক্তিসহ নথিভুক্ত পরীক্ষা নির্বাচন অনুমোদন করবে।"
+      }
+    }
+  },
+  "full-suite-command": {
+    "label": "ফুল-স্যুট কমান্ড",
+    "description": "বাধ্যতামূলক ফুল-স্যুট যাচাই সক্রিয় থাকলে ফুল-স্যুট গেট যে কমান্ড চালায়।"
+  },
+  "full-suite-timeout-ms": {
+    "label": "ফুল-স্যুট টাইমআউট",
+    "description": "ফুল-স্যুট কমান্ডের সর্বোচ্চ রানটাইম, মিলিসেকেন্ডে।"
+  },
+  "full-suite-green-summary-max-lines": {
+    "label": "সফল ফুল-স্যুট সারাংশ দৈর্ঘ্য",
+    "description": "সংক্ষিপ্ত টাস্ক প্রমাণে রাখা সফল ফুল-স্যুট আউটপুট লাইনের সংখ্যা।"
+  },
+  "full-suite-red-failure-chunk-lines": {
+    "label": "ব্যর্থতা আউটপুট চাঙ্ক দৈর্ঘ্য",
+    "description": "প্রতিটি সংক্ষিপ্ত ব্যর্থতা চাঙ্কে রাখা ব্যর্থ ফুল-স্যুট লাইনের সংখ্যা।"
+  },
+  "full-suite-out-of-scope-failure-policy": {
+    "label": "স্কোপ-বাইরে ব্যর্থতা হ্যান্ডলিং",
+    "description": "ফুল-স্যুট আউটপুটে বর্তমান টাস্ক স্কোপের বাইরে ব্যর্থতা দেখালে ওয়ার্কফ্লো কী করে।",
+    "options": {
+      "AUDIT_AND_BLOCK": {
+        "label": "অডিট করে ব্লক",
+        "description": "স্কোপ-বাইরে ব্যর্থতা রেকর্ড করে এবং সমাধান না হওয়া পর্যন্ত ওয়ার্কফ্লো থামায়।"
+      },
+      "AUDIT_AND_WARN": {
+        "label": "অডিট করে সতর্ক",
+        "description": "স্কোপ-বাইরে ব্যর্থতা রেকর্ড করে কিন্তু সতর্কতা সহ ওয়ার্কফ্লো চালিয়ে যেতে দেয়।"
+      }
+    }
+  },
+  "full-suite-placement": {
+    "label": "ফুল-স্যুট প্লেসমেন্ট",
+    "description": "টাস্ক লাইফসাইকেলে বাধ্যতামূলক ফুল-স্যুট গেট কোথায় চলে।",
+    "options": {
+      "after_compile_before_reviews": {
+        "label": "কম্পাইলের পর, রিভিউয়ের আগে",
+        "description": "কম্পাইল পাস হওয়ার পর এবং রিভিউ কাজ শুরুর আগে ফুল-স্যুট চালায়।"
+      },
+      "before_test_review": {
+        "label": "টেস্ট রিভিউয়ের আগে",
+        "description": "টেস্ট-রিভিউ লেনের প্রমাণ দরকার হওয়ার ঠিক আগে ফুল-স্যুট চালায়।"
+      },
+      "before_completion": {
+        "label": "সমাপ্তির আগে",
+        "description": "চূড়ান্ত সমাপ্তি পথ পর্যন্ত ফুল-স্যুট পিছিয়ে দেয়।"
+      }
+    }
+  },
+  "review-execution-policy": {
+    "label": "রিভিউ এক্সিকিউশন মোড",
+    "description": "প্রয়োজনীয় রিভিউ লেন সমান্তরাল চলবে, কোড রিভিউয়ের জন্য অপেক্ষা করবে, নাকি ক্রমানুসারে চলবে তা নিয়ন্ত্রণ করে।",
+    "options": {
+      "parallel_all": {
+        "label": "সব সমান্তরাল",
+        "description": "সব রিভিউ ধরন স্বাধীনভাবে প্রস্তুত করা যায়; কোনো আপস্ট্রিম লঞ্চ নির্ভরতা নেই।"
+      },
+      "test_after_code": {
+        "label": "কোডের পর টেস্ট",
+        "description": "শুধু টেস্ট বর্তমান চক্রের কোড PASS-এর জন্য অপেক্ষা করে; অন্য রিভিউ ধরন স্বাধীন থাকে।"
+      },
+      "code_first_optional": {
+        "label": "ঐচ্ছিকের জন্য কোড আগে",
+        "description": "API, পারফরম্যান্স, ইনফ্রা ও ডিপেন্ডেন্সি কোড PASS-এর জন্য অপেক্ষা করে; টেস্ট সব প্রয়োজনীয় আপস্ট্রিম রিভিউয়ের ডাউনস্ট্রিমে থাকে।"
+      },
+      "strict_sequential": {
+        "label": "কঠোর ক্রমানুসার",
+        "description": "সব প্রয়োজনীয় রিভিউ বর্তমান চক্রে ক্যাননিক্যাল রিভিউ ক্রমে একে একে চলে।"
+      }
+    }
+  },
+  "scope-budget-enabled": {
+    "label": "স্কোপ বাজেট গার্ড",
+    "description": "টাস্ক কনফিগার করা প্রোফাইল বাজেটের চেয়ে বড় হলে সতর্ক করে বা ব্লক করে।",
+    "options": {
+      "true": {
+        "label": "চালু",
+        "description": "টাস্ক কনফিগার করা প্রোফাইল বাজেট ছাড়িয়ে গেলে স্কোপ বাজেট পরীক্ষা সতর্ক করে বা ব্লক করে।"
+      },
+      "false": {
+        "label": "বন্ধ",
+        "description": "টাস্ক-আকার সিদ্ধান্তে স্কোপ বাজেট সীমা প্রয়োগ হয় না।"
+      }
+    }
+  },
+  "scope-budget-action": {
+    "label": "Legacy max_* compatibility mode",
+    "description": "Old max_* compatibility only; explicit block_* thresholds still produce BLOCK and route to split-required.",
+    "options": {
+      "BLOCK_FOR_SPLIT": {
+        "label": "max_* maps to block_*",
+        "description": "Old max_* values are treated as blocking thresholds; explicit block_* thresholds still block in every mode."
+      },
+      "WARN_ONLY": {
+        "label": "max_* maps to warn_*",
+        "description": "Old max_* values are treated as warning thresholds; explicit block_* thresholds still block in every mode."
+      }
+    }
+  },
+  "scope-budget-profiles": {
+    "label": "স্কোপ বাজেট প্রোফাইল",
+    "description": "যে টাস্ক প্রোফাইলে স্কোপ বাজেট গার্ড প্রয়োগ হয়। অজানা লেগাসি মান স্পষ্টভাবে দেখানো হয়, চুপচাপ সরানো হয় না।"
+  },
+  "scope-budget-max-files": {
+    "label": "স্কোপ বাজেট ফাইল সীমা",
+    "description": "স্কোপ বাজেট গার্ড প্রতিক্রিয়া করার আগে সর্বোচ্চ পরিবর্তিত ফাইলের সংখ্যা।"
+  },
+  "scope-budget-max-changed-lines": {
+    "label": "স্কোপ বাজেট পরিবর্তিত লাইন সীমা",
+    "description": "স্কোপ বাজেট গার্ড প্রতিক্রিয়া করার আগে সর্বোচ্চ পরিবর্তিত লাইনের সংখ্যা।"
+  },
+  "scope-budget-max-required-reviews": {
+    "label": "বাধ্যতামূলক রিভিউ টাইপ সীমা",
+    "description": "বর্তমান preflight যতগুলো আলাদা রিভিউ টাইপ বাধ্যতামূলক করে, scope budget guard প্রতিক্রিয়া করার আগে তার সর্বোচ্চ সংখ্যা। কোনো রিভিউ capability বন্ধ থাকলে মিলে যাওয়া ফাইল বদলালেই তা বাধ্যতামূলক হয় না; এটি রিভিউয়ার, চেষ্টা, বা রিভিউ সাইকেলের সংখ্যা নয়।"
+  },
+  "scope-budget-max-review-tokens": {
+    "label": "স্কোপ বাজেট রিভিউ-টোকেন পূর্বাভাস",
+    "description": "স্কোপ বাজেট গার্ড প্রতিক্রিয়া করার আগে সর্বোচ্চ অনুমানিত রিভিউ-টোকেন বাজেট।"
+  },
+  "review-cycle-enabled": {
+    "label": "রিভিউ-চক্র গার্ড",
+    "description": "অতিরিক্ত কাজ খরচ করার আগে পুনরাবৃত্ত নন-টেস্ট রিভিউ লুপ শনাক্ত করে।",
+    "options": {
+      "true": {
+        "label": "চালু",
+        "description": "ক্লোজআউট চালিয়ে যাওয়ার আগে পুনরাবৃত্ত নন-টেস্ট রিভিউ লুপ শনাক্ত হয়।"
+      },
+      "false": {
+        "label": "বন্ধ",
+        "description": "এই গার্ড দ্বারা রিভিউ-চক্র চাপ পরীক্ষা করা হয় না।"
+      }
+    }
+  },
+  "review-cycle-action": {
+    "label": "রিভিউ-চক্র অ্যাকশন",
+    "description": "পুনরাবৃত্ত রিভিউ প্রচেষ্টা কনফিগার সীমা ছাড়িয়ে গেলে কী হয়।",
+    "options": {
+      "BLOCK_FOR_OPERATOR_DECISION": {
+        "label": "অপারেটর সিদ্ধান্ত পর্যন্ত ব্লক",
+        "description": "অপারেটর পুনরুদ্ধার পথ বেছে নেওয়া পর্যন্ত পুনরাবৃত্ত রিভিউ লুপ থামায়।"
+      },
+      "WARN_ONLY": {
+        "label": "শুধু সতর্কতা",
+        "description": "রিভিউ-চক্র চাপ রিপোর্ট করে কিন্তু ওয়ার্কফ্লো চালিয়ে যেতে দেয়।"
+      }
+    }
+  },
+  "review-cycle-max-failed-non-test-reviews": {
+    "label": "ব্যর্থ নন-টেস্ট রিভিউ সীমা",
+    "description": "রিভিউ-চক্র গার্ড প্রতিক্রিয়া করার আগে সর্বোচ্চ ব্যর্থ নন-টেস্ট রিভিউ প্রচেষ্টা।"
+  },
+  "review-cycle-max-total-non-test-reviews": {
+    "label": "মোট নন-টেস্ট রিভিউ সীমা",
+    "description": "রিভিউ-চক্র গার্ড প্রতিক্রিয়া করার আগে সর্বোচ্চ মোট নন-টেস্ট রিভিউ প্রচেষ্টা।"
+  },
+  "review-cycle-excluded-review-types": {
+    "label": "বহিষ্কৃত রিভিউ ধরন",
+    "description": "একাধিক পছন্দ: চেক করা রিভিউ ধরনগুলো review-cycle guard গণনা থেকে বাদ দেওয়া হয়।",
+    "options": {
+      "code": {
+        "label": "কোড রিভিউ"
+      },
+      "db": {
+        "label": "ডাটাবেস রিভিউ"
+      },
+      "security": {
+        "label": "নিরাপত্তা রিভিউ"
+      },
+      "refactor": {
+        "label": "রিফ্যাক্টর রিভিউ"
+      },
+      "api": {
+        "label": "API রিভিউ"
+      },
+      "test": {
+        "label": "টেস্ট রিভিউ"
+      },
+      "performance": {
+        "label": "পারফরম্যান্স রিভিউ"
+      },
+      "infra": {
+        "label": "ইনফ্রাস্ট্রাকচার রিভিউ"
+      },
+      "dependency": {
+        "label": "ডিপেন্ডেন্সি রিভিউ"
+      }
+    }
+  },
+  "review-cycle-auto-split-enabled": {
+    "label": "স্বয়ংক্রিয় বিভাজন প্রম্পট",
+    "description": "অ্যাকশন BLOCK_FOR_OPERATOR_DECISION হলে রিভিউ-চক্র চাপ দ্বারা স্বয়ংক্রিয়-বিভাজন প্রম্পট জারি করার অনুমতি দেয়। WARN_ONLY অ্যাকশনের সময় কোনো ব্লকিং প্রভাব নেই।",
+    "options": {
+      "true": {
+        "label": "চালু",
+        "description": "অ্যাকশন BLOCK_FOR_OPERATOR_DECISION হলে রিভিউ-চক্র চাপ স্বয়ংক্রিয়-বিভাজন প্রম্পট জারি করতে পারে।"
+      },
+      "false": {
+        "label": "বন্ধ",
+        "description": "রিভিউ-চক্র চাপ কখনো স্বয়ংক্রিয়-বিভাজন প্রম্পট জারি করে না।"
+      }
+    }
+  },
+  "project-memory-enabled": {
+    "label": "প্রকল্প-মেমোরি রক্ষণাবেক্ষণ",
+    "description": "ক্লোজআউটে প্রকল্প-মেমোরি প্রভাব পরীক্ষা করবে কিনা তা নিয়ন্ত্রণ করে।",
+    "options": {
+      "true": {
+        "label": "চালু",
+        "description": "ক্লোজআউটে পরীক্ষা করে প্রকল্প-মেমোরি প্রভাব প্রমাণ দরকার কিনা।"
+      },
+      "false": {
+        "label": "বন্ধ",
+        "description": "ক্লোজআউটে প্রকল্প-মেমোরি রক্ষণাবেক্ষণ পরীক্ষা চালায় না।"
+      }
+    }
+  },
+  "project-memory-mode": {
+    "label": "প্রকল্প-মেমোরি মোড",
+    "description": "ওয়ার্কফ্লো প্রকল্প-মেমোরি প্রভাব কাজ কতটা কঠোরভাবে প্রয়োগ করে।",
+    "options": {
+      "off": {
+        "label": "বন্ধ",
+        "description": "ক্লোজআউটের সময় প্রকল্প-মেমোরি রক্ষণাবেক্ষণ চালাবেন না।"
+      },
+      "check": {
+        "label": "পরীক্ষা",
+        "description": "মেমোরি আপডেট দরকার কিনা পরীক্ষা করুন, কিন্তু লিখবেন না।"
+      },
+      "update": {
+        "label": "আপডেট",
+        "description": "প্রয়োজনে ওয়ার্কফ্লোকে ফোকাসড প্রকল্প-মেমোরি ফাইল আপডেট করতে দিন।"
+      },
+      "strict": {
+        "label": "কঠোর",
+        "description": "ক্লোজআউট পাস হওয়ার আগে মেমোরি প্রমাণ প্রয়োজন।"
+      }
+    }
+  },
+  "project-memory-run-before-final-closeout": {
+    "label": "চূড়ান্ত ক্লোজআউটের আগে মেমোরি পরীক্ষা",
+    "description": "চূড়ান্ত সমাপ্তি ধাপের আগে প্রকল্প-মেমোরি রক্ষণাবেক্ষণ চালায়।",
+    "options": {
+      "true": {
+        "label": "চালু",
+        "description": "চূড়ান্ত সমাপ্তি ধাপের আগে প্রকল্প-মেমোরি রক্ষণাবেক্ষণ চালায়।"
+      },
+      "false": {
+        "label": "বন্ধ",
+        "description": "চূড়ান্ত ক্লোজআউটের আগে প্রকল্প-মেমোরি রক্ষণাবেক্ষণ যোগ করে না।"
+      }
+    }
+  },
+  "project-memory-require-user-approval-for-writes": {
+    "label": "মেমোরি লেখার জন্য ব্যবহারকারী অনুমোদন",
+    "description": "ওয়ার্কফ্লো প্রকল্প-মেমোরি ফাইল লেখার আগে স্পষ্ট ব্যবহারকারী অনুমোদন প্রয়োজন।",
+    "options": {
+      "true": {
+        "label": "চালু",
+        "description": "প্রকল্প-মেমোরি লেখার জন্য ফাইল পরিবর্তনের আগে স্পষ্ট ব্যবহারকারী অনুমোদন প্রয়োজন।"
+      },
+      "false": {
+        "label": "বন্ধ",
+        "description": "প্রকল্প-মেমোরি লেখা কনফিগার করা রক্ষণাবেক্ষণ মোডে অতিরিক্ত অনুমোদন ছাড়াই এগিয়ে যেতে পারে।"
+      }
+    }
+  },
+  "project-memory-max-compact-summary-chars": {
+    "label": "প্রকল্প-মেমোরি সংক্ষিপ্ত সারাংশ আকার",
+    "description": "উৎপন্ন সংক্ষিপ্ত প্রকল্প-মেমোরি সারাংশের সর্বোচ্চ আকার, অক্ষরে।"
+  },
+  "project-memory-read-strategy": {
+    "label": "প্রকল্প-মেমোরি পড়ার কৌশল",
+    "description": "টাস্ক শুরুতে এজেন্টদের স্থায়ী মেমোরি কীভাবে পড়া উচিত।",
+    "options": {
+      "index_first": {
+        "label": "প্রথমে ইনডেক্স",
+        "description": "প্রথমে মেমোরি ইনডেক্স পড়ুন এবং বিস্তারিত ফাইল শুধু তখনই খুলুন যখন ইনডেক্স সেগুলোর দিকে নির্দেশ করে।"
+      }
+    }
+  },
+  "project-memory-impact-retention-days": {
+    "label": "প্রকল্প-মেমোরি প্রভাব ধারণ",
+    "description": "প্রকল্প-মেমোরি প্রভাব আর্টিফ্যাক্ট কত দিন ধরে রাখা হয়।"
+  },
+  "task-reset-enabled": {
+    "label": "টাস্ক রিসেট কমান্ড",
+    "description": "নিশ্চিত করা টাস্ক রিসেট/বাতিল মিউটেশনের অনুমতি দেয়।",
+    "options": {
+      "true": {
+        "label": "চালু",
+        "description": "নিশ্চিত করা টাস্ক রিসেট ও বাতিল কমান্ড সুরক্ষিত পথে উপলব্ধ।"
+      },
+      "false": {
+        "label": "বন্ধ",
+        "description": "টাস্ক রিসেট ও বাতিল মিউটেশন উপলব্ধ নয়।"
+      }
+    }
+  },
+  "auto-backup-enabled": {
+    "label": "নির্ধারিত স্বয়ংক্রিয় ব্যাকআপ",
+    "description": "নির্ধারিত সময়ে দৈনিক রক্ষণাবেক্ষণ ট্রিগার নির্ধারিত রোলব্যাক ব্যাকআপ তৈরি করতে পারে।",
+    "options": {
+      "true": {
+        "label": "চালু",
+        "description": "দৈনিক রক্ষণাবেক্ষণ ব্যবধান পূর্ণ হলে নির্ধারিত রোলব্যাক ব্যাকআপ তৈরি করতে পারে।"
+      },
+      "false": {
+        "label": "বন্ধ",
+        "description": "দৈনিক রক্ষণাবেক্ষণ নির্ধারিত রোলব্যাক ব্যাকআপ তৈরি করবে না।"
+      }
+    }
+  },
+  "auto-backup-interval-days": {
+    "label": "স্বয়ংক্রিয় ব্যাকআপ ব্যবধান",
+    "description": "সফল নির্ধারিত ব্যাকআপের মধ্যে ন্যূনতম দিনের সংখ্যা।"
+  },
+  "auto-backup-keep-latest": {
+    "label": "স্বয়ংক্রিয় ব্যাকআপ ধারণ",
+    "description": "নির্ধারিত ব্যাকআপ তৈরি হওয়ার পর রাখা সর্বশেষ ব্যাকআপের সংখ্যা।"
+  },
+  "garda-self-guard": {
+    "label": "Garda স্ব-সুরক্ষা",
+    "description": "এজেন্ট সরাসরি সুরক্ষিত Garda কন্ট্রোল-প্লেন কাজে প্রবেশ করতে পারবে কিনা তা নিয়ন্ত্রণ করে।",
+    "options": {
+      "deny_agent_entry": {
+        "label": "চালু",
+        "description": "অপারেটর-মালিকানাধীন পথ ছাড়া এজেন্ট সুরক্ষিত কন্ট্রোল-প্লেন কাজে প্রবেশ করতে পারে না।"
+      },
+      "require_operator_confirmation": {
+        "label": "অপারেটর নিশ্চিতকরণ",
+        "description": "সুরক্ষিত কন্ট্রোল-প্লেন প্রবেশের জন্য স্পষ্ট অপারেটর নিশ্চিতকরণ প্রয়োজন।"
+      }
+    }
+  },
+  "full-suite-timeout-blocker": {
+    "label": "ফুল-সুইট টাইমআউট ব্লকার",
+    "description": "পুনরাবৃত্ত ফুল-সুইট টাইমআউট কাজ ব্লক করে মেরামত কাজ প্রস্তাব করবে, নাকি চূড়ান্ত সতর্কতা হিসেবে চলবে তা নিয়ন্ত্রণ করে।",
+    "options": {
+      "true": {
+        "label": "true",
+        "description": "পুনরাবৃত্ত ফুল-সুইট টাইমআউট কাজ শেষ করা ব্লক করে এবং মেরামত কাজ প্রস্তাব করে।"
+      },
+      "false": {
+        "label": "false",
+        "description": "পুনরাবৃত্ত ফুল-সুইট টাইমআউট সতর্কতা হিসেবে রিপোর্ট হয় এবং সম্পন্ন করা ব্লক করে না।"
+      }
+    }
+  },
+  "full-suite-timeout-retry-count": {
+    "label": "ফুল-সুইট টাইমআউট পুনরায় চেষ্টা",
+    "description": "টাইমআউটের পরে টাইমআউট নীতি প্রয়োগের আগে ফুল-সুইট কমান্ড কতবার পুনরায় চালানো হবে।"
+  },
+  "optional-checks-enabled": {
+    "label": "ঐচ্ছিক মান পরীক্ষা",
+    "description": "কম্পাইল, রিভিউ এবং পূর্ণ যাচাইয়ের আগে পরামর্শমূলক স্ব-পরীক্ষা নিয়ম চলবে কি না তা নিয়ন্ত্রণ করে। নিচের নিয়ম সম্পাদনাও একই অডিটেড workflow set পথে যায়।",
+    "options": {
+      "true": {
+        "label": "চালু",
+        "description": "এজেন্টরা ব্যয়বহুল গেটের আগে কনফিগার করা স্ব-পরীক্ষা নিয়ম চালায়।"
+      },
+      "false": {
+        "label": "বন্ধ",
+        "description": "ঐচ্ছিক quality-checklist গেট বাদ যায়, কিন্তু বাধ্যতামূলক compile, review বা full-suite গেটের বদলি হয় না।"
+      }
+    }
+  },
+  "optional-checks-review-failure-cadence-interval": {
+    "label": "গুণমান পরীক্ষার মাঝে ব্যর্থ রিভিউ",
+    "description": "প্রয়োজনীয় quality-checklist উত্তর চালানোর মাঝে কতটি নথিভুক্ত review failure attempt থাকবে। কাউন্টার শুধু নথিভুক্ত review FAIL ফলাফলে বাড়ে; পুনরাবৃত্ত next-step বা preflight refresh এতে বাড়ে না।"
+  },
+  "optional-skill-selection-mode": {
+    "label": "বিশেষজ্ঞ-স্কিল নির্বাচন মোড",
+    "description": "টাস্ক শুরুর সময় বিশেষজ্ঞ-স্কিল মিল বন্ধ, optional, না mandatory হবে তা নিয়ন্ত্রণ করে। পুরনো advisory/required/strict মান read-compatible থাকে এবং সংরক্ষণের সময় canonical mode-এ লেখা হয়।",
+    "options": {
+      "off": {
+        "label": "বন্ধ",
+        "description": "টাস্ক শুরুর সময় বিশেষজ্ঞ স্কিল প্রস্তাব বা বাধ্যতামূলক করা হয় না।"
+      },
+      "optional": {
+        "label": "ঐচ্ছিক",
+        "description": "বিশেষজ্ঞ-স্কিল প্রস্তাব এবং সুপারিশকৃত প্যাক দেখায়, কিন্তু সাধারণ টাস্ক কাজ থামায় না।"
+      },
+      "mandatory": {
+        "label": "বাধ্যতামূলক",
+        "description": "নীতির মিল কোনো ইনস্টল করা বিশেষজ্ঞ স্কিল বেছে নিলে implementation শুরু করার আগে সেটি প্রয়োজন হয়।"
+      },
+      "advisory": {
+        "label": "পুরনো: advisory -> optional",
+        "description": "optional-এর compatibility alias; সংরক্ষণ করলে optional লেখা হয়।"
+      },
+      "required": {
+        "label": "পুরনো: required -> mandatory",
+        "description": "mandatory-এর compatibility alias; সংরক্ষণ করলে mandatory লেখা হয়।"
+      },
+      "strict": {
+        "label": "পুরনো: strict -> mandatory",
+        "description": "mandatory-এর compatibility alias; সংরক্ষণ করলে mandatory লেখা হয়।"
+      }
+    }
+  },
+  "optional-check-rule-management": {
+    "label": "ঐচ্ছিক গুণমান-পরীক্ষা নিয়ম",
+    "description": "নিরীক্ষিত workflow-setting পথ দিয়ে একটি পরামর্শমূলক ঐচ্ছিক গুণমান-পরীক্ষা নিয়ম যোগ, আপডেট বা সরায়।"
+  },
+  "scope-budget-warn-files": {
+    "label": "স্কোপ বাজেট: পরিবর্তিত ফাইল - WARN সতর্কতা",
+    "description": "WARN সতর্কতা: পরিবর্তিত ফাইল above threshold; চালিয়ে যাওয়া যায়; keep it below BLOCK ব্লক."
+  },
+  "scope-budget-block-files": {
+    "label": "স্কোপ বাজেট: পরিবর্তিত ফাইল - BLOCK ব্লক",
+    "description": "BLOCK ব্লক: পরিবর্তিত ফাইল above threshold; next-step split-required এ যায়."
+  },
+  "scope-budget-warn-changed-lines": {
+    "label": "স্কোপ বাজেট: পরিবর্তিত লাইন - WARN সতর্কতা",
+    "description": "WARN সতর্কতা: পরিবর্তিত লাইন above threshold; চালিয়ে যাওয়া যায়; keep it below BLOCK ব্লক."
+  },
+  "scope-budget-block-changed-lines": {
+    "label": "স্কোপ বাজেট: পরিবর্তিত লাইন - BLOCK ব্লক",
+    "description": "BLOCK ব্লক: পরিবর্তিত লাইন above threshold; next-step split-required এ যায়."
+  },
+  "scope-budget-warn-required-reviews": {
+    "label": "স্কোপ বাজেট: আবশ্যিক রিভিউ টাইপ - WARN সতর্কতা",
+    "description": "WARN সতর্কতা: আবশ্যিক রিভিউ টাইপ above threshold; চালিয়ে যাওয়া যায়; keep it below BLOCK ব্লক."
+  },
+  "scope-budget-block-required-reviews": {
+    "label": "স্কোপ বাজেট: আবশ্যিক রিভিউ টাইপ - BLOCK ব্লক",
+    "description": "BLOCK ব্লক: আবশ্যিক রিভিউ টাইপ above threshold; next-step split-required এ যায়."
+  },
+  "scope-budget-warn-review-tokens": {
+    "label": "স্কোপ বাজেট: রিভিউ টোকেন - WARN সতর্কতা",
+    "description": "WARN সতর্কতা: রিভিউ টোকেন above threshold; চালিয়ে যাওয়া যায়; keep it below BLOCK ব্লক."
+  },
+  "scope-budget-block-review-tokens": {
+    "label": "স্কোপ বাজেট: রিভিউ টোকেন - BLOCK ব্লক",
+    "description": "BLOCK ব্লক: রিভিউ টোকেন above threshold; next-step split-required এ যায়."
+  },
+  "parent-audit-enabled": {
+    "label": "মূল কাজের পূর্ণ নিরীক্ষা ও পর্যালোচনা",
+    "description": "কাজ চলাকালীন ভাগ করা হলে সব উপকাজ গ্রহণের পরে একবার যৌথ পর্যালোচনা হবে। সব সমস্যা একটি F কাজে থাকবে; সেটি গ্রহণ হলে মূল কাজ শেষ হবে। শুরুতেই হাতে তৈরি করা দল স্বয়ংক্রিয়ভাবে শেষ হয়। পরবর্তী বিভাজনে প্রযোজ্য।",
+    "options": {
+      "true": {
+        "label": "চালু",
+        "description": "যৌথ ফলাফল একবার স্বাধীনভাবে পর্যালোচনা করুন।"
+      },
+      "false": {
+        "label": "বন্ধ",
+        "description": "সব উপকাজ গ্রহণ হলে স্বয়ংক্রিয়ভাবে শেষ করুন।"
+      }
+    }
+  }
+}

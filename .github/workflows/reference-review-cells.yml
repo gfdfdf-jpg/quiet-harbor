@@ -1,0 +1,62 @@
+name: Reference review cells (diagnostic only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      cells:
+        description: Exact comma-separated common review matrix cell IDs; never release acceptance
+        type: string
+        required: true
+        default: review-matrix-node--passed-delta-then-test--test_after_code,review-matrix-php-laravel--test-small-test--test_after_code,review-matrix-polyglot-python-go--source-line-limit-240--test_after_code,review-matrix-python--audit-recovery-no-fresh-review--strict_sequential
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  cells:
+    name: Diagnostic cells / Windows / Node 24
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      REVIEW_CELLS: ${{ inputs.cells }}
+      STAND_PROVIDER: Codex
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-fund --no-audit
+      - name: Run only the selected cells
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Get-ChildItem Env:GIT_CONFIG_* | Remove-Item
+          $tempRoot = Join-Path $env:RUNNER_TEMP 'reference-review-cells-temp'
+          New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
+          $env:TMP = $env:TEMP = $env:TMPDIR = (Get-Item -LiteralPath $tempRoot).FullName
+          node tests/node/synthetic/review-matrix.cjs run --only $env:REVIEW_CELLS --report "$env:RUNNER_TEMP/reference-review-cells"
+          exit $LASTEXITCODE
+      - name: Label the diagnostic scope
+        if: always()
+        run: |
+          'Diagnostic common review matrix cells only. This run does not certify the release stand.' >> $env:GITHUB_STEP_SUMMARY
+          "Selected cells: $env:REVIEW_CELLS" >> $env:GITHUB_STEP_SUMMARY
+      - name: Upload full cell evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reference-review-cells-windows
+          path: ${{ runner.temp }}/reference-review-cells/**
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 15

@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "oracleVersion": "stack-oracle-1",
+  "fixtures": [
+    "spring-maven",
+    "java-gradle",
+    "kotlin-gradle",
+    "dotnet",
+    "go",
+    "rust",
+    "python",
+    "node",
+    "php-phpunit",
+    "php-laravel",
+    "vite-playwright",
+    "pnpm-nx",
+    "ruby",
+    "elixir",
+    "swift",
+    "cmake",
+    "unknown-quartz",
+    "polyglot-maven-ts",
+    "polyglot-python-go"
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "tab_intro": {
+    "description": "Retentiebeleid voor runtime in `runtime-retention.json`: drempels voor geplande onderhoudstaken, compactieregels en beschermde handmatige opschoningsacties."
+  },
+  "daily_maintenance_enabled": {
+    "label": "Dagelijks onderhoud",
+    "description": "Schakelt gepland dagelijks onderhoud in of uit. Wanneer ingeschakeld kan de orchestrator volgens schema een beperkte batch geschikte taken verwerken zonder handmatige tussenkomst."
+  },
+  "daily_maintenance_max_tasks_per_run": {
+    "label": "Maximaal aantal taken per onderhoudsrun",
+    "description": "Bovengrens voor hoeveel geschikte taken het dagelijkse onderhoud in één run verwerkt. Beperkt de impact als drempels verkeerd zijn geconfigureerd."
+  },
+  "eligible_older_than_days": {
+    "label": "Taken ouder dan verwijderen (dagen)",
+    "description": "Handmatige opschoning selecteert runtime-artefacten van taken die ouder zijn dan dit aantal dagen. Actieve en nieuwere taken blijven beschermd."
+  },
+  "keep_latest_tasks": {
+    "label": "Minstens nieuwste taken behouden (aantal)",
+    "description": "Bewaart altijd minstens zoveel meest recente taken, zelfs als ze ouder zijn dan de leeftijdsdrempel. Zet op 0 om alleen leeftijd en actieve-taakbescherming te gebruiken."
+  },
+  "include_problematic_tasks": {
+    "label": "Ook problematische taken verwijderen"
+  },
+  "daily_maintenance_dry_run": {
+    "label": "Dry-run voor dagelijks onderhoud",
+    "description": "Wanneer de waarde true is, somt het geplande dagelijkse onderhoud alleen kandidaten op en schrijft het audituitvoer; artefacten worden niet verwijderd of gecomprimeerd. Gebruik true tijdens het afstellen van drempels en zet daarna false om toe te passen."
+  },
+  "purge_require_confirm": {
+    "label": "Bevestigingsbeveiliging voor automatische cleanup",
+    "description": "Als true blijft geplande of CLI-destructieve cleanup bevestiging vereisen en draait deze niet stilzwijgend. Handmatige UI-cleanup en taakartefact-cleanup vragen altijd hun eigen getypte bevestigingszinnen."
+  },
+  "healthy_done_compact_after_days": {
+    "label": "Gezonde DONE comprimeren na (dagen)",
+    "description": "Na zoveel dagen mogen succesvol voltooide DONE-taken worden gecomprimeerd naar ledger-only historie zodra ledger-bewijs is geverifieerd."
+  },
+  "problem_tasks_compress_after_days": {
+    "label": "Probleemtaken comprimeren na (dagen)",
+    "description": "Na zoveel dagen mogen zware forensische artefacten van mislukte of vastgelopen taken worden gecomprimeerd, terwijl herstelbare leesbare bewijzen behouden blijven."
+  },
+  "manual_runtime_cleanup": {
+    "label": "Handmatige runtime-cleanup",
+    "description": "Verwijdert runtime-artefacten van niet-actieve taken die zijn geselecteerd met de leeftijds- en keep-latest-bediening in deze rij. De preview is een dry-run-rapport; Opschoning uitvoeren verwijdert de geselecteerde taakartefacten, herstelt gedeelde indexen eenmaal en vereist getypte bevestiging."
+  },
+  "task_purge": {
+    "label": "Runtime-artefacten van taak opschonen",
+    "description": "Verwijdert runtime-artefacten van een taak-ID en repareert gedeelde indexen. Verwijdert geen volledige gedeelde bestanden; actieve-taakbescherming blijft op de server gelden."
+  },
+  "task_id": {
+    "label": "Taak-ID"
+  },
+  "purge_task_button": {
+    "label": "Runtime-artefacten opschonen"
+  },
+  "run_preview": {
+    "label": "Voorberekening"
+  },
+  "value_true": {
+    "label": "true — ingeschakeld"
+  },
+  "value_false": {
+    "label": "false — uitgeschakeld"
+  },
+  "run_apply": {
+    "label": "Opschoning uitvoeren"
+  },
+  "cleanup_report": {
+    "label": "Opschoonrapport"
+  },
+  "cleanup_result": {
+    "label": "Opschoonresultaat"
+  },
+  "report_preview_tasks": {
+    "label": "Previewkandidaten"
+  },
+  "report_eligible_now": {
+    "label": "Nu geschikt"
+  },
+  "report_would_remove": {
+    "label": "Zou verwijderen"
+  },
+  "report_would_free": {
+    "label": "Zou vrijmaken"
+  },
+  "report_removed": {
+    "label": "Verwijderd"
+  },
+  "report_freed": {
+    "label": "Vrijgemaakt"
+  }
+}

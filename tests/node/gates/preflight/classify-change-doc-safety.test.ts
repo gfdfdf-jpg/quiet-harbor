@@ -1,0 +1,319 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+import { normalizeOrdinaryDocPathPatterns } from '../../../../src/core/ordinary-doc-paths';
+import { classifyChange } from '../../../../src/gates/preflight/classify-change';
+import {
+    getSafeOrdinaryDocPathMatches,
+    isDocumentationLikePath,
+    isProtectedControlPlaneDocumentationSurfacePath,
+    isSafeOrdinaryDocumentationPath,
+    isSecuritySensitiveDocumentationScopePath
+} from '../../../../src/gates/preflight/classify-change-doc-safety';
+import {
+    runClassifyChangeCommand,
+    runHandshakeDiagnosticsCommand,
+    runShellSmokePreflightCommand
+} from '../../../../src/cli/commands/gates';
+import {
+    createTempRepo,
+    getOrchestratorRoot,
+    initializeGitRepo,
+    loadTaskEntryRulePack,
+    runEnterTaskMode,
+    seedInitAnswers,
+    seedTaskQueue
+} from '../../cli/commands/gates/preflight/gates-preflight-fixtures';
+import { defaultCapabilities, makeConfig } from './classify-change-test-support';
+
+const ordinaryDocPaths = ['docs/**', 'doc/**', 'examples/**', 'custom-notes/**'];
+const config = makeConfig({ ordinary_doc_paths: ordinaryDocPaths });
+
+function classifyFile(filePath: string) {
+    return classifyChange({
+        normalizedFiles: [filePath],
+        taskIntent: 'Classify a changed file',
+        changedLinesTotal: 5,
+        additionsTotal: 5,
+        deletionsTotal: 0,
+        renameCount: 0,
+        detectionSource: 'explicit_changed_files',
+        classificationConfig: config,
+        reviewCapabilities: defaultCapabilities
+    });
+}
+
+describe('ordinary documentation file safety', () => {
+    it('keeps explicitly declared source roles behavioral under documentation and configuration names', () => {
+        for (const filePath of ['src/view.mdx', 'docs/worker.md', 'config/rules.yaml', 'README']) {
+            const declaredConfig = makeConfig({ file_roles: { [filePath]: 'source' } });
+            const result = classifyChange({ normalizedFiles: [filePath], changedLinesTotal: 5,
+                taskIntent: 'Change project behavior', classificationConfig: declaredConfig,
+                reviewCapabilities: defaultCapabilities });
+            assert.equal(result.scope_category, 'code', filePath);
+            assert.equal(isSafeOrdinaryDocumentationPath(filePath, declaredConfig), false, filePath);
+        }
+    });
+
+    it('recognizes explicitly declared test roles before extension and directory guesses', () => {
+        for (const filePath of ['specifications/purchase.case', 'tests/purchase.yaml', 'docs/purchase.mdx', 'quality/购买']) {
+            const result = classifyChange({ normalizedFiles: [filePath], changedLinesTotal: 5,
+                taskIntent: 'Verify project behavior', classificationConfig: makeConfig({
+                    file_roles: { [filePath]: 'test' }
+                }), reviewCapabilities: defaultCapabilities });
+            assert.equal(result.scope_category, 'test-only', filePath);
+            assert.equal(result.required_reviews.test, true, filePath);
+        }
+    });
+
+    it('excludes dependency requirements, executable MDX and project instructions from ordinary documents', () => {
+        const config = makeConfig({ ordinary_doc_paths: ['**/*.txt', '**/*.mdx', '**/*.md'] });
+        for (const file of ['requirements/base.txt', 'requirements.txt', 'requirements-dev.txt',
+            'packages/api/requirements/prod.txt', 'src/page.mdx', 'packages/web/src/page.mdx',
+            'pages/blog.mdx', 'components/Intro.mdx', 'examples/demo.mdx', 'pages/security.mdx',
+            'src/docs/guide.mdx',
+            'AGENTS.md', 'CLAUDE.md', 'docs/agent-rules/reviews.md']) {
+            assert.equal(isSafeOrdinaryDocumentationPath(file, config), false, file);
+        }
+        for (const file of ['docs/page.mdx', 'doc/page.mdx', 'documentation/page.mdx', 'docs/guide.txt', 'src/README.md']) {
+            assert.equal(isSafeOrdinaryDocumentationPath(file, config), true, file);
+        }
+    });
+
+    it('routes MDX outside documentation folders to code review even with an ordinary-doc override', () => {
+        const mdxConfig = makeConfig({ ordinary_doc_paths: [
+            'pages/**', 'components/**', 'examples/**', 'docs/**', 'doc/**', 'documentation/**'
+        ] });
+        for (const file of ['pages/blog.mdx', 'components/Intro.mdx', 'examples/demo.mdx', 'pages/security.mdx']) {
+            const result = classifyChange({ normalizedFiles: [file], taskIntent: 'Change behavior', changedLinesTotal: 5,
+                classificationConfig: mdxConfig, reviewCapabilities: defaultCapabilities });
+            assert.equal(result.scope_category, 'code', file);
+            assert.equal(result.required_reviews.code, true, file);
+            assert.deepEqual(result.triggers.ordinary_doc_path_matched_files, [], file);
+        }
+        for (const file of ['docs/page.mdx', 'doc/page.mdx', 'documentation/page.mdx']) {
+            const result = classifyChange({ normalizedFiles: [file], taskIntent: 'Change documentation', changedLinesTotal: 5,
+                classificationConfig: mdxConfig, reviewCapabilities: defaultCapabilities });
+            assert.equal(result.scope_category, 'docs-only', file);
+            assert.equal(isSafeOrdinaryDocumentationPath(file, mdxConfig), true, file);
+        }
+    });
+
+    for (const stem of [
+        'docs/worker', 'doc/worker', 'packages/help/docs/worker', 'README',
+        'README/index', 'CHANGELOG', 'examples/worker', 'custom-notes/worker'
+    ]) {
+        it(`requires a documentation file form under ${stem}`, () => {
+            for (const suffix of [
+                'js', 'ts', 'mjs', 'cjs', 'py', 'java', 'cpp', 'c', 'sh',
+                'ps1', 'vue', 'svelte', 'unknown', 'md.js', 'md.unknown'
+            ]) {
+                const filePath = `${stem}.${suffix}`;
+                assert.equal(isDocumentationLikePath(filePath, ordinaryDocPaths), false, filePath);
+                assert.equal(isSafeOrdinaryDocumentationPath(filePath, config), false, filePath);
+                assert.deepEqual(getSafeOrdinaryDocPathMatches([filePath], config), [], filePath);
+                assert.equal(classifyFile(filePath).scope_category, 'code', filePath);
+            }
+        });
+    }
+
+    it('rejects executable and unknown file forms under broad documentation paths', () => {
+        assert.equal(isSafeOrdinaryDocumentationPath('docs/worker.js', config), false);
+        assert.equal(isSafeOrdinaryDocumentationPath('custom-notes/worker.unknown', config), false);
+        assert.equal(isSafeOrdinaryDocumentationPath('README/index.js', config), false);
+    });
+
+    it('keeps recognized tests out of documentation exemptions', () => {
+        for (const filePath of [
+            'docs/worker.test.ts', 'doc/worker.spec.js', 'README/index.test.py',
+            'examples/tests/worker.mjs', 'custom-notes/tests/worker.ps1', 'docs/tests/worker.unknown'
+        ]) {
+            const result = classifyFile(filePath);
+            assert.equal(result.scope_category, 'test-only', filePath);
+            assert.equal(result.required_reviews.test, true, filePath);
+            assert.deepEqual(result.triggers.ordinary_doc_path_matched_files, [], filePath);
+            assert.deepEqual(result.triggers.test_ordinary_doc_suppressed_files, [], filePath);
+        }
+    });
+
+    it('preserves text documentation and conventional extensionless files', () => {
+        for (const filePath of [
+            'README', 'CHANGELOG', 'LICENSE', 'NOTICE', 'CODEOWNERS', 'docs/guide.md',
+            'doc/guide.mdx', 'packages/help/docs/guide.rst', 'examples/guide.adoc',
+            'custom-notes/guide.asciidoc', 'docs/guide.txt', 'docs/guide.textile', 'DOCS/GUIDE.MD'
+        ]) {
+            assert.equal(isSafeOrdinaryDocumentationPath(filePath, config), true, filePath);
+            assert.equal(classifyFile(filePath).scope_category, 'docs-only', filePath);
+        }
+        assert.equal(isSafeOrdinaryDocumentationPath('tests/plan.md', makeConfig({
+            ordinary_doc_paths: ['tests/plan.md']
+        })), true);
+    });
+
+    it('requires an exact explicit path for an unfamiliar extensionless document', () => {
+        for (const filePath of ['docs/worker', 'doc/worker', 'examples/worker', 'custom-notes/worker']) {
+            assert.equal(isSafeOrdinaryDocumentationPath(filePath, config), false, filePath);
+        }
+        assert.equal(isSafeOrdinaryDocumentationPath('BACKLOG', makeConfig({
+            ordinary_doc_paths: ['BACKLOG']
+        })), true);
+        assert.equal(isSafeOrdinaryDocumentationPath('custom-notes/BACKLOG', makeConfig({
+            ordinary_doc_paths: ['custom-notes/**', 'custom-notes/BACKLOG']
+        })), true);
+        assert.equal(isSafeOrdinaryDocumentationPath('custom-notes/worker', makeConfig({
+            ordinary_doc_paths: ['custom-notes/']
+        })), false);
+    });
+
+    it('rejects ordinary-doc overrides of sensitive and protected boundaries', () => {
+        const protectedConfig = makeConfig({
+            ordinary_doc_paths: ['docs/**', 'garda-agent-orchestrator/**'],
+            protected_control_plane_roots: ['garda-agent-orchestrator/']
+        });
+        assert.equal(isSafeOrdinaryDocumentationPath('docs/security.md', protectedConfig), false);
+        assert.equal(isSecuritySensitiveDocumentationScopePath('docs/security.md', protectedConfig), true);
+        assert.equal(isSecuritySensitiveDocumentationScopePath('docs/security.sh', protectedConfig), false);
+        assert.equal(isSafeOrdinaryDocumentationPath('garda-agent-orchestrator/live/docs/agent-rules/00-core.md', protectedConfig), false);
+        assert.equal(isProtectedControlPlaneDocumentationSurfacePath('garda-agent-orchestrator/docs/guide.md', protectedConfig), true);
+        assert.equal(isProtectedControlPlaneDocumentationSurfacePath('garda-agent-orchestrator/docs/worker.py', protectedConfig), false);
+        assert.equal(isSafeOrdinaryDocumentationPath('docs/settings.json', protectedConfig), false);
+    });
+
+    it('keeps repository-wide wildcard and traversal configuration rejected', () => {
+        assert.throws(() => normalizeOrdinaryDocPathPatterns(['**/*.md']));
+        assert.throws(() => normalizeOrdinaryDocPathPatterns(['*/README.md']));
+        assert.throws(() => normalizeOrdinaryDocPathPatterns(['../docs/**']));
+        assert.throws(() => normalizeOrdinaryDocPathPatterns(['docs/../notes/**']));
+    });
+
+    it('does not treat tests with sensitive, protected or non-documentation files as test-only', () => {
+        for (const otherPath of [
+            'src/main.ts', 'docs/settings.json', 'docs/worker.unknown',
+            'docs/security.md', 'garda-agent-orchestrator/live/docs/agent-rules/00-core.md'
+        ]) {
+            const result = classifyChange({
+                normalizedFiles: ['tests/unit/example.test.ts', otherPath],
+                taskIntent: 'Update a test and another file',
+                changedLinesTotal: 5, additionsTotal: 5, deletionsTotal: 0, renameCount: 0,
+                detectionSource: 'explicit_changed_files', classificationConfig: config,
+                reviewCapabilities: defaultCapabilities
+            });
+            assert.notEqual(result.scope_category, 'test-only', otherPath);
+        }
+    });
+});
+
+function prepareNativePreflight(profile: string, apiEnabled = defaultCapabilities.api) {
+    const repoRoot = createTempRepo();
+    const taskId = `T-170-doc-safety-${profile}`;
+    const orchestratorRoot = getOrchestratorRoot(repoRoot);
+    const configRoot = path.join(orchestratorRoot, 'live', 'config');
+    fs.mkdirSync(configRoot, { recursive: true });
+    const profiles = JSON.parse(fs.readFileSync(path.resolve('template/config/profiles.json'), 'utf8'));
+    profiles.active_profile = profile;
+    fs.writeFileSync(path.join(configRoot, 'profiles.json'), JSON.stringify(profiles));
+    fs.writeFileSync(path.join(configRoot, 'paths.json'), JSON.stringify({ ordinary_doc_paths: ordinaryDocPaths }));
+    fs.writeFileSync(path.join(configRoot, 'review-capabilities.json'), JSON.stringify({ ...defaultCapabilities, api: apiEnabled }));
+    seedTaskQueue(repoRoot, taskId, 'TODO', profile, 'fixture', 'Classify a single file');
+    seedInitAnswers(repoRoot);
+    fs.writeFileSync(path.join(repoRoot, 'VERSION'), '0.0.0-test\n');
+    fs.mkdirSync(path.join(repoRoot, '.agents', 'workflows'), { recursive: true });
+    fs.writeFileSync(path.join(repoRoot, '.agents', 'workflows', 'start-task.md'), '# fixture router\n');
+    fs.mkdirSync(path.join(orchestratorRoot, 'bin'), { recursive: true });
+    fs.writeFileSync(path.join(orchestratorRoot, 'bin', 'garda.js'), "console.log('0.0.0-test');\n");
+    initializeGitRepo(repoRoot);
+    assert.equal(runEnterTaskMode({ repoRoot, taskId, provider: 'Codex', taskSummary: 'Classify a single file' }).exitCode, 0);
+    assert.equal(loadTaskEntryRulePack(repoRoot, taskId).exitCode, 0);
+    const handshake = runHandshakeDiagnosticsCommand({ repoRoot, taskId, provider: 'Codex', emitMetrics: false });
+    assert.equal(handshake.exitCode, 0, handshake.outputLines.join('\n'));
+    const smoke = runShellSmokePreflightCommand({ repoRoot, taskId, emitMetrics: false });
+    assert.equal(smoke.exitCode, 0, smoke.outputLines.join('\n'));
+    return { repoRoot, taskId };
+}
+
+describe('native documentation safety decisions', () => {
+    it('keeps active reached lanes when a remediation owner capability is disabled in the frozen snapshot', () => {
+        const { repoRoot, taskId } = prepareNativePreflight('balanced', false);
+        try {
+            fs.mkdirSync(path.join(repoRoot, 'src/routes'), { recursive: true });
+            fs.writeFileSync(path.join(repoRoot, 'src/routes/user.ts'), 'export const user = true;\n');
+            const result = runClassifyChangeCommand({ repoRoot, taskId, changedFiles: ['src/routes/user.ts'],
+                remediationRequiredReviewTypes: ['code', 'test', 'api'], taskIntent: 'Fix the user route',
+                outputPath: path.join(repoRoot, 'garda-agent-orchestrator/runtime/reviews', taskId + '-preflight.json'),
+                emitMetrics: false });
+            const payload = JSON.parse(result.outputText);
+            assert.equal(payload.required_reviews.api, false);
+            assert.equal(payload.required_reviews.code, true);
+            assert.equal(payload.required_reviews.test, true);
+        } finally { fs.rmSync(repoRoot, { recursive: true, force: true }); }
+    });
+
+    for (const profile of ['balanced', 'fast', 'strict']) {
+        it(`keeps tests with ordinary docs in the final ${profile} test-review scope`, () => {
+            const { repoRoot, taskId } = prepareNativePreflight(profile);
+            const changedFiles = ['tests/unit/example.test.ts', 'docs/changes/example.md', 'CHANGELOG.md'];
+            try {
+                for (const filePath of changedFiles) {
+                    const absolutePath = path.join(repoRoot, filePath);
+                    fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
+                    fs.writeFileSync(absolutePath, 'changed file\n');
+                }
+                for (const forceCodeReview of [false, true]) {
+                    const result = runClassifyChangeCommand({
+                        repoRoot, taskId, changedFiles, forceCodeReview,
+                        taskIntent: 'Update tests and ordinary change documentation',
+                        outputPath: path.join(repoRoot, 'garda-agent-orchestrator/runtime/reviews', `${taskId}-preflight.json`),
+                        emitMetrics: false
+                    });
+                    const payload = JSON.parse(result.outputText);
+                    assert.equal(payload.scope_category, 'test-only');
+                    assert.deepEqual([...payload.changed_files].sort(), [...changedFiles].sort());
+                    assert.equal(payload.required_reviews.test, true);
+                    assert.equal(payload.required_reviews.code, forceCodeReview);
+                    assert.deepEqual(payload.effective_review_snapshot.required_reviews, payload.required_reviews);
+                    assert.deepEqual(payload.triggers.ordinary_doc_path_matched_files, ['docs/changes/example.md']);
+                }
+            } finally {
+                fs.rmSync(repoRoot, { recursive: true, force: true });
+            }
+        });
+
+        it(`uses safe documentation classification in the final ${profile} review snapshot`, () => {
+            const { repoRoot, taskId } = prepareNativePreflight(profile);
+            try {
+                for (const [filePath, category] of [
+                    ['docs/worker.js', 'code'], ['README.js', 'code'],
+                    ['custom-notes/worker.unknown', 'code'], ['docs/worker.test.ts', 'test-only'],
+                    ['docs/guide.md', 'docs-only'], ['examples/guide.rst', 'docs-only']
+                ]) {
+                    const absolutePath = path.join(repoRoot, filePath);
+                    fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
+                    fs.writeFileSync(absolutePath, 'changed file\n');
+                    const result = runClassifyChangeCommand({
+                        repoRoot, taskId, changedFiles: [filePath], taskIntent: 'Classify a single file',
+                        outputPath: path.join(repoRoot, 'garda-agent-orchestrator/runtime/reviews', `${taskId}-preflight.json`),
+                        emitMetrics: false
+                    });
+                    const payload = JSON.parse(result.outputText);
+                    assert.equal(payload.scope_category, category, filePath);
+                    assert.equal(payload.profile_selection.effective_profile, profile);
+                    assert.deepEqual(payload.effective_review_snapshot.required_reviews, payload.required_reviews);
+                    if (category === 'docs-only') {
+                        assert.equal(payload.required_reviews.code, false, filePath);
+                        assert.equal(payload.required_reviews.test, false, filePath);
+                    } else {
+                        assert.deepEqual(payload.triggers.ordinary_doc_path_matched_files, [], filePath);
+                        assert.deepEqual(payload.triggers.test_ordinary_doc_suppressed_files, [], filePath);
+                        if (category === 'test-only') assert.equal(payload.required_reviews.test, true, filePath);
+                        if (category === 'code' && profile !== 'fast') assert.equal(payload.required_reviews.code, true, filePath);
+                    }
+                    fs.unlinkSync(absolutePath);
+                }
+            } finally {
+                fs.rmSync(repoRoot, { recursive: true, force: true });
+            }
+        });
+    }
+});
