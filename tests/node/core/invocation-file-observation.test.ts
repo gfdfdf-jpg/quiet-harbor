@@ -1,0 +1,373 @@
+import test, { type TestContext } from 'node:test';
+import assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { fileSha256 } from '../../../src/core/file-hashing';
+import { fileSha256 as runtimeFileSha256 } from '../../../src/gate-runtime/hash';
+import { readObservedValidationFile } from '../../../src/core/project-validation-identity';
+import { statFileIdentitySync } from '../../../src/core/file-stat';
+import { getSafeWorktreePathState } from '../../../src/gates/workspace/worktree-path-state';
+import {
+    assertInvocationDependenciesCurrent, createInvocationReadMemoKey, memoizeInvocationRead, withInvocationReadObservation
+} from '../../../src/core/invocation-read-observation';
+import { withNextStepMeasurement, type NextStepMeasurement } from '../../../src/core/next-step-measurement';
+import { observedInvocationValue, readInvocationPathObservation, readInvocationTextFile } from '../../../src/core/invocation-file-observation';
+import { readJsonFile } from '../../../src/core/json';
+
+function fixture(t: TestContext): string {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'garda-scope-observation-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    return root;
+}
+
+function replaceFile(file: string, content: string): void {
+    const replacement = file + '.replacement';
+    fs.writeFileSync(replacement, content);
+    fs.renameSync(replacement, file);
+}
+
+function measured(action: () => void): NextStepMeasurement {
+    let measurement: NextStepMeasurement | undefined;
+    withNextStepMeasurement(() => withInvocationReadObservation(action), value => { measurement = value; });
+    return measurement!;
+}
+
+function counts(measurement: NextStepMeasurement, prefix: string): number[] {
+    return Object.entries(measurement.work).filter(([key]) => key.startsWith(prefix)).map(([, count]) => count);
+}
+
+test('JSON, text and authenticated consumers read each config payload once per invocation', t => {
+    const root = fixture(t);
+    const names = ['profiles.json', 'paths.json', 'isolation-mode.json', 'package.json', 'review-capabilities.json', 'workflow-config.json'];
+    for (const name of names) fs.writeFileSync(path.join(root, name), '{"version":1}');
+    for (let invocation = 0; invocation < 2; invocation++) {
+        const measurement = measured(() => {
+            for (let repeat = 0; repeat < 38; repeat++) for (const name of names) {
+                const file = path.join(root, name);
+                assert.equal(readInvocationTextFile(file), '{"version":1}');
+                const parsed = readJsonFile(file) as { version: number };
+                assert.equal(parsed.version, 1);
+                parsed.version = 99;
+                assert.equal(readObservedValidationFile(root, name).bytes.toString(), '{"version":1}');
+            }
+        });
+        assert.deepEqual(counts(measurement, 'payload_read:'), names.map(() => 1));
+    }
+    const file = path.join(root, names[0]);
+    assert.throws(() => withInvocationReadObservation(() => {
+        assert.deepEqual(readJsonFile(file), { version: 1 });
+        fs.writeFileSync(file, '{"version":2}');
+        assertInvocationDependenciesCurrent();
+    }), /changed/iu);
+    assert.deepEqual(readJsonFile(file), { version: 2 });
+    assert.throws(() => withInvocationReadObservation(() => {
+        readJsonFile(file);
+        replaceFile(file, '{"version":3}');
+    }), /changed/iu);
+    assert.deepEqual(withInvocationReadObservation(() => readJsonFile(file)), { version: 3 });
+});
+
+test('scope paths and all hash entrypoints share exactly 64 observations at one and five lanes', t => {
+    const root = fixture(t);
+    const files = Array.from({ length: 64 }, (_, index) => 'source-' + index + '.txt');
+    for (const relative of files) fs.writeFileSync(path.join(root, relative), 'content for ' + relative);
+    for (const lanes of [1, 5]) {
+        const measurement = measured(() => {
+            for (let lane = 0; lane < lanes; lane += 1) {
+                for (const relative of files) {
+                    const file = path.join(root, relative), state = getSafeWorktreePathState(root, relative);
+                    assert.equal(state.status, 'file');
+                    assert.equal(fileSha256(file), state.sha256);
+                    assert.equal(runtimeFileSha256(file), state.sha256);
+                    assert.equal(readObservedValidationFile(root, relative).identity.sha256, state.sha256);
+                }
+            }
+        });
+        assert.deepEqual(counts(measurement, 'scope_path_state:'), Array<number>(64).fill(1));
+        assert.deepEqual(counts(measurement, 'file_hash:'), Array<number>(64).fill(1));
+    }
+});
+
+test('retains Windows native path errors and rejects recovery before final validation', {
+    skip: process.platform !== 'win32'
+}, t => {
+    const root = fixture(t), file = path.join(root, 'native path \u0444\u0430\u0439\u043b.txt');
+    fs.writeFileSync(file, 'observed bytes');
+    const nativeFs = require('node:fs') as typeof fs;
+    const originalNative = nativeFs.realpathSync.native;
+    const denied = Object.assign(new Error('Native path lookup denied'), { code: 'EACCES' });
+    let fail = true;
+    nativeFs.realpathSync.native = function (this: unknown, ...args: unknown[]) {
+        if (args[0] === file && fail) throw denied;
+        return Reflect.apply(originalNative, this, args);
+    } as typeof fs.realpathSync.native;
+    try {
+        const readFailure = () => assert.throws(() => observedInvocationValue(
+            readInvocationPathObservation(file)!.realPath
+        ), error => error === denied);
+        withInvocationReadObservation(readFailure);
+        assert.throws(() => withInvocationReadObservation(() => {
+            readFailure();
+            fail = false;
+        }), /Invocation file observation changed/u);
+    } finally { nativeFs.realpathSync.native = originalNative; }
+});
+
+test('Windows supplied legacy real roots retain containment for extended-length paths', {
+    skip: process.platform !== 'win32'
+}, t => {
+    const root = fixture(t), relativePath = 'source.txt';
+    fs.writeFileSync(path.join(root, relativePath), 'observed bytes');
+    const extendedRoot = path.toNamespacedPath(root);
+    const legacyRealRoot = fs.realpathSync(extendedRoot);
+    assert.notEqual(legacyRealRoot, fs.realpathSync.native(root));
+    for (const includeContentHashes of [true, false]) {
+        const expected = getSafeWorktreePathState(root, relativePath, { includeContentHashes });
+        assert.equal(expected.status, 'file');
+        for (const repoRoot of [root, extendedRoot]) {
+            const options = { repoRealPath: legacyRealRoot, includeContentHashes };
+            assert.deepEqual(getSafeWorktreePathState(repoRoot, relativePath, options), expected);
+            assert.deepEqual(withInvocationReadObservation(
+                () => getSafeWorktreePathState(repoRoot, relativePath, options)
+            ), expected);
+        }
+    }
+});
+
+test('Windows symlink scope keeps legacy relative target containment across root aliases', {
+    skip: process.platform !== 'win32'
+}, t => {
+    const root = fixture(t), target = path.join(root, 'Target.txt'), link = path.join(root, 'link.txt');
+    fs.writeFileSync(target, 'observed target bytes');
+    try { fs.symlinkSync(target, link, 'file'); }
+    catch { t.skip('File symlink creation is unavailable'); return; }
+    const legacyRealRoot = fs.realpathSync(path.toNamespacedPath(root));
+    assert.equal(fs.realpathSync.native(legacyRealRoot), fs.realpathSync.native(root));
+    assert.equal(getSafeWorktreePathState(root, 'link.txt').target_path, 'Target.txt');
+    for (const includeContentHashes of [true, false]) {
+        const options = { repoRealPath: legacyRealRoot, includeContentHashes };
+        assert.deepEqual(getSafeWorktreePathState(root, 'link.txt', options), { status: 'outside_repo' });
+        assert.deepEqual(withInvocationReadObservation(
+            () => getSafeWorktreePathState(root, 'link.txt', options)
+        ), { status: 'outside_repo' });
+    }
+});
+
+test('retains option-specific projections without duplicate content hashes', t => {
+    const root = fixture(t), file = path.join(root, 'source.txt');
+    fs.mkdirSync(path.join(root, 'other'));
+    fs.writeFileSync(file, 'observed content');
+    const combinations = [
+        { includeContentHashes: false }, {}, { repoRealPath: path.join(root, 'other') },
+        { repoRealPath: fs.realpathSync(root), distinguishAccessErrors: true }
+    ];
+    const expected = combinations.map(options => getSafeWorktreePathState(root, 'source.txt', options));
+    const invalid = 'invalid' + String.fromCharCode(0) + 'path';
+    const invalidExpected = [false, true].map(distinguishAccessErrors => getSafeWorktreePathState(root, invalid, { distinguishAccessErrors }));
+    const measurement = measured(() => {
+        for (const [index, options] of combinations.entries()) assert.deepEqual(getSafeWorktreePathState(root, 'source.txt', options), expected[index]);
+        for (const [index, distinguishAccessErrors] of [false, true].entries()) {
+            assert.deepEqual(getSafeWorktreePathState(root, invalid, { distinguishAccessErrors }), invalidExpected[index]);
+        }
+    });
+    assert.deepEqual(counts(measurement, 'file_hash:'), [1]);
+});
+
+test('checks every supplied expectedStat against retained authentic metadata', t => {
+    const root = fixture(t), file = path.join(root, 'source.txt'), other = path.join(root, 'other.txt');
+    fs.writeFileSync(file, 'same content'); fs.writeFileSync(other, 'same content');
+    const original = fs.statSync(file), complete = statFileIdentitySync(file), digest = fileSha256(file);
+    const changed = Object.assign(Object.create(Object.getPrototypeOf(original)), original, { mtimeMs: original.mtimeMs + 1 });
+    const measurement = measured(() => {
+        assert.equal(fileSha256(file, changed), null);
+        assert.equal(fileSha256(file, original), digest);
+        assert.equal(fileSha256(file, complete), digest);
+        assert.equal(fileSha256(file, fs.statSync(other)), null);
+        assert.equal(fileSha256(file, changed), null);
+        assert.equal(fileSha256(file, original), digest);
+    });
+    assert.deepEqual(counts(measurement, 'file_hash:'), [1]);
+});
+
+test('retains the first bytes between consumers and rejects same-byte path replacement at final validation', t => {
+    const root = fixture(t), file = path.join(root, 'source.txt');
+    for (const replacement of ['original', 'modified']) {
+        fs.writeFileSync(file, 'original');
+        const expectedStat = fs.statSync(file);
+        assert.throws(() => withInvocationReadObservation(() => {
+            const first = getSafeWorktreePathState(root, 'source.txt');
+            replaceFile(file, replacement);
+            assert.deepEqual(getSafeWorktreePathState(root, 'source.txt'), first);
+            assert.equal(fileSha256(file, expectedStat), first.sha256);
+            assert.equal(runtimeFileSha256(file), first.sha256);
+            assert.equal(fileSha256(file, fs.statSync(file)), null);
+        }), /Invocation file observation changed/);
+    }
+});
+
+test('observes changed files afresh on the next invocation without cross-call metadata caching', t => {
+    const root = fixture(t), file = path.join(root, 'source.txt');
+    fs.writeFileSync(file, 'original');
+    const originalStat = fs.statSync(file);
+    const first = withInvocationReadObservation(() => getSafeWorktreePathState(root, 'source.txt'));
+    replaceFile(file, 'changed before invocation');
+    const second = withInvocationReadObservation(() => {
+        assert.equal(fileSha256(file, originalStat), null);
+        return getSafeWorktreePathState(root, 'source.txt');
+    });
+    assert.notEqual(first.sha256, second.sha256);
+    assert.equal(second.sha256, fileSha256(file));
+});
+
+test('retains absence for later consumers and rejects a path created during the invocation', t => {
+    const root = fixture(t), file = path.join(root, 'absent.txt');
+    assert.throws(() => withInvocationReadObservation(() => {
+        assert.deepEqual(getSafeWorktreePathState(root, 'absent.txt'), { status: 'missing' });
+        assert.equal(fileSha256(file), null);
+        fs.writeFileSync(file, 'appeared');
+        assert.deepEqual(getSafeWorktreePathState(root, 'absent.txt'), { status: 'missing' });
+        assert.equal(runtimeFileSha256(file), null);
+    }), /Invocation file observation changed/);
+});
+
+test('rejects a replaced repository root even when its source bytes are unchanged', t => {
+    const container = fixture(t), root = path.join(container, 'repo'), moved = path.join(container, 'moved');
+    fs.mkdirSync(root); fs.writeFileSync(path.join(root, 'source.txt'), 'unchanged');
+    assert.throws(() => withInvocationReadObservation(() => {
+        const first = getSafeWorktreePathState(root, 'source.txt');
+        fs.renameSync(root, moved); fs.mkdirSync(root); fs.writeFileSync(path.join(root, 'source.txt'), 'unchanged');
+        assert.deepEqual(getSafeWorktreePathState(root, 'source.txt'), first);
+    }), /Invocation file observation changed/);
+});
+
+test('validation bindings retain final ancestor and hard-link checks through shared observations', t => {
+    const container = fixture(t), root = path.join(container, 'repo'), moved = path.join(container, 'moved');
+    fs.mkdirSync(root); fs.writeFileSync(path.join(root, 'source.txt'), 'unchanged');
+    assert.throws(() => withInvocationReadObservation(() => {
+        const first = readObservedValidationFile(root, 'source.txt');
+        fs.renameSync(root, moved); fs.mkdirSync(root); fs.writeFileSync(path.join(root, 'source.txt'), 'unchanged');
+        assert.deepEqual(readObservedValidationFile(root, 'source.txt'), first);
+    }), /Invocation file observation changed/);
+    assert.throws(() => withInvocationReadObservation(() => {
+        readObservedValidationFile(root, 'source.txt');
+        fs.linkSync(path.join(root, 'source.txt'), path.join(root, 'alias.txt'));
+    }), /Invocation file observation changed/);
+});
+
+test('preserves junction containment and detects an ancestor replaced by an escaping junction', t => {
+    const container = fixture(t), root = path.join(container, 'repo'), outside = path.join(container, 'outside');
+    fs.mkdirSync(root); fs.mkdirSync(outside); fs.mkdirSync(path.join(root, 'inside'));
+    fs.writeFileSync(path.join(root, 'inside', 'source.txt'), 'inside');
+    fs.writeFileSync(path.join(outside, 'source.txt'), 'outside');
+    try { fs.symlinkSync(outside, path.join(root, 'escape'), 'junction'); }
+    catch { t.skip('Directory junction creation is unavailable'); return; }
+    assert.equal(withInvocationReadObservation(() => getSafeWorktreePathState(root, 'escape/source.txt')).status, 'outside_repo');
+    assert.throws(() => withInvocationReadObservation(() => {
+        const first = getSafeWorktreePathState(root, 'inside/source.txt');
+        fs.renameSync(path.join(root, 'inside'), path.join(root, 'moved'));
+        fs.symlinkSync(outside, path.join(root, 'inside'), 'junction');
+        assert.deepEqual(getSafeWorktreePathState(root, 'inside/source.txt'), first);
+    }), /Invocation file observation changed/);
+});
+
+test('shares symlink target content while retaining the link alias and its containment', t => {
+    const container = fixture(t), root = path.join(container, 'repo'), outside = path.join(container, 'outside.txt');
+    fs.mkdirSync(root); fs.writeFileSync(path.join(root, 'target.txt'), 'inside'); fs.writeFileSync(outside, 'outside');
+    const link = path.join(root, 'link.txt');
+    try { fs.symlinkSync('target.txt', link, 'file'); }
+    catch { t.skip('File symlink creation is unavailable'); return; }
+    const measurement = measured(() => {
+        const target = getSafeWorktreePathState(root, 'target.txt');
+        const linked = getSafeWorktreePathState(root, 'link.txt');
+        assert.equal(linked.target_sha256, target.sha256);
+        assert.equal(fileSha256(link), target.sha256);
+    });
+    assert.deepEqual(counts(measurement, 'file_hash:'), [1]);
+    assert.throws(() => withInvocationReadObservation(() => {
+        const first = getSafeWorktreePathState(root, 'link.txt');
+        fs.unlinkSync(link); fs.symlinkSync(outside, link, 'file');
+        assert.deepEqual(getSafeWorktreePathState(root, 'link.txt'), first);
+    }), /Invocation file observation changed/);
+    const outsideMeasurement = measured(() => assert.deepEqual(getSafeWorktreePathState(root, 'link.txt'), { status: 'outside_repo' }));
+    assert.deepEqual(counts(outsideMeasurement, 'file_hash:'), []);
+});
+
+test('Windows case-aliased symlink targets keep observed and uncached results equivalent', {
+    skip: process.platform !== 'win32'
+}, t => {
+    const container = fixture(t), root = path.join(container, 'CaseRepo');
+    fs.mkdirSync(root);
+    fs.writeFileSync(path.join(root, 'Target.txt'), 'same target bytes');
+    const outside = path.join(container, 'Outside.txt');
+    fs.writeFileSync(outside, 'same target bytes');
+    const link = path.join(root, 'Link.txt');
+    try { fs.symlinkSync('target.txt', link, 'file'); }
+    catch { t.skip('File symlink creation is unavailable'); return; }
+    for (const includeContentHashes of [true, false]) {
+        for (const [repoRoot, relativePath] of [[root, 'Link.txt'], [root.toUpperCase(), 'LINK.TXT']]) {
+            const options = { includeContentHashes };
+            const expected = getSafeWorktreePathState(repoRoot, relativePath, options);
+            assert.equal(expected.status, 'symbolic_link');
+            assert.equal(expected.target_status, 'file');
+            assert.equal(expected.target_path, 'target.txt', 'Persisted symlink evidence keeps legacy target spelling.');
+            const observed = withInvocationReadObservation(() => getSafeWorktreePathState(repoRoot, relativePath, options));
+            assert.deepEqual(observed, expected);
+        }
+    }
+    assert.throws(() => withInvocationReadObservation(() => {
+        assert.equal(getSafeWorktreePathState(root.toUpperCase(), 'LINK.TXT').status, 'symbolic_link');
+        fs.unlinkSync(link);
+        fs.symlinkSync(outside, link, 'file');
+    }), /Invocation file observation changed/u);
+    assert.equal(withInvocationReadObservation(() => getSafeWorktreePathState(root, 'Link.txt')).status, 'outside_repo');
+});
+
+test('retains validation bounds and strict path rules after another hash consumer populated the observation', t => {
+    const root = fixture(t), file = path.join(root, 'source.txt');
+    fs.writeFileSync(file, 'validation bytes');
+    const measurement = measured(() => {
+        assert.throws(() => readObservedValidationFile(root, 'source.txt', 1), /byte bound/);
+        const digest = runtimeFileSha256(file);
+        assert.throws(() => readObservedValidationFile(root, 'source.txt', 1), /byte bound/);
+        const first = readObservedValidationFile(root, 'source.txt');
+        assert.equal(first.identity.sha256, digest);
+        first.bytes.fill(0); first.identity.sha256 = 'caller mutation';
+        const second = readObservedValidationFile(root, 'source.txt');
+        assert.equal(second.bytes.toString(), 'validation bytes');
+        assert.equal(second.identity.sha256, digest);
+        assert.throws(() => readObservedValidationFile(path.join(root, 'other'), '../source.txt'), /validation|relative/i);
+    });
+    assert.deepEqual(counts(measurement, 'file_hash:'), [1]);
+    const link = path.join(root, 'hard-link.txt');
+    fs.linkSync(file, link);
+    withInvocationReadObservation(() => {
+        assert.ok(fileSha256(link));
+        assert.throws(() => readObservedValidationFile(root, 'hard-link.txt'), /hard-linked/);
+    });
+});
+
+test('Windows case aliases share one canonical content hash', t => {
+    if (process.platform !== 'win32') { t.skip('Windows path case alias'); return; }
+    const root = fixture(t), file = path.join(root, 'Source.txt'); fs.writeFileSync(file, 'case alias');
+    const measurement = measured(() => assert.equal(fileSha256(file), runtimeFileSha256(file.toUpperCase())));
+    assert.deepEqual(counts(measurement, 'file_hash:'), [1]);
+});
+
+test('memo keys preserve typed ownership, first errors and invocation lifetime without rebaseline', () => {
+    const first = createInvocationReadMemoKey<string>('same'), second = createInvocationReadMemoKey<number>('same');
+    const failureKey = createInvocationReadMemoKey<string>('failed');
+    const failure = new Error('Original memo failure');
+    let builds = 0;
+    for (let invocation = 0; invocation < 2; invocation += 1) {
+        withInvocationReadObservation(() => {
+            assert.equal(memoizeInvocationRead(first, 'key', () => { builds += 1; return 'original'; }).value, 'original');
+            assert.equal(memoizeInvocationRead(first, 'key', () => 'replacement').value, 'original');
+            assert.equal(memoizeInvocationRead(second, 'key', () => 42).value, 42);
+            assert.throws(() => memoizeInvocationRead(failureKey, 'key', () => { throw failure; }), error => error === failure);
+            assert.throws(() => memoizeInvocationRead(failureKey, 'key', () => 'replacement'), error => error === failure);
+            assertInvocationDependenciesCurrent();
+        });
+    }
+    assert.equal(builds, 2);
+});

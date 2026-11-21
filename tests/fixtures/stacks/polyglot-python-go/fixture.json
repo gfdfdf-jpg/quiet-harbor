@@ -1,0 +1,90 @@
+{
+  "schema": 1,
+  "id": "polyglot-python-go",
+  "title": "Python API + Go worker",
+  "adapter": null,
+  "technologies": [
+    {
+      "id": "python",
+      "executable": "tools/pytest",
+      "compileArgv": [
+        "-m",
+        "compileall",
+        "orders",
+        "partners"
+      ],
+      "firstArgv": [
+        "-q",
+        "tests/orders/test_service.py::test_task_contract"
+      ],
+      "allArgv": [
+        "-q",
+        "tests/orders/test_service.py::test_task_contract"
+      ],
+      "broadArgv": [],
+      "report": "junit",
+      "secondArgv": [
+        "-q",
+        "tests/orders/test_service.py::test_task_contract"
+      ],
+      "compileExecutable": "tools/python"
+    },
+    {
+      "id": "go",
+      "executable": "tools/go",
+      "compileArgv": [
+        "build",
+        "./orders",
+        "./partners"
+      ],
+      "firstArgv": [
+        "test",
+        "-json",
+        "./orders",
+        "-run",
+        "^TestTaskContract$"
+      ],
+      "allArgv": [
+        "test",
+        "-json",
+        "./orders",
+        "-run",
+        "^TestTaskContract$"
+      ],
+      "broadArgv": [
+        "test",
+        "./..."
+      ],
+      "report": "text",
+      "secondArgv": [
+        "test",
+        "-json",
+        "./orders",
+        "-run",
+        "^TestTaskContract$"
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "backend",
+      "technology": "python",
+      "source": "orders/service.py",
+      "target": "tests/orders/test_service.py",
+      "case": "task-contract",
+      "comment": "#"
+    },
+    {
+      "id": "frontend",
+      "technology": "go",
+      "source": "orders/service.go",
+      "target": "orders/service_test.go",
+      "case": "task-contract",
+      "comment": "//"
+    }
+  ],
+  "helpers": [
+    "tests/conftest.py",
+    "tests/data/partners.json"
+  ]
+}

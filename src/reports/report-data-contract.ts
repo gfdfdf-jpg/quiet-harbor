@@ -1,0 +1,94 @@
+export {
+    REPORT_DATA_CONTRACT_SCHEMA_VERSION,
+    DEFAULT_REPORT_MAX_DETAILED_TASKS
+} from './report-data/types';
+export type {
+    ReportDataUnavailableEntry,
+    ReportTaskQueueRow,
+    ReportTaskActivitySummary,
+    ReportArtifactLink,
+    ReportFullSuiteState,
+    ReportFullSuiteFreshness,
+    ReportFullSuiteSummary,
+    ReportTaskDetail,
+    ReportTaskRow,
+    ReportWorkflowSetting,
+    ReportWorkflowConfigTab,
+    ReportQualityGateRuleSource,
+    ReportQualityGateRuleStatus,
+    ReportQualityGateRule,
+    ReportQualityGateEvidenceStatus,
+    ReportQualityGateEffect,
+    ReportQualityGateAnswerSummary,
+    ReportQualityGateLatestCheck,
+    ReportQualityGateActionRequiredHistoryEntry,
+    ReportTaskQualityChecklistLatest,
+    ReportTaskQualityChecklist,
+    ReportQualityGateTab,
+    ReportProfileSource,
+    ReportProfileReviewPolicyValue,
+    ReportProfileReviewType,
+    ReportReviewCatalogProfileState,
+    ReportReviewCatalogLane,
+    ReportReviewCatalogTab,
+    ReportProfileRow,
+    ReportProfilesTab,
+    ReportInstructionEntry,
+    ReportValueRow,
+    ReportCommandInfo,
+    ReportOrdinaryDocsInfo,
+    ReportInitSettingsTab,
+    ReportProjectMemoryFile,
+    ReportProjectMemoryAdvisory,
+    ReportProjectMemoryTab,
+    ReportBackupRow,
+    ReportBackupsTab,
+    ReportSystemStateHealth,
+    ReportSystemStateSignal,
+    ReportSystemStateConfigFile,
+    ReportSystemState,
+    ReportDataContract,
+    BuildReportDataContractOptions,
+    BuildReportTaskDetailOptions
+} from './report-data/types';
+export { readCanonicalActiveQueueRows } from './report-data/task-queue';
+export { buildWorkflowConfigTab } from './report-data/workflow-config-tab';
+export { buildQualityGateTab } from './report-data/quality-gate-tab';
+export { buildProfilesTab } from './report-data/profiles-tab';
+export { buildReviewCatalogTab } from './report-data/review-catalog-tab';
+export { buildInitSettingsTab } from './report-data/init-settings-tab';
+export { buildProjectMemoryTab } from './report-data/project-memory-tab';
+export { buildBackupsTab } from './report-data/backups-tab';
+export { buildSystemStateReport } from './report-data/system-state';
+export { buildReportSnapshotFingerprint } from './report-data/report-snapshot-fingerprint';
+export {
+    buildReportTaskDetail,
+    isLazyReportDetailEntry,
+    buildSkippedTaskDetail,
+    normalizeMaxDetailedTasks,
+    selectDetailedTaskIds
+} from './report-data/task-detail';
+export { buildReportDataContract } from './report-data/contract';
+export {
+    INSTRUCTIONS_REPORT_UI_TAB_CONTRACT,
+    REPORT_UI_TAB_CONTRACT_MIGRATION_CHECKLIST,
+    REPORT_UI_TAB_CONTRACT_MIGRATION_STEPS,
+    buildInstructionsReportUiTabMetadata
+} from './ui/dashboard/instructions-report-ui-tab';
+export type { InstructionsReportUiTabStatus } from './ui/dashboard/instructions-report-ui-tab';
+export {
+    REPORT_UI_TAB_PATH_KINDS,
+    buildReportUiTabMetadata,
+    defineReportUiTabContract,
+    getReportUiTabActionHook
+} from './ui/dashboard/report-ui-tab-contract';
+export type {
+    ReportUiTabActionHook,
+    ReportUiTabActionHooks,
+    ReportUiTabContract,
+    ReportUiTabLabel,
+    ReportUiTabMetadata,
+    ReportUiTabPathContract,
+    ReportUiTabPathKind,
+    ReportUiTabPathMetadata
+} from './ui/dashboard/report-ui-tab-contract';

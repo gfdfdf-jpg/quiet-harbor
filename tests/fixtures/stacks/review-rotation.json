@@ -1,0 +1,4 @@
+{
+  "multiModule": ["spring-maven", "java-gradle", "kotlin-gradle", "dotnet", "go", "rust", "node", "pnpm-nx", "elixir", "swift"],
+  "multiTechnology": ["polyglot-maven-ts", "polyglot-python-go"]
+}

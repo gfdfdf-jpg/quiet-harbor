@@ -1,0 +1,11 @@
+# Test-only remediation and historical review claims
+
+Authenticated preservation connects review-context creation, reuse and terminal validation to the original accepted non-test claims. Future task entries freeze `private_test_review_preservation: true` in their remediation policy. Existing snapshots without that permission, and snapshots that explicitly disable it, retain their original rules and hashes.
+
+A historical non-test review describes the production contracts and validation cases its reviewer actually inspected. A later test-review correction can add private tests or fixtures without changing those production contracts. Preservation must retain the original claims and require a fresh test reviewer to resolve every current case and inspect shared verification infrastructure.
+
+The foundation reads the current integrity-verified restart for the exact active entry and preflight. It authenticates the failed test-review baseline and frozen rerun policy, reconstructs the current delta and rejects source, policy, scope or evidence drift. No old report is rewritten, no current case is declared covered by an old review, and no caller can supply a PASS declaration.
+
+The frozen policy remains authoritative. During TEST remediation, a nonempty authenticated delta containing only private leaf tests, structural tests or shared test helpers selects TEST as the rerun seed. A helper plus a new case may have an aggregate ambiguous category; every individual file must still be proven private. Missing or nonprivate evidence and broad global or generated changes retain the conservative category rule. Authored semantic dependencies expand the seed to their affected downstream reviews.
+
+Private verification infrastructure can change what tests prove without changing the production contract. Shared fixtures can produce false positive results, so a fresh test reviewer must inspect them and resolve every current case against current source, execution and output. Historical CODE or SECURITY claims cannot accept new test semantics. Explicit source-role overrides and changed production or public contracts cannot gain private preservation authority; affected production reviews remain required, including initial reviews of changed production code.
