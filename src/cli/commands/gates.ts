@@ -1,0 +1,101 @@
+/**
+ * gates.ts — Thin facade that re-exports all gate flow commands.
+ *
+ * Implementation lives in the `gate-flows/` directory:
+ *   - task-mode-flow.ts   (enter-task-mode, load-rule-pack, record-no-op, diagnostics)
+ *   - compile-flow.ts     (classify-change, compile-gate)
+ *   - recovery-flow.ts    (restart-coherent-cycle, restart-review-cycle)
+ *   - review-flow.ts      (required-reviews-check, doc-impact-gate)
+ *   - completion-flow.ts  (log-task-event, human-commit)
+ *
+ * Shared parsing, artifact, formatting, and subprocess support lives in the
+ * sibling `../gate-cli/` owner directory.
+ *
+ * This file preserves the public API so existing consumers (handler modules,
+ * tests) continue to import from './gates' without changes.
+ */
+
+export {
+    runEnterTaskModeCommand,
+    runBindRulePackToPreflightCommand,
+    runLoadRulePackCommand,
+    runRecordNoOpCommand,
+    runRecordReviewCycleContinuationCommand,
+    runRecordReviewCycleSplitDecisionCommand,
+    runRecordStrictDecompositionDecisionCommand,
+    runListSplitRequiredWipCommand,
+    runRestoreSplitRequiredWipCommand,
+    runRetireSplitRequiredWipCommand,
+    runHandshakeDiagnosticsCommand,
+    runShellSmokePreflightCommand,
+    runCommandTimeoutDiagnosticsCommand
+} from './gate-flows/task-mode/task-mode-flow';
+
+export {
+    runIntermediateCommandCommand
+} from './gate-flows/command-run/command-run-flow';
+
+export {
+    runClassifyChangeCommand,
+    runCompileGateCommand
+} from './gate-flows/compile/compile-flow';
+
+export {
+    runRestartCoherentCycleCommand,
+    runRestartReviewCycleCommand
+} from './gate-flows/recovery/recovery-flow';
+
+export {
+    runDocImpactGateCommand,
+    runRequiredReviewsCheckCommand
+} from './gate-flows/review/review-flow';
+
+export {
+    runMaterializeReviewFollowUpTasksCommand
+} from './gate-flows/review/review-follow-up-task-flow';
+
+export {
+    runLogTaskEventCommand,
+    runHumanCommitCommand
+} from './gate-flows/completion/completion-flow';
+
+export {
+    runFullSuiteValidationCommand
+} from './gate-flows/full-suite/full-suite-validation-flow';
+
+export {
+    runFullSuiteRunMarkerRecoveryCommand
+} from './gate-flows/full-suite/full-suite-run-marker-recovery';
+
+export {
+    runMaterializeFullSuiteRepairTaskCommand,
+    runRestoreFullSuiteRepairWipCommand
+} from './gate-flows/full-suite/full-suite-repair-task-flow';
+
+export {
+    runQualityChecklistCommand
+} from './gate-flows/quality-checklist/quality-checklist-flow';
+
+export {
+    runBuildReviewContextCommand
+} from './gate-flows/review-context/review-context-flow';
+
+export {
+    runTaskEventsSummaryCommand,
+    runTaskAuditSummaryCommand
+} from './gate-flows/task/task-summary-flow';
+
+export {
+    runTaskResetCommand
+} from './gate-flows/task/task-reset-flow';
+
+export {
+    runProjectMemoryImpactCommand
+} from './gate-flows/completion/project-memory-flow';
+
+export {
+    executeCommand,
+    executeCommandAsync,
+    resolveExecutablePath,
+    splitCommandLine
+} from '../gate-cli/gates-subprocess';

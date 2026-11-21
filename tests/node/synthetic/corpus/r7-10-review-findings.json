@@ -1,0 +1,254 @@
+[
+  {
+    "id": "r7-10-third-party",
+    "layer": "path",
+    "note": "R7-10 review of the Codex fixes: third_party code fell through to production.",
+    "stack": "python",
+    "role": "GENERATED",
+    "file": "third_party/orders/invoice.py",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-10-generated-suffix",
+    "layer": "path",
+    "note": "R7-10 review of the Codex fixes: the _generated suffix fell through to production.",
+    "stack": "node-ts",
+    "role": "GENERATED",
+    "file": "src/invoice_generated.ts",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-10-monorepo-output",
+    "layer": "path",
+    "note": "R7-10 review of the Codex fixes: build output in a package container stays output.",
+    "stack": "node-ts",
+    "role": "GENERATED",
+    "file": "packages/ui/build/index.js",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-10-testutil-go",
+    "layer": "path",
+    "note": "R7-10 review of the Codex fixes: Go test support under internal/ counted as production.",
+    "stack": "go",
+    "role": "TEST_HELPER",
+    "file": "internal/testutil/server.go",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-10-test-utils-file",
+    "layer": "path",
+    "note": "R7-10 review of the Codex fixes: a test-utils file under src counted as production.",
+    "stack": "node-ts",
+    "role": "TEST_HELPER",
+    "file": "src/test-utils.tsx",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-10-test-utils-package",
+    "layer": "path",
+    "note": "R7-10 review of the Codex fixes: a test-utils package with a src folder counted as production.",
+    "stack": "node-ts",
+    "role": "TEST_HELPER",
+    "file": "packages/test-utils/src/render.tsx",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-10-rust-common-file",
+    "layer": "path",
+    "note": "R7-10 review of the Codex fixes: the single-file shared module of Rust integration tests counted as a leaf test.",
+    "stack": "rust",
+    "role": "TEST_HELPER",
+    "file": "crates/orders/tests/common.rs",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-10-test-base",
+    "layer": "path",
+    "note": "R7-10 review of the Codex fixes: a base test class counted as a leaf test.",
+    "stack": "dotnet",
+    "role": "TEST_HELPER",
+    "file": "tests/Orders.Tests/TestBase.cs",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-10-phpunit-case",
+    "layer": "path",
+    "note": "R7-10 review of the Codex fixes: the PHPUnit base case counted as a leaf test.",
+    "stack": "php",
+    "role": "TEST_HELPER",
+    "file": "tests/TestCase.php",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-10-phpunit-bootstrap",
+    "layer": "path",
+    "note": "R7-10 review of the Codex fixes: the PHPUnit bootstrap counted as a leaf test.",
+    "stack": "php",
+    "role": "TEST_HELPER",
+    "file": "tests/bootstrap.php",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-10-behave-steps",
+    "layer": "path",
+    "note": "R7-10 review of the Codex fixes: behave steps counted as production.",
+    "stack": "python",
+    "role": "TEST_HELPER",
+    "file": "features/steps/invoice_steps.py",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-10-specflow-steps",
+    "layer": "path",
+    "note": "R7-10 review of the Codex fixes: SpecFlow steps counted as production.",
+    "stack": "dotnet",
+    "role": "TEST_HELPER",
+    "file": "Orders.Specs/Steps/InvoiceSteps.cs",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-10-docs-setup-name",
+    "layer": "path",
+    "note": "R7-10 review of the Codex fixes: a document named like a Jest setup file won over documentation.",
+    "stack": "node-ts",
+    "role": "DOCS",
+    "file": "src/docs/jest.setup.md",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-10-settings-variant",
+    "layer": "path",
+    "note": "R7-10 review of the Codex fixes: a Django settings variant fell through to production.",
+    "stack": "python",
+    "role": "CONFIG",
+    "file": "project/settings_prod.py",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-10-gradle-convention",
+    "layer": "path",
+    "note": "R7-10 review of the Codex fixes: a Gradle convention plugin fell through to production.",
+    "stack": "kotlin-gradle",
+    "role": "CONFIG",
+    "file": "buildSrc/src/main/kotlin/java-conventions.gradle.kts",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-10-build-module",
+    "layer": "path",
+    "note": "R7-10 review of the Codex fixes: a source module named build re-opened every review.",
+    "stack": "node-ts",
+    "role": "PROD",
+    "file": "src/build/compiler.ts",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-10-build-package",
+    "layer": "path",
+    "note": "R7-10 review of the Codex fixes: a package named build re-opened every review.",
+    "stack": "node-ts",
+    "role": "PROD",
+    "file": "packages/build/src/index.ts",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-10-gen-crate",
+    "layer": "path",
+    "note": "R7-10 review of the Codex fixes: a crate named gen re-opened every review.",
+    "stack": "rust",
+    "role": "PROD",
+    "file": "crates/gen/src/lib.rs",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-10-docs-route",
+    "layer": "path",
+    "note": "R7-10 review of the Codex fixes: a documentation route under src re-opened every review.",
+    "stack": "node-ts",
+    "role": "PROD",
+    "file": "apps/web/src/app/docs/page.tsx",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-10-doc-site-test",
+    "layer": "path",
+    "note": "R7-10 review of the Codex fixes: a test of the documentation site re-opened every review.",
+    "stack": "node-ts",
+    "role": "UNIT_TEST",
+    "file": "docs/components/Invoice.test.tsx",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-10-test-in-config-package",
+    "layer": "path",
+    "note": "R7-10 review of the Codex fixes: a test in a config package counted as harness configuration.",
+    "stack": "java-maven",
+    "role": "UNIT_TEST",
+    "file": "src/test/java/orders/config/InvoiceTest.java",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  }
+]

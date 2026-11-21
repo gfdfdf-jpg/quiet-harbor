@@ -1,0 +1,1242 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { createHash } from 'node:crypto';
+
+import {
+    EXIT_GATE_FAILURE,
+    EXIT_GENERAL_FAILURE
+} from '../../../../../../src/cli/exit-codes';
+import {
+    buildGateHelpText
+} from '../../../../../../src/cli/commands/gate-command-help';
+import {
+    getNodeHumanCommitCommand
+} from '../../../../../../src/materialization/command-constants';
+import * as gateReviewHandlers from '../../../../../../src/cli/commands/gate-review-handlers';
+import {
+    runCompileGateCommand,
+    runDocImpactGateCommand,
+    runHumanCommitCommand,
+    runLogTaskEventCommand,
+    runRequiredReviewsCheckCommand as runLegacyRequiredReviewsCheckCommand,
+    executeCommand,
+    executeCommandAsync
+} from '../../../../../../src/cli/commands/gates';
+import {
+    runCliMainWithHandling
+} from '../../../../../../src/cli/main';
+import { formatCompileOutputEntry } from '../../../../../../src/cli/gate-cli/gates-formatter';
+import { runCompletionGate } from '../../../../../../src/gates/completion';
+import { buildReviewContext } from '../../../../../../src/gates/review-context/build-review-context';
+import { getWorkspaceSnapshot } from '../../../../../../src/gates/compile/compile-gate';
+import { buildReviewTreeState } from '../../../../../../src/gates/review/review-tree-state';
+import {
+    buildReviewerLaunchBindingSha256
+} from '../../../../../../src/cli/commands/gate-review-handlers/launch/review-launch-input-attestation';
+import {
+    applyReviewerRoutingMetadata
+} from '../../../../../../src/gate-runtime/review-context';
+import { appendTaskEvent } from '../../../../../../src/gate-runtime/task-events';
+import {
+    buildReviewRemediationReviewContract
+} from '../../../../../../src/gates/review-remediation/review-remediation-review-contract';
+import { resolveReviewExecutionRuntimeBindings } from '../../../../../../src/cli/commands/gate-review-handlers/context/review-context-runtime-validation';
+import { readReviewCatalogConfigFile } from '../../../../../../src/core/review-catalog';
+import { buildEffectiveReviewSnapshot } from '../../../../../../src/policy/effective-review-snapshot';
+import { resolveProfileReviewCatalogPolicy } from '../../../../../../src/policy/profile-review-catalog-policy';
+import { type TaskProfilePolicySnapshot } from '../../../../../../src/policy/task-profile-policy-snapshot';
+import { writeOptionalSkillSelectionArtifact } from '../../../../../../src/runtime/optional-skill-selection';
+import * as childProcess from 'node:child_process';
+
+import {
+    createTempRepo,
+    createWindowsBatchNodeFixture,
+    createDependentValidationFixture,
+    writeReviewCapabilitiesConfig,
+    writeBudgetOutputFilters,
+    seedTaskQueue,
+    seedInitAnswers,
+    writeBalancedProfilesConfig,
+    writeNodeFoundationManifest,
+    getReviewsRoot,
+    getOrchestratorRoot,
+    runEnterTaskMode,
+    createReviewerRoutingFixture,
+    writePreflight as writeLegacyPreflight,
+    prepareReviewDiffFixture,
+    writeCompilePassEvidence,
+    writeReceiptBackedReviewArtifact,
+    writeCleanReviewArtifact,
+    seedReusableReviewEvidence,
+    loadTaskEntryRulePack,
+    loadPostPreflightRulePack as loadLegacyPostPreflightRulePack,
+    runHandshakeForTask,
+    runShellSmokeForTask,
+    PROVIDER_BRIDGE_BY_SOURCE,
+    PROVIDER_ENTRYPOINT_BY_SOURCE,
+    runExplicitPreflight,
+    runGit,
+    initializeGitRepo,
+    readTaskTimelineEvents,
+    findLastTimelineEventIndex,
+    readTaskQueueStatusFromTaskFile,
+    captureExpectedAsyncError,
+    runCliWithCapturedOutput,
+    assertGateChainDecision,
+    ageFixturePath
+} from '../../gate-test-helpers';
+
+function ensureCurrentReviewFixtureConfiguration(repoRoot: string): void {
+    const orchestratorRoot = getOrchestratorRoot(repoRoot);
+    const createdPaths: string[] = [];
+    const profilesPath = path.join(orchestratorRoot, 'live', 'config', 'profiles.json');
+    if (!fs.existsSync(profilesPath)) {
+        writeBalancedProfilesConfig(repoRoot);
+        createdPaths.push(profilesPath);
+    }
+    for (const skillId of ['code-review', 'test-review', 'testing-strategy']) {
+        const skillPath = path.join(orchestratorRoot, 'live', 'skills', skillId, 'SKILL.md');
+        if (!fs.existsSync(skillPath)) {
+            fs.mkdirSync(path.dirname(skillPath), { recursive: true });
+            fs.writeFileSync(skillPath, `# ${skillId}\n\nFixture review skill entrypoint.\n`, 'utf8');
+            createdPaths.push(skillPath);
+        }
+    }
+    const excludePath = path.join(repoRoot, '.git', 'info', 'exclude');
+    if (createdPaths.length > 0 && fs.existsSync(path.dirname(excludePath))) {
+        const existingEntries = fs.existsSync(excludePath)
+            ? fs.readFileSync(excludePath, 'utf8').split(/\r?\n/).filter(Boolean)
+            : [];
+        const addedEntries = createdPaths.map((createdPath) => (
+            path.relative(repoRoot, createdPath).replace(/\\/g, '/')
+        ));
+        fs.writeFileSync(
+            excludePath,
+            `${[...new Set([...existingEntries, ...addedEntries])].join('\n')}\n`,
+            'utf8'
+        );
+    }
+}
+
+function writePreflight(
+    repoRoot: string,
+    taskId: string,
+    overrides: Record<string, unknown> = {},
+    outputFileName = `${taskId}-preflight.json`
+): string {
+    ensureCurrentReviewFixtureConfiguration(repoRoot);
+    return writeLegacyPreflight(repoRoot, taskId, overrides, outputFileName);
+}
+
+function bindRequestedFindingPolicyToFixtureProfile(repoRoot: string, preflightPath: string): void {
+    const preflight = JSON.parse(fs.readFileSync(preflightPath, 'utf8')) as Record<string, any>;
+    const requestedPolicy = preflight.profile_policy_snapshot?.review_finding_policy as Record<string, unknown> | undefined;
+    const profileId = String(requestedPolicy?.policy_id || '').trim();
+    if (!profileId || !requestedPolicy) {
+        return;
+    }
+
+    const profilesPath = path.join(getOrchestratorRoot(repoRoot), 'live', 'config', 'profiles.json');
+    const profiles = JSON.parse(fs.readFileSync(profilesPath, 'utf8')) as Record<string, any>;
+    const builtInProfiles = profiles.built_in_profiles as Record<string, any>;
+    const userProfiles = profiles.user_profiles as Record<string, any>;
+    const balancedProfile = builtInProfiles.balanced as Record<string, unknown>;
+    const existingProfile = builtInProfiles[profileId] || userProfiles[profileId] || balancedProfile;
+    const boundProfile = {
+        ...existingProfile,
+        description: `${profileId} review-finding-policy fixture profile.`,
+        depth: profileId === 'soft' ? 1 : profileId === 'strict' ? 3 : Number(existingProfile.depth || 2),
+        review_finding_policy: requestedPolicy
+    };
+    if (builtInProfiles[profileId]) {
+        builtInProfiles[profileId] = boundProfile;
+    } else {
+        userProfiles[profileId] = boundProfile;
+    }
+    profiles.active_profile = profileId;
+    fs.writeFileSync(profilesPath, `${JSON.stringify(profiles, null, 2)}\n`, 'utf8');
+}
+
+function bindCurrentEffectiveReviewSnapshot(
+    repoRoot: string,
+    taskId: string,
+    preflightPath: string,
+    taskModePath = ''
+): Record<string, unknown> | null {
+    const reviewsRoot = getReviewsRoot(repoRoot);
+    const resolvedTaskModePath = taskModePath || path.join(reviewsRoot, `${taskId}-task-mode.json`);
+    if (!fs.existsSync(resolvedTaskModePath)) {
+        return null;
+    }
+    const taskMode = JSON.parse(
+        fs.readFileSync(resolvedTaskModePath, 'utf8')
+    ) as Record<string, unknown>;
+    const preflight = JSON.parse(fs.readFileSync(preflightPath, 'utf8')) as Record<string, any>;
+    const profileSnapshotCandidate = taskMode.profile_policy_snapshot
+        || preflight.profile_policy_snapshot;
+    if (
+        !profileSnapshotCandidate
+        || typeof profileSnapshotCandidate !== 'object'
+        || typeof (profileSnapshotCandidate as Record<string, unknown>).snapshot_hash !== 'string'
+        || typeof (profileSnapshotCandidate as Record<string, unknown>).source !== 'object'
+    ) {
+        return null;
+    }
+    const orchestratorRoot = getOrchestratorRoot(repoRoot);
+    const profileSnapshot = profileSnapshotCandidate as TaskProfilePolicySnapshot;
+    const catalog = readReviewCatalogConfigFile(
+        path.join(orchestratorRoot, 'live', 'config', 'review-catalog.json')
+    );
+    const profilePolicy = resolveProfileReviewCatalogPolicy(
+        String(profileSnapshot.source.effective_profile),
+        profileSnapshot.review_lane_selection.profile_review_policy,
+        profileSnapshot.review_lane_selection.review_capabilities,
+        catalog
+    );
+    const changedFiles = Array.isArray(preflight.changed_files)
+        ? preflight.changed_files.map((entry: unknown) => String(entry))
+        : [];
+    const effectiveReviewSnapshot = buildEffectiveReviewSnapshot({
+        catalog,
+        profilePolicy,
+        profileSnapshotSha256: String(profileSnapshot.snapshot_hash),
+        legacyRequiredReviews: preflight.required_reviews || {},
+        scopeCategory: String(preflight.scope_category || 'code'),
+        taskIntent: `Prepare review lifecycle for ${taskId}`,
+        changedFiles,
+        taskTriggers: preflight.triggers || {},
+        zeroDiffBaselineOnly: changedFiles.length === 0,
+        reviewExecutionPolicyMode: profileSnapshot.review_execution_policy.mode,
+        reviewDependencyGraph: profileSnapshot.review_execution_policy.review_dependency_graph,
+        fullSuiteValidation: profileSnapshot.review_execution_policy.full_suite_validation
+    });
+    preflight.profile_policy_snapshot = profileSnapshot;
+    preflight.effective_review_snapshot = effectiveReviewSnapshot;
+    preflight.review_execution_policy = {
+        mode: profileSnapshot.review_execution_policy.mode,
+        visible_summary_line: `Review execution policy: ${profileSnapshot.review_execution_policy.mode}`,
+        dependency_graph: effectiveReviewSnapshot.review_dependency_graph
+    };
+    preflight.required_reviews = { ...effectiveReviewSnapshot.required_reviews };
+    fs.writeFileSync(preflightPath, `${JSON.stringify(preflight, null, 2)}\n`, 'utf8');
+    return effectiveReviewSnapshot as unknown as Record<string, unknown>;
+}
+
+function loadPostPreflightRulePack(
+    repoRoot: string,
+    taskId: string,
+    preflightPath: string,
+    ensurePreflightClassified = true,
+    artifactPath = '',
+    taskModePath = ''
+) {
+    const defaultTaskModePath = path.join(getReviewsRoot(repoRoot), `${taskId}-task-mode.json`);
+    if (
+        taskModePath &&
+        path.resolve(taskModePath) !== path.resolve(defaultTaskModePath) &&
+        fs.existsSync(taskModePath) &&
+        !fs.existsSync(defaultTaskModePath)
+    ) {
+        fs.mkdirSync(path.dirname(defaultTaskModePath), { recursive: true });
+        fs.copyFileSync(taskModePath, defaultTaskModePath);
+    }
+    const effectiveReviewSnapshot = bindCurrentEffectiveReviewSnapshot(
+        repoRoot,
+        taskId,
+        preflightPath,
+        taskModePath
+    );
+    const recordsEffectivePreflight = ensurePreflightClassified && !!effectiveReviewSnapshot;
+    if (recordsEffectivePreflight) {
+        const preflight = JSON.parse(fs.readFileSync(preflightPath, 'utf8')) as Record<string, unknown>;
+        const metrics = preflight.metrics as Record<string, unknown> | undefined;
+        appendTaskEvent(getOrchestratorRoot(repoRoot), taskId, 'PREFLIGHT_CLASSIFIED', 'INFO', 'Fixture preflight bound to immutable effective review snapshot.', {
+            mode: String(preflight.mode || 'FULL_PATH'),
+            output_path: preflightPath.replace(/\\/g, '/'),
+            changed_files_count: Array.isArray(preflight.changed_files) ? preflight.changed_files.length : 0,
+            changed_lines_total: Number(metrics?.changed_lines_total || 0),
+            required_reviews: preflight.required_reviews || {},
+            effective_review_snapshot: effectiveReviewSnapshot
+        });
+    }
+    return loadLegacyPostPreflightRulePack(
+        repoRoot,
+        taskId,
+        preflightPath,
+        recordsEffectivePreflight ? false : ensurePreflightClassified,
+        artifactPath,
+        taskModePath
+    );
+}
+
+function prepareCurrentReviewPhase(repoRoot: string, taskId: string, preflightPath: string, provider = 'Codex'): void {
+    ensureCurrentReviewFixtureConfiguration(repoRoot);
+    bindRequestedFindingPolicyToFixtureProfile(repoRoot, preflightPath);
+    const initAnswersPath = path.join(repoRoot, 'garda-agent-orchestrator', 'runtime', 'init-answers.json');
+    const initAnswers = fs.existsSync(initAnswersPath)
+        ? JSON.parse(fs.readFileSync(initAnswersPath, 'utf8')) as Record<string, unknown>
+        : {};
+    const shouldPinExplicitProvider = !!provider && provider !== String(initAnswers.SourceOfTruth || '').trim();
+    const routedTo = PROVIDER_BRIDGE_BY_SOURCE[provider] || PROVIDER_ENTRYPOINT_BY_SOURCE[provider] || null;
+    runEnterTaskMode({
+        repoRoot,
+        taskId,
+        taskSummary: `Prepare review lifecycle for ${taskId}`,
+        ...(shouldPinExplicitProvider ? { provider, routedTo } : {})
+    });
+    const taskMode = JSON.parse(fs.readFileSync(
+        path.join(getReviewsRoot(repoRoot), `${taskId}-task-mode.json`),
+        'utf8'
+    )) as Record<string, any>;
+    const requestedFindingPolicy = (JSON.parse(fs.readFileSync(preflightPath, 'utf8')) as Record<string, any>)
+        .profile_policy_snapshot?.review_finding_policy;
+    if (requestedFindingPolicy) {
+        assert.deepEqual(
+            taskMode.profile_policy_snapshot?.review_finding_policy,
+            requestedFindingPolicy,
+            `Task-mode finding policy drift for ${taskId}: ${JSON.stringify({
+                task_profile: taskMode.task_profile,
+                profile_selection_source: taskMode.profile_selection_source,
+                active_profile: taskMode.active_profile,
+                task_queue: fs.readFileSync(path.join(repoRoot, 'TASK.md'), 'utf8')
+            })}`
+        );
+    }
+    assert.equal(loadTaskEntryRulePack(repoRoot, taskId).exitCode, 0);
+    runHandshakeForTask(repoRoot, taskId, provider);
+    runShellSmokeForTask(repoRoot, taskId, provider);
+    assert.equal(loadPostPreflightRulePack(repoRoot, taskId, preflightPath).exitCode, 0);
+    writeCompilePassEvidence(repoRoot, taskId, preflightPath);
+}
+
+function runRequiredReviewsCheckCommand(
+    options: Parameters<typeof runLegacyRequiredReviewsCheckCommand>[0]
+): ReturnType<typeof runLegacyRequiredReviewsCheckCommand> {
+    const optionRecord = options as unknown as Record<string, unknown>;
+    const repoRoot = String(optionRecord.repoRoot || '.');
+    const taskId = String(optionRecord.taskId || '');
+    const explicitTaskModePath = String(optionRecord.taskModePath || '');
+    const defaultTaskModePath = path.join(getReviewsRoot(repoRoot), `${taskId}-task-mode.json`);
+    if (
+        !explicitTaskModePath ||
+        path.resolve(explicitTaskModePath) === path.resolve(defaultTaskModePath) ||
+        !fs.existsSync(explicitTaskModePath) ||
+        !fs.existsSync(defaultTaskModePath)
+    ) {
+        return runLegacyRequiredReviewsCheckCommand(options);
+    }
+
+    const originalDefaultTaskMode = fs.readFileSync(defaultTaskModePath);
+    const explicitTaskMode = JSON.parse(fs.readFileSync(explicitTaskModePath, 'utf8')) as Record<string, unknown>;
+    const defaultTaskMode = JSON.parse(originalDefaultTaskMode.toString('utf8')) as Record<string, unknown>;
+    if (explicitTaskMode.profile_policy_snapshot) {
+        defaultTaskMode.profile_policy_snapshot = explicitTaskMode.profile_policy_snapshot;
+    }
+    try {
+        fs.writeFileSync(defaultTaskModePath, `${JSON.stringify(defaultTaskMode, null, 2)}\n`, 'utf8');
+        return runLegacyRequiredReviewsCheckCommand(options);
+    } finally {
+        fs.writeFileSync(defaultTaskModePath, originalDefaultTaskMode);
+    }
+}
+
+export {
+    describe,
+    it,
+    assert,
+    fs,
+    os,
+    path,
+    createHash,
+    EXIT_GATE_FAILURE,
+    EXIT_GENERAL_FAILURE,
+    buildGateHelpText,
+    getNodeHumanCommitCommand,
+    gateReviewHandlers,
+    runCompileGateCommand,
+    runDocImpactGateCommand,
+    runHumanCommitCommand,
+    runLogTaskEventCommand,
+    runRequiredReviewsCheckCommand,
+    executeCommand,
+    executeCommandAsync,
+    runCliMainWithHandling,
+    formatCompileOutputEntry,
+    runCompletionGate,
+    buildReviewContext,
+    getWorkspaceSnapshot,
+    buildReviewTreeState,
+    applyReviewerRoutingMetadata,
+    appendTaskEvent,
+    writeOptionalSkillSelectionArtifact,
+    childProcess,
+    createTempRepo,
+    createWindowsBatchNodeFixture,
+    createDependentValidationFixture,
+    writeReviewCapabilitiesConfig,
+    writeBudgetOutputFilters,
+    seedTaskQueue,
+    seedInitAnswers,
+    writeNodeFoundationManifest,
+    getReviewsRoot,
+    getOrchestratorRoot,
+    runEnterTaskMode,
+    createReviewerRoutingFixture,
+    writePreflight,
+    prepareReviewDiffFixture,
+    writeCompilePassEvidence,
+    writeReceiptBackedReviewArtifact,
+    writeCleanReviewArtifact,
+    seedReusableReviewEvidence,
+    loadTaskEntryRulePack,
+    loadPostPreflightRulePack,
+    runHandshakeForTask,
+    runShellSmokeForTask,
+    prepareCurrentReviewPhase,
+    runExplicitPreflight,
+    runGit,
+    initializeGitRepo,
+    readTaskTimelineEvents,
+    findLastTimelineEventIndex,
+    readTaskQueueStatusFromTaskFile,
+    captureExpectedAsyncError,
+    runCliWithCapturedOutput,
+    assertGateChainDecision,
+    ageFixturePath
+};
+
+export const TEST_REVIEW_LAUNCH_PREPARED_AT_UTC = '2026-04-28T00:00:00.000Z';
+export const TEST_REVIEW_LAUNCHED_AT_UTC = '2026-04-28T00:00:01.000Z';
+export const TEST_REVIEW_LAUNCH_COMPLETED_AT_UTC = '2026-04-28T00:00:12.000Z';
+export const TEST_REVIEW_INVOCATION_ATTESTED_AT_UTC = '2026-04-28T00:00:13.000Z';
+
+function buildTestProviderInvocationId(taskId: string, reviewType: string, reviewerIdentity: string): string {
+    const normalizedIdentity = reviewerIdentity.replace(/^agent:/, '').replace(/[^a-zA-Z0-9._-]+/g, '-');
+    return `test-${taskId}-${reviewType}-${normalizedIdentity}`;
+}
+
+function buildFixtureLaunchInputEvidence(taskId: string, reviewType: string): {
+    copy_paste_reviewer_launch_prompt: string;
+    copy_paste_reviewer_launch_prompt_sha256: string;
+    launch_input_mode: 'copy_paste_prompt';
+    launch_input_sha256: string;
+    launch_input_copy_paste_reviewer_launch_prompt_sha256: string;
+    reviewer_prompt_sha256: string;
+    role_prompt_sha256: string;
+    prompt_template_sha256: string;
+    output_template_sha256: string;
+    evidence_manifest_sha256: string;
+} {
+    const copyPastePrompt = `Delegated ${reviewType} reviewer launch prompt for ${taskId}.`;
+    const copyPastePromptSha256 = createHash('sha256').update(copyPastePrompt, 'utf8').digest('hex');
+    return {
+        copy_paste_reviewer_launch_prompt: copyPastePrompt,
+        copy_paste_reviewer_launch_prompt_sha256: copyPastePromptSha256,
+        launch_input_mode: 'copy_paste_prompt',
+        launch_input_sha256: copyPastePromptSha256,
+        launch_input_copy_paste_reviewer_launch_prompt_sha256: copyPastePromptSha256,
+        reviewer_prompt_sha256: createHash('sha256').update(`reviewer-prompt:${taskId}:${reviewType}`, 'utf8').digest('hex'),
+        role_prompt_sha256: createHash('sha256').update(`role-prompt:${taskId}:${reviewType}`, 'utf8').digest('hex'),
+        prompt_template_sha256: createHash('sha256').update(`prompt-template:${taskId}:${reviewType}`, 'utf8').digest('hex'),
+        output_template_sha256: createHash('sha256').update(`output-template:${taskId}:${reviewType}`, 'utf8').digest('hex'),
+        evidence_manifest_sha256: createHash('sha256').update(`evidence-manifest:${taskId}:${reviewType}`, 'utf8').digest('hex')
+    };
+}
+
+function seedCompletedReviewerLaunchFixture(options: {
+    repoRoot: string;
+    taskId: string;
+    reviewType: string;
+    reviewerIdentity: string;
+    reviewContextPath: string;
+    reviewContextSha256: string;
+    routingEventSha256: string;
+}): {
+    launchArtifactPath: string;
+    launchArtifactSha256: string;
+    launchInputMode: 'copy_paste_prompt';
+    launchInputSha256: string;
+    copyPastePromptSha256: string;
+    providerInvocationId: string;
+    launchTool: string;
+    attestationSource: string;
+} {
+    const launchInputEvidence = buildFixtureLaunchInputEvidence(options.taskId, options.reviewType);
+    const reviewExecutionBindings = resolveReviewExecutionRuntimeBindings(
+        JSON.parse(fs.readFileSync(options.reviewContextPath, 'utf8')) as Record<string, unknown>
+    );
+    const providerInvocationId = buildTestProviderInvocationId(options.taskId, options.reviewType, options.reviewerIdentity);
+    const launchTool = 'test-subagent-spawn';
+    const attestationSource = 'test-subagent-spawn';
+    const launchArtifactPath = path.join(
+        getOrchestratorRoot(options.repoRoot),
+        'runtime',
+        'tmp',
+        'reviews',
+        options.taskId,
+        options.reviewType,
+        'reviewer-launch.json'
+    );
+    fs.mkdirSync(path.dirname(launchArtifactPath), { recursive: true });
+    const launchBindingSha256 = buildReviewerLaunchBindingSha256({
+        taskId: options.taskId,
+        reviewType: options.reviewType,
+        reviewerExecutionMode: 'delegated_subagent',
+        reviewerIdentity: options.reviewerIdentity,
+        reviewContextSha256: options.reviewContextSha256,
+        routingEventSha256: options.routingEventSha256,
+        reviewerPromptSha256: launchInputEvidence.reviewer_prompt_sha256
+    });
+    const preparedEvent = appendTaskEvent(getOrchestratorRoot(options.repoRoot), options.taskId, 'REVIEWER_LAUNCH_PREPARED', 'INFO', 'Reviewer launch prepared by test controller fixture.', {
+        task_id: options.taskId,
+        review_type: options.reviewType,
+        reviewer_execution_mode: 'delegated_subagent',
+        reviewer_session_id: options.reviewerIdentity,
+        reviewer_identity: options.reviewerIdentity,
+        review_context_sha256: options.reviewContextSha256,
+        routing_event_sha256: options.routingEventSha256,
+        reviewer_prompt_sha256: launchInputEvidence.reviewer_prompt_sha256,
+        role_prompt_sha256: launchInputEvidence.role_prompt_sha256,
+        prompt_template_sha256: launchInputEvidence.prompt_template_sha256,
+        output_template_sha256: launchInputEvidence.output_template_sha256,
+        evidence_manifest_sha256: launchInputEvidence.evidence_manifest_sha256,
+        ...reviewExecutionBindings,
+        launch_binding_sha256: launchBindingSha256,
+        reviewer_launch_artifact_path: path.normalize(launchArtifactPath).replace(/\\/g, '/')
+    }, { passThru: true });
+    const launchArtifactText = `${JSON.stringify({
+        schema_version: 1,
+        evidence_type: 'delegated_reviewer_launch',
+        attestation_state: 'launched',
+        task_id: options.taskId,
+        review_type: options.reviewType,
+        reviewer_execution_mode: 'delegated_subagent',
+        reviewer_identity: options.reviewerIdentity,
+        reviewer_session_id: options.reviewerIdentity,
+        review_context_sha256: options.reviewContextSha256,
+        ...reviewExecutionBindings,
+        routing_event_sha256: options.routingEventSha256,
+        launch_binding_sha256: launchBindingSha256,
+        prepared_launch_event_sha256: String(preparedEvent?.integrity?.event_sha256 || '').trim(),
+        launch_tool: launchTool,
+        provider_invocation_id: providerInvocationId,
+        launch_prepared_at_utc: TEST_REVIEW_LAUNCH_PREPARED_AT_UTC,
+        delegation_started_at_utc: TEST_REVIEW_LAUNCHED_AT_UTC,
+        launched_at_utc: TEST_REVIEW_LAUNCHED_AT_UTC,
+        launch_completed_at_utc: TEST_REVIEW_LAUNCH_COMPLETED_AT_UTC,
+        ...launchInputEvidence,
+        fork_context: false
+    }, null, 2)}\n`;
+    fs.writeFileSync(launchArtifactPath, launchArtifactText, 'utf8');
+    return {
+        launchArtifactPath,
+        launchArtifactSha256: fileSha256(launchArtifactPath),
+        launchInputMode: launchInputEvidence.launch_input_mode,
+        launchInputSha256: launchInputEvidence.launch_input_sha256,
+        copyPastePromptSha256: launchInputEvidence.copy_paste_reviewer_launch_prompt_sha256,
+        providerInvocationId,
+        launchTool,
+        attestationSource
+    };
+}
+
+export function stripAnsi(value: string): string {
+    return value.replace(/\x1B\[[0-9;?]*[ -/]*[@-~]/g, '');
+}
+
+export function fileSha256(pathToFile: string): string {
+    return createHash('sha256').update(fs.readFileSync(pathToFile)).digest('hex');
+}
+
+export function buildReviewExecutionEvidenceFixture(reviewContextPath: string): Record<string, unknown> {
+    const reviewContext = JSON.parse(fs.readFileSync(reviewContextPath, 'utf8')) as {
+        review_execution: {
+            mode: 'FULL' | 'DELTA';
+            contract_sha256: string;
+            delta?: { required_delta_targets?: string[] } | null;
+            finding_reconciliation: { resolvable_finding_ids: string[] };
+        };
+    };
+    const reviewExecution = reviewContext.review_execution;
+    assert.ok(reviewExecution, 'Fixture review context must include review_execution.');
+    return {
+        mode: reviewExecution.mode,
+        contract_sha256: reviewExecution.contract_sha256,
+        covered_delta_targets: reviewExecution.delta?.required_delta_targets || [],
+        inspected_prior_finding_ids: reviewExecution.finding_reconciliation.resolvable_finding_ids
+    };
+}
+
+export function buildNoFindingsJsonReviewReport(
+    reviewContextPath: string,
+    taskId: string,
+    reviewType = 'code'
+): Record<string, unknown> {
+    const reviewContext = JSON.parse(fs.readFileSync(reviewContextPath, 'utf8')) as {
+        coverage_contract: {
+            contract_sha256: string;
+            obligations: Array<{ id: string; kind: string; target: string }>;
+        };
+        task_scope: { changed_files: string[] };
+        tree_state: { tree_state_sha256: string };
+    };
+    const defaultFile = reviewContext.task_scope.changed_files[0] || 'src/app.ts';
+    const reviewContextSha256 = fileSha256(reviewContextPath);
+    return {
+        schema_version: 2,
+        task_id: taskId,
+        review_type: reviewType,
+        review_context_sha256: reviewContextSha256,
+        tree_state_sha256: reviewContext.tree_state.tree_state_sha256,
+        review_execution: buildReviewExecutionEvidenceFixture(reviewContextPath),
+        validation_notes: [{
+            id: 'N-001',
+            topic: 'complete-scope-sweep',
+            note: `Reviewed the complete assigned ${reviewType} scope and generated coverage obligations for verdict-free findings JSON ingestion.`,
+            evidence: [{
+                location: `${defaultFile}:1`,
+                observation: 'Validated concrete source behavior and receipt materialization for the assigned review contract.'
+            }]
+        }],
+        coverage_ledger: {
+            coverage_contract_sha256: reviewContext.coverage_contract.contract_sha256,
+            entries: reviewContext.coverage_contract.obligations.map((obligation) => ({
+                obligation_id: obligation.id,
+                evidence: [{
+                    location: `${obligation.kind === 'file' ? obligation.target : defaultFile}:1`,
+                    observation: `Verified concrete ${obligation.kind} behavior for ${obligation.target} against the assigned review contract.`
+                }],
+                finding_ids: []
+            }))
+        },
+        findings: { critical: [], high: [], medium: [], low: [] },
+        residual_risks: [],
+        reviewer_notes: ['No legacy verdict token is present in this JSON output.']
+    };
+}
+
+export function buildFailedJsonReviewReport(
+    reviewContextPath: string,
+    taskId: string,
+    reviewType = 'code'
+): Record<string, unknown> {
+    const report = buildNoFindingsJsonReviewReport(reviewContextPath, taskId, reviewType);
+    const reviewContext = JSON.parse(fs.readFileSync(reviewContextPath, 'utf8')) as {
+        coverage_contract: { obligations: Array<{ id: string }> };
+        task_scope: { changed_files: string[] };
+    };
+    const firstObligation = reviewContext.coverage_contract.obligations[0];
+    const coverageLedger = report.coverage_ledger as {
+        entries: Array<{ finding_ids: string[] }>;
+    };
+    coverageLedger.entries[0].finding_ids = ['F-001'];
+    const findings = report.findings as {
+        high: Array<Record<string, unknown>>;
+    };
+    findings.high = [{
+        id: 'F-001',
+        title: 'Fixture active finding',
+        description: 'The fixture intentionally records a failed verdict-free JSON review result.',
+        evidence: [{
+            location: `${reviewContext.task_scope.changed_files[0] || 'src/app.ts'}:1`,
+            observation: 'Active finding evidence is bound to the changed source file.'
+        }],
+        coverage_obligation_ids: [firstObligation.id]
+    }];
+    return report;
+}
+
+// Manual review-context fixtures are used only by CLI routing/receipt tests that
+// do not exercise production review-context construction.
+export function manualReviewContextTaskScopeFixture(repoRoot: string, taskId: string): Record<string, unknown> {
+    const preflightPath = path.join(getReviewsRoot(repoRoot), `${taskId}-preflight.json`);
+    let changedFiles = ['src/app.ts'];
+    if (fs.existsSync(preflightPath) && fs.statSync(preflightPath).isFile()) {
+        try {
+            const preflight = JSON.parse(fs.readFileSync(preflightPath, 'utf8')) as Record<string, unknown>;
+            changedFiles = Array.isArray(preflight.changed_files)
+                ? preflight.changed_files
+                    .map((entry) => String(entry || '').replace(/\\/g, '/').trim())
+                    .filter(Boolean)
+                : changedFiles;
+        } catch {
+            // Keep the stable default fixture.
+        }
+    }
+    return {
+        changed_files: changedFiles,
+        changed_file_count: changedFiles.length,
+        diff: {
+            available: changedFiles.length > 0,
+            source: 'fixture_task_diff',
+            char_count: changedFiles.length > 0 ? 120 : 0,
+            truncated: false
+        }
+    };
+}
+
+export function manualReviewContextBindingFixture(repoRoot: string, taskId: string, reviewType: string): Record<string, unknown> {
+    const preflightPath = path.join(getReviewsRoot(repoRoot), `${taskId}-preflight.json`);
+    const preflightSha256 = fs.existsSync(preflightPath)
+        ? createHash('sha256').update(fs.readFileSync(preflightPath)).digest('hex')
+        : null;
+    const treeState = manualReviewContextTreeStateFixture(repoRoot, taskId);
+    const taskScope = manualReviewContextTaskScopeFixture(repoRoot, taskId) as { changed_files: string[] };
+    return {
+        ...(treeState ? { schema_version: 2, tree_state: treeState } : {}),
+        task_id: taskId,
+        review_type: reviewType,
+        preflight_path: preflightPath.replace(/\\/g, '/'),
+        preflight_sha256: preflightSha256,
+        rule_context: manualReviewContextRuleContextFixture(repoRoot, taskId, reviewType),
+        review_execution: buildReviewRemediationReviewContract({
+            taskId,
+            reviewType,
+            preflightSha256: preflightSha256 || '0'.repeat(64),
+            fullReviewScope: taskScope.changed_files
+        })
+    };
+}
+
+export function manualReviewContextRuleContextFixture(repoRoot: string, taskId: string, reviewType: string): Record<string, unknown> {
+    const reviewsRoot = getReviewsRoot(repoRoot);
+    fs.mkdirSync(reviewsRoot, { recursive: true });
+    const artifactPath = path.join(reviewsRoot, `${taskId}-${reviewType}-review-context.md`);
+    let artifactText: string;
+    if (fs.existsSync(artifactPath) && fs.statSync(artifactPath).isFile()) {
+        artifactText = fs.readFileSync(artifactPath, 'utf8');
+    } else {
+        artifactText = [
+            `# ${reviewType} Review Context`,
+            '',
+            `Fixture prompt artifact for ${taskId}.`,
+            '',
+            '## Task Scope',
+            '- src/app.ts'
+        ].join('\n');
+        fs.writeFileSync(artifactPath, `${artifactText}\n`, 'utf8');
+        artifactText = `${artifactText}\n`;
+    }
+    return {
+        artifact_path: artifactPath.replace(/\\/g, '/'),
+        artifact_sha256: createHash('sha256').update(artifactText, 'utf8').digest('hex'),
+        preferred_prompt_artifact: artifactPath.replace(/\\/g, '/')
+    };
+}
+
+export function writeManualReviewerHandoffFixture(repoRoot: string, taskId: string, reviewType: string): Record<string, unknown> {
+    const reviewsRoot = getReviewsRoot(repoRoot);
+    fs.mkdirSync(reviewsRoot, { recursive: true });
+    const promptTemplatePath = path.join(reviewsRoot, `${taskId}-${reviewType}-prompt-template.md`);
+    const outputTemplatePath = path.join(reviewsRoot, `${taskId}-${reviewType}-output-template.md`);
+    const evidenceManifestPath = path.join(reviewsRoot, `${taskId}-${reviewType}-evidence-manifest.json`);
+    const promptTemplateText = `# ${reviewType} review Prompt Template\nUse only this prompt template as instructions.\n`;
+    const outputTemplateText = [
+        `# ${reviewType} review Output Template`,
+        '',
+        '## Findings by Severity',
+        'none',
+        '',
+        '## Deferred Findings',
+        'none',
+        '',
+        '## Residual Risks',
+        'none',
+        '',
+        '## Verdict',
+        'REVIEW PASSED',
+        ''
+    ].join('\n');
+    const evidenceManifestText = JSON.stringify({
+        schema_version: 1,
+        task_id: taskId,
+        review_type: reviewType,
+        trust_boundary: {
+            evidence_is_untrusted: true
+        }
+    }, null, 2) + '\n';
+    fs.writeFileSync(promptTemplatePath, promptTemplateText, 'utf8');
+    fs.writeFileSync(outputTemplatePath, outputTemplateText, 'utf8');
+    fs.writeFileSync(evidenceManifestPath, evidenceManifestText, 'utf8');
+    return {
+        prompt_template: {
+            artifact_path: promptTemplatePath.replace(/\\/g, '/'),
+            artifact_sha256: createHash('sha256').update(promptTemplateText, 'utf8').digest('hex')
+        },
+        output_template: {
+            artifact_path: outputTemplatePath.replace(/\\/g, '/'),
+            artifact_sha256: createHash('sha256').update(outputTemplateText, 'utf8').digest('hex')
+        },
+        evidence_manifest: {
+            artifact_path: evidenceManifestPath.replace(/\\/g, '/'),
+            artifact_sha256: createHash('sha256').update(evidenceManifestText, 'utf8').digest('hex')
+        }
+    };
+}
+
+export function manualReviewContextTreeStateFixture(repoRoot: string, taskId: string): Record<string, unknown> | null {
+    const preflightPath = path.join(getReviewsRoot(repoRoot), `${taskId}-preflight.json`);
+    if (!fs.existsSync(preflightPath) || !fs.statSync(preflightPath).isFile()) {
+        return null;
+    }
+    try {
+        const preflight = JSON.parse(fs.readFileSync(preflightPath, 'utf8')) as Record<string, unknown>;
+        const changedFiles = Array.isArray(preflight.changed_files)
+            ? preflight.changed_files.map((entry) => String(entry || '').replace(/\\/g, '/').trim()).filter(Boolean)
+            : ['src/app.ts'];
+        const metrics = preflight.metrics && typeof preflight.metrics === 'object' && !Array.isArray(preflight.metrics)
+            ? preflight.metrics as Record<string, unknown>
+            : null;
+        return buildReviewTreeState({
+            repoRoot,
+            detectionSource: preflight.detection_source || 'explicit_changed_files',
+            includeUntracked: preflight.include_untracked !== false,
+            changedFiles,
+            metrics
+        }) as unknown as Record<string, unknown>;
+    } catch {
+        return null;
+    }
+}
+
+export function readReviewTreeStateSha256FromContextPath(reviewContextPath: string): string | null {
+    if (!fs.existsSync(reviewContextPath) || !fs.statSync(reviewContextPath).isFile()) {
+        return null;
+    }
+    try {
+        const reviewContext = JSON.parse(fs.readFileSync(reviewContextPath, 'utf8')) as Record<string, unknown>;
+        const treeState = reviewContext.tree_state && typeof reviewContext.tree_state === 'object' && !Array.isArray(reviewContext.tree_state)
+            ? reviewContext.tree_state as Record<string, unknown>
+            : null;
+        const treeStateSha256 = String(treeState?.tree_state_sha256 || treeState?.treeStateSha256 || '').trim().toLowerCase();
+        return treeStateSha256 || null;
+    } catch {
+        return null;
+    }
+}
+
+export function reviewContextScopedDiffFixture(repoRoot: string, taskId: string, reviewType: string): Record<string, unknown> {
+    return {
+        expected: false,
+        metadata_path: path.join(getReviewsRoot(repoRoot), `${taskId}-${reviewType}-scoped.json`).replace(/\\/g, '/'),
+        metadata: null
+    };
+}
+
+export async function recordReviewRoutingViaCli(options: {
+    taskId: string;
+    reviewType: string;
+    repoRoot: string;
+    reviewerExecutionMode: 'delegated_subagent';
+    reviewerIdentity: string;
+    reviewerFallbackReason?: string;
+    reviewContextPath?: string;
+}) {
+    const args = [
+        'gate',
+        'record-review-routing',
+        '--task-id', options.taskId,
+        '--review-type', options.reviewType,
+        '--repo-root', options.repoRoot,
+        '--reviewer-execution-mode', options.reviewerExecutionMode,
+        '--reviewer-identity', options.reviewerIdentity
+    ];
+    if (options.reviewerFallbackReason) {
+        args.push('--reviewer-fallback-reason', options.reviewerFallbackReason);
+    }
+    await runCliMainWithHandling(args);
+    if ((process.exitCode ?? 0) !== 0) {
+        return;
+    }
+    const taskEventsPath = path.join(getOrchestratorRoot(options.repoRoot), 'runtime', 'task-events', `${options.taskId}.jsonl`);
+    if (!fs.existsSync(taskEventsPath)) {
+        return;
+    }
+    attestReviewerInvocationForTest({
+        repoRoot: options.repoRoot,
+        taskId: options.taskId,
+        reviewType: options.reviewType,
+        reviewContextPath: options.reviewContextPath || path.join(
+            getReviewsRoot(options.repoRoot),
+            `${options.taskId}-${options.reviewType}-review-context.json`
+        ),
+        reviewerIdentity: options.reviewerIdentity,
+        reviewerExecutionMode: options.reviewerExecutionMode
+    });
+}
+
+export function attestReviewerInvocationForTest(options: {
+    repoRoot: string;
+    taskId: string;
+    reviewType: string;
+    reviewContextPath: string;
+    reviewerIdentity: string;
+    reviewerExecutionMode?: 'delegated_subagent';
+}): void {
+    const reviewerExecutionMode = options.reviewerExecutionMode || 'delegated_subagent';
+    const events = readTaskTimelineEvents(options.repoRoot, options.taskId);
+    const routedEvent = [...events].reverse().find((event) => (
+        event.event_type === 'REVIEWER_DELEGATION_ROUTED'
+        && String((event.details as Record<string, unknown> | undefined)?.review_type || '').trim().toLowerCase() === options.reviewType
+        && String((event.details as Record<string, unknown> | undefined)?.reviewer_session_id || '').trim() === options.reviewerIdentity
+        && String((event.details as Record<string, unknown> | undefined)?.reviewer_execution_mode || '').trim() === reviewerExecutionMode
+    ));
+    const routedIntegrity = routedEvent?.integrity as { event_sha256?: string } | null | undefined;
+    assert.ok(routedIntegrity?.event_sha256, `Missing routed reviewer integrity for ${options.taskId}/${options.reviewType}.`);
+    applyReviewerRoutingMetadata(options.reviewContextPath, {
+        actualExecutionMode: reviewerExecutionMode,
+        reviewerSessionId: options.reviewerIdentity,
+        fallbackReason: null
+    });
+    const crypto = require('node:crypto');
+    const reviewContextSha256 = crypto.createHash('sha256')
+        .update(fs.readFileSync(options.reviewContextPath))
+        .digest('hex');
+    const reviewTreeStateSha256 = readReviewTreeStateSha256FromContextPath(options.reviewContextPath);
+    const launchEvidence = seedCompletedReviewerLaunchFixture({
+        repoRoot: options.repoRoot,
+        taskId: options.taskId,
+        reviewType: options.reviewType,
+        reviewerIdentity: options.reviewerIdentity,
+        reviewContextPath: options.reviewContextPath,
+        reviewContextSha256,
+        routingEventSha256: String(routedIntegrity.event_sha256).trim()
+    });
+    if (events.some((event) => (
+        event.event_type === 'REVIEWER_INVOCATION_ATTESTED'
+        && String((event.details as Record<string, unknown> | undefined)?.review_type || '').trim().toLowerCase() === options.reviewType
+        && String((event.details as Record<string, unknown> | undefined)?.reviewer_session_id || '').trim() === options.reviewerIdentity
+        && String((event.details as Record<string, unknown> | undefined)?.review_context_sha256 || '').trim().toLowerCase() === reviewContextSha256
+        && (!reviewTreeStateSha256 || String((event.details as Record<string, unknown> | undefined)?.review_tree_state_sha256 || '').trim().toLowerCase() === reviewTreeStateSha256)
+        && String((event.details as Record<string, unknown> | undefined)?.routing_event_sha256 || '').trim().toLowerCase() === String(routedIntegrity.event_sha256).trim().toLowerCase()
+        && String((event.details as Record<string, unknown> | undefined)?.reviewer_launch_artifact_sha256 || '').trim().toLowerCase() === launchEvidence.launchArtifactSha256
+    ))) {
+        return;
+    }
+    appendTaskEvent(getOrchestratorRoot(options.repoRoot), options.taskId, 'REVIEWER_INVOCATION_ATTESTED', 'INFO', 'Reviewer invocation attested by test controller fixture.', {
+        task_id: options.taskId,
+        review_type: options.reviewType,
+        reviewer_execution_mode: reviewerExecutionMode,
+        reviewer_session_id: options.reviewerIdentity,
+        reviewer_identity: options.reviewerIdentity,
+        review_context_sha256: reviewContextSha256,
+        review_tree_state_sha256: reviewTreeStateSha256,
+        routing_event_sha256: routedIntegrity.event_sha256,
+        reviewer_launch_artifact_path: path.normalize(launchEvidence.launchArtifactPath).replace(/\\/g, '/'),
+        reviewer_launch_artifact_sha256: launchEvidence.launchArtifactSha256,
+        reviewer_launch_attestation_source: launchEvidence.attestationSource,
+        reviewer_launch_tool: launchEvidence.launchTool,
+        provider_invocation_id: launchEvidence.providerInvocationId,
+        launch_prepared_at_utc: TEST_REVIEW_LAUNCH_PREPARED_AT_UTC,
+        delegation_started_at_utc: TEST_REVIEW_LAUNCHED_AT_UTC,
+        launched_at_utc: TEST_REVIEW_LAUNCHED_AT_UTC,
+        launch_completed_at_utc: TEST_REVIEW_LAUNCH_COMPLETED_AT_UTC,
+        launch_input_mode: launchEvidence.launchInputMode,
+        launch_input_sha256: launchEvidence.launchInputSha256,
+        copy_paste_reviewer_launch_prompt_sha256: launchEvidence.copyPastePromptSha256,
+        ...resolveReviewExecutionRuntimeBindings(
+            JSON.parse(fs.readFileSync(options.reviewContextPath, 'utf8')) as Record<string, unknown>
+        ),
+        invocation_attested_at_utc: TEST_REVIEW_INVOCATION_ATTESTED_AT_UTC
+    });
+}
+
+export async function seedRoutedReviewerLaunchFixture(options: {
+    repoRoot: string;
+    taskId: string;
+    provider?: string;
+    reviewerIdentity?: string;
+}) {
+    const provider = options.provider || 'Antigravity';
+    const reviewerIdentity = options.reviewerIdentity || 'agent:test-reviewer';
+    const reviewType = 'code';
+    seedTaskQueue(options.repoRoot, options.taskId);
+    seedInitAnswers(options.repoRoot, provider);
+    const preflightPath = writePreflight(options.repoRoot, options.taskId);
+    prepareCurrentReviewPhase(options.repoRoot, options.taskId, preflightPath, provider);
+    const reviewsRoot = getReviewsRoot(options.repoRoot);
+    fs.mkdirSync(reviewsRoot, { recursive: true });
+    const reviewerPromptPath = path.join(reviewsRoot, `${options.taskId}-${reviewType}-review-context.md`);
+    const reviewerPromptContent = 'reviewer prompt payload\n';
+    fs.writeFileSync(reviewerPromptPath, reviewerPromptContent, 'utf8');
+    const reviewContextPath = path.join(reviewsRoot, `${options.taskId}-${reviewType}-review-context.json`);
+    const reviewSnapshot = getWorkspaceSnapshot(options.repoRoot, 'explicit_changed_files', true, ['src/app.ts']);
+    const reviewerHandoff = writeManualReviewerHandoffFixture(options.repoRoot, options.taskId, reviewType);
+    const reviewTreeState = buildReviewTreeState({
+        repoRoot: options.repoRoot,
+        detectionSource: 'explicit_changed_files',
+        includeUntracked: true,
+        changedFiles: ['src/app.ts'],
+        metrics: {
+            changed_files_sha256: reviewSnapshot.changed_files_sha256,
+            scope_content_sha256: reviewSnapshot.scope_content_sha256,
+            scope_sha256: reviewSnapshot.scope_sha256
+        }
+    });
+    fs.writeFileSync(reviewContextPath, JSON.stringify({
+        ...manualReviewContextBindingFixture(options.repoRoot, options.taskId, reviewType),
+        task_scope: manualReviewContextTaskScopeFixture(options.repoRoot, options.taskId),
+        tree_state: reviewTreeState,
+        scoped_diff: reviewContextScopedDiffFixture(options.repoRoot, options.taskId, reviewType),
+        rule_context: {
+            artifact_path: reviewerPromptPath.replace(/\\/g, '/'),
+            artifact_sha256: createHash('sha256').update(reviewerPromptContent, 'utf8').digest('hex'),
+            preferred_prompt_artifact: reviewerPromptPath.replace(/\\/g, '/')
+        },
+        reviewer_handoff: reviewerHandoff,
+        reviewer_routing: createReviewerRoutingFixture(provider, {
+            capability_level: 'delegation_capable'
+        })
+    }, null, 2) + '\n', 'utf8');
+
+    const previousExitCode = process.exitCode;
+    const previousCwd = process.cwd();
+    process.exitCode = 0;
+    try {
+        process.chdir(options.repoRoot);
+        await runCliMainWithHandling([
+            'gate',
+            'record-review-routing',
+            '--task-id', options.taskId,
+            '--review-type', reviewType,
+            '--repo-root', options.repoRoot,
+            '--reviewer-execution-mode', 'delegated_subagent',
+            '--reviewer-identity', reviewerIdentity
+        ]);
+        assert.equal(process.exitCode ?? 0, 0);
+    } finally {
+        process.chdir(previousCwd);
+        process.exitCode = previousExitCode;
+    }
+
+    const events = readTaskTimelineEvents(options.repoRoot, options.taskId);
+    const routingEvent = [...events].reverse().find((event) => event.event_type === 'REVIEWER_DELEGATION_ROUTED');
+    const routingIntegrity = routingEvent?.integrity as Record<string, unknown> | undefined;
+    assert.ok(routingIntegrity?.event_sha256);
+    const reviewContextSha256 = createHash('sha256').update(fs.readFileSync(reviewContextPath)).digest('hex');
+    return {
+        preflightPath,
+        reviewsRoot,
+        reviewType,
+        reviewerIdentity,
+        reviewerPromptPath,
+        promptTemplatePath: String((reviewerHandoff.prompt_template as Record<string, unknown>).artifact_path),
+        outputTemplatePath: String((reviewerHandoff.output_template as Record<string, unknown>).artifact_path),
+        evidenceManifestPath: String((reviewerHandoff.evidence_manifest as Record<string, unknown>).artifact_path),
+        reviewContextPath,
+        reviewContextSha256,
+        reviewTreeStateSha256: reviewTreeState.tree_state_sha256,
+        routingEventSha256: String(routingIntegrity.event_sha256)
+    };
+}
+
+export async function seedPromptBoundReviewFixture(options: {
+    repoRoot: string;
+    taskId: string;
+    provider?: string;
+    reviewerIdentity?: string;
+    preflightOverrides?: Record<string, unknown>;
+    taskNotes?: string;
+    parentTask?: {
+        taskId: string;
+        notes: string;
+    };
+}) {
+    const provider = options.provider || 'Codex';
+    const reviewerIdentity = options.reviewerIdentity || `agent:${options.taskId}-reviewer`;
+    seedTaskQueue(options.repoRoot, options.taskId);
+    if (options.parentTask) {
+        const taskPath = path.join(options.repoRoot, 'TASK.md');
+        const taskContent = fs.readFileSync(taskPath, 'utf8');
+        const separator = '| --- | --- | --- | --- | --- | --- | --- | --- | --- |';
+        assert.ok(taskContent.includes(separator));
+        fs.writeFileSync(
+            taskPath,
+            taskContent.replace(
+                separator,
+                `${separator}\n| ${options.parentTask.taskId} | IN_PROGRESS | P1 | test | Parent review task | unassigned | 2026-03-28 | balanced | ${options.parentTask.notes} |`
+            ),
+            'utf8'
+        );
+    }
+    const requestedProfileId = String(
+        ((options.preflightOverrides?.profile_policy_snapshot as Record<string, any> | undefined)
+            ?.review_finding_policy as Record<string, unknown> | undefined)?.policy_id || ''
+    ).trim();
+    if (options.taskNotes || requestedProfileId) {
+        const taskPath = path.join(options.repoRoot, 'TASK.md');
+        let taskContent = fs.readFileSync(taskPath, 'utf8');
+        if (requestedProfileId) {
+            taskContent = taskContent.replace('| default |', `| ${requestedProfileId} |`);
+        }
+        if (options.taskNotes) {
+            taskContent = taskContent.replace('| fixture |', `| ${options.taskNotes} |`);
+        }
+        fs.writeFileSync(
+            taskPath,
+            taskContent,
+            'utf8'
+        );
+    }
+    seedInitAnswers(options.repoRoot, provider);
+    initializeGitRepo(options.repoRoot);
+    fs.writeFileSync(path.join(options.repoRoot, 'src', 'app.ts'), 'const promptBoundValue = 2;\n', 'utf8');
+    const snapshot = getWorkspaceSnapshot(options.repoRoot, 'explicit_changed_files', true, ['src/app.ts']);
+    const preflightPath = writePreflight(options.repoRoot, options.taskId, {
+        detection_source: 'explicit_changed_files',
+        review_coverage_contract_required: true,
+        scope_category: 'code',
+        changed_files: ['src/app.ts'],
+        metrics: {
+            changed_lines_total: snapshot.changed_lines_total,
+            changed_files_sha256: snapshot.changed_files_sha256,
+            scope_content_sha256: snapshot.scope_content_sha256,
+            scope_sha256: snapshot.scope_sha256
+        },
+        required_reviews: {
+            code: true,
+            db: false,
+            security: false,
+            refactor: false,
+            api: false,
+            test: false,
+            performance: false,
+            infra: false,
+            dependency: false
+        },
+        triggers: { runtime_changed: true, runtime_code_changed: true },
+        ...(options.preflightOverrides || {})
+    });
+    prepareCurrentReviewPhase(options.repoRoot, options.taskId, preflightPath, provider);
+
+    const reviewsRoot = getReviewsRoot(options.repoRoot);
+    const reviewContextPath = path.join(reviewsRoot, `${options.taskId}-code-review-context.json`);
+    buildReviewContext({
+        reviewType: 'code',
+        depth: 2,
+        preflightPath,
+        tokenEconomyConfigPath: path.join(options.repoRoot, 'garda-agent-orchestrator', 'live', 'config', 'token-economy.json'),
+        scopedDiffMetadataPath: path.join(reviewsRoot, `${options.taskId}-code-scoped.json`),
+        outputPath: reviewContextPath,
+        repoRoot: options.repoRoot
+    });
+
+    const reviewContext = JSON.parse(fs.readFileSync(reviewContextPath, 'utf8')) as Record<string, unknown>;
+    const ruleContext = reviewContext.rule_context as Record<string, unknown>;
+    const rawReviewerPromptPath = String(ruleContext.artifact_path || ruleContext.preferred_prompt_artifact || '');
+    const reviewerPromptPath = path.isAbsolute(rawReviewerPromptPath)
+        ? rawReviewerPromptPath
+        : path.resolve(options.repoRoot, rawReviewerPromptPath);
+    const reviewerHandoff = reviewContext.reviewer_handoff as Record<string, Record<string, unknown>>;
+    const promptTemplatePathValue = String(reviewerHandoff.prompt_template?.artifact_path || '');
+    const outputTemplatePathValue = String(reviewerHandoff.output_template?.artifact_path || '');
+    const evidenceManifestPathValue = String(reviewerHandoff.evidence_manifest?.artifact_path || '');
+    const routing = await runCliWithCapturedOutput([
+        'gate',
+        'record-review-routing',
+        '--task-id', options.taskId,
+        '--review-type', 'code',
+        '--repo-root', options.repoRoot,
+        '--reviewer-execution-mode', 'delegated_subagent',
+        '--reviewer-identity', reviewerIdentity
+    ], { cwd: options.repoRoot });
+    assert.equal(routing.exitCode, 0, routing.errors.join('\n'));
+
+    return {
+        preflightPath,
+        reviewsRoot,
+        reviewType: 'code',
+        reviewerIdentity,
+        reviewerPromptPath,
+        promptTemplatePath: path.isAbsolute(promptTemplatePathValue) ? promptTemplatePathValue : path.resolve(options.repoRoot, promptTemplatePathValue),
+        outputTemplatePath: path.isAbsolute(outputTemplatePathValue) ? outputTemplatePathValue : path.resolve(options.repoRoot, outputTemplatePathValue),
+        evidenceManifestPath: path.isAbsolute(evidenceManifestPathValue) ? evidenceManifestPathValue : path.resolve(options.repoRoot, evidenceManifestPathValue),
+        reviewContextPath,
+        launchArtifactPath: path.join(options.repoRoot, 'garda-agent-orchestrator', 'runtime', 'tmp', 'reviews', options.taskId, 'code', 'reviewer-launch.json')
+    };
+}
+
+export async function prepareReviewerLaunchForTest(options: {
+    repoRoot: string;
+    taskId: string;
+    reviewerIdentity: string;
+    launchArtifactPath: string;
+}): Promise<void> {
+    const prepare = await runCliWithCapturedOutput([
+        'gate',
+        'prepare-reviewer-launch',
+        '--task-id', options.taskId,
+        '--review-type', 'code',
+        '--repo-root', options.repoRoot,
+        '--reviewer-execution-mode', 'delegated_subagent',
+        '--reviewer-identity', options.reviewerIdentity,
+        '--reviewer-launch-artifact-path', options.launchArtifactPath
+    ], { cwd: options.repoRoot });
+    assert.equal(prepare.exitCode, 0, prepare.errors.join('\n'));
+}
+
+export function completeReviewerLaunchArtifactForTest(launchArtifactPath: string): void {
+    const preparedArtifact = JSON.parse(fs.readFileSync(launchArtifactPath, 'utf8')) as Record<string, unknown>;
+    fs.writeFileSync(launchArtifactPath, JSON.stringify({
+        ...preparedArtifact,
+        evidence_type: 'delegated_reviewer_launch',
+        attestation_state: 'launched',
+        attestation_source: 'test_provider_controller',
+        launch_tool: 'test-subagent-spawn',
+        provider_invocation_id: 'test-invocation-265',
+        launched_at_utc: '2026-04-28T00:00:00.000Z',
+        fork_context: false
+    }, null, 2) + '\n', 'utf8');
+}
+
+export function seedNodeBackendOptionalSkillFixture(repoRoot: string, policyMode: 'advisory' | 'required' | 'strict' | 'off' = 'advisory') {
+    const orchestratorRoot = getOrchestratorRoot(repoRoot);
+    const configDir = path.join(orchestratorRoot, 'live', 'config');
+    const skillRoot = path.join(orchestratorRoot, 'live', 'skills', 'node-backend');
+    fs.mkdirSync(configDir, { recursive: true });
+    fs.mkdirSync(skillRoot, { recursive: true });
+    fs.writeFileSync(
+        path.join(configDir, 'garda.config.json'),
+        JSON.stringify({
+            version: 1,
+            configs: {
+                'optional-skill-selection-policy': 'optional-skill-selection-policy.json',
+                'skill-packs': 'skill-packs.json'
+            }
+        }, null, 2),
+        'utf8'
+    );
+    fs.writeFileSync(
+        path.join(configDir, 'skill-packs.json'),
+        JSON.stringify({ version: 1, installed_packs: ['node-backend'] }, null, 2),
+        'utf8'
+    );
+    fs.writeFileSync(
+        path.join(configDir, 'optional-skill-selection-policy.json'),
+        JSON.stringify({ version: 1, mode: policyMode }, null, 2),
+        'utf8'
+    );
+    fs.writeFileSync(
+        path.join(skillRoot, 'skill.json'),
+        JSON.stringify({
+            id: 'node-backend',
+            pack: 'node-backend',
+            name: 'Node Backend',
+            summary: 'Node backend API implementation helper.',
+            tags: ['node', 'backend', 'api'],
+            aliases: ['node-backend', 'node'],
+            task_signals: ['request validation', 'api endpoint', 'node-backend'],
+            changed_path_signals: ['src/api/', 'orders.ts'],
+            references: [],
+            cost_hint: 'low',
+            priority: 50,
+            autoload: 'suggest'
+        }, null, 2),
+        'utf8'
+    );
+    fs.writeFileSync(path.join(skillRoot, 'SKILL.md'), '# Node Backend\n', 'utf8');
+    return path.join(skillRoot, 'SKILL.md');
+}

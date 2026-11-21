@@ -1,0 +1,213 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {
+    buildReviewCoverageContract, getReviewCoverageContractViolations, validateReviewCoverageLedger
+} from '../../../../src/gates/review/review-coverage-ledger';
+import type { QualityValidationObligation } from '../../../../src/gates/quality-checklist/quality-checklist-validation-phases';
+import { sha256RedactedJsonPayload } from '../../../../src/core/redaction';
+import { buildReviewFindingsValidationArtifact } from '../../../../src/gates/review/review-findings-validation-artifact';
+import { buildReviewFindingsDispositionArtifact } from '../../../../src/gates/review/review-findings-disposition-artifact';
+import { resolveLockedReviewFindingPolicyFromPreflight } from '../../../../src/gates/review/review-finding-disposition';
+import { buildReviewRemediationBaselineArtifact } from '../../../../src/gates/review-remediation/review-remediation-baseline';
+import { validateReviewFindingsReport } from '../../../../src/gates/review/review-findings-schema';
+import { buildReviewerFindingsOutputTemplateJson } from '../../../../src/gates/review/reviewer-findings-prompt-contract';
+import { buildReviewRemediationReviewContract } from '../../../../src/gates/review-remediation/review-remediation-review-contract';
+import { getNativeCaseResolutionViolations } from '../../../../src/gates/review/native-case-semantics';
+import { MAX_BOUNDARY_SOURCE_REFERENCES } from '../../../../src/core/trust-boundary-source-evidence';
+
+// Unit input for the contract builder; this is not native execution or review evidence.
+const obligation: QualityValidationObligation = {
+    id: 'a'.repeat(64), recipe_id: 'opaque', target_id: 'literal target', selector: 'declared case',
+    source_identity: { path: 'RootSuite', sha256: 'b'.repeat(64), size: 17, identity: 'fixture identity' },
+    snapshot_sha256: 'c'.repeat(64), execution: 'OBSERVED', attempt_id: 'fixture attempt',
+    result_status: 'UNRESOLVED', result_sha256: 'd'.repeat(64)
+};
+
+function contractFor(binding: QualityValidationObligation) {
+    return buildReviewCoverageContract({ reviewType: 'test', changedFiles: ['src/domain/catalog.ts'],
+        validationObligations: [binding] });
+}
+
+// Constructor data only: these unit bindings are not native process or reviewer receipts.
+function nativeCaseBinding() {
+    return { ...obligation, case_execution: {
+        record_path: 'unit/attempt.json', record_sha256: '1'.repeat(64),
+        output_path: 'unit/output.log', output_sha256: '2'.repeat(64), output_size_bytes: 71,
+        output_encoding: 'utf8' as const, event_task_sequence: 9, scope_content_sha256: '3'.repeat(64)
+    } };
+}
+
+test('rejects altered native output identity while preserving exact case execution coverage', () => {
+    const binding = nativeCaseBinding(), contract = contractFor(binding);
+    assert.deepEqual(contract.obligations.find(entry => entry.kind === 'validation')!.validation_binding, binding);
+    const changedOutput = { ...binding, case_execution: {
+        ...binding.case_execution, output_sha256: '4'.repeat(64)
+    } };
+    assert.notEqual(contractFor(changedOutput).contract_sha256, contract.contract_sha256);
+});
+
+test('rejects missing independent case resolution despite complete source coverage', () => {
+    const contract = contractFor(nativeCaseBinding()), taskId = 'T-UNIT-NATIVE-SEMANTICS', hash = 'e'.repeat(64);
+    const execution = buildReviewRemediationReviewContract({ taskId, reviewType: 'test', preflightSha256: hash,
+        fullReviewScope: ['src/domain/catalog.ts'] });
+    const report = JSON.parse(buildReviewerFindingsOutputTemplateJson({ taskId, reviewType: 'test',
+        reviewContextSha256: hash, treeStateSha256: hash, coverageContract: contract, reviewExecutionContract: execution }));
+    report.validation_notes[0] = { id: 'N-001', topic: 'complete-scope-sweep', note: 'Unit report with source coverage only.',
+        evidence: [{ location: 'src/domain/catalog.ts:1', observation: 'Unit assigned source inspected.' }] };
+    report.coverage_ledger.entries = outputFor(contract).coverage_ledger.entries;
+    report.reviewer_notes = ['Unit schema input, not a delegated review.'];
+    const result = validateReviewFindingsReport(report, { expectedTaskId: taskId, expectedReviewType: 'test',
+        expectedCoverageContract: contract, expectedCoverageObligationIds: contract.obligations.map(entry => entry.id),
+        expectedChangedFilePaths: ['src/domain/catalog.ts'], expectedReviewContextSha256: hash,
+        expectedTreeStateSha256: hash, expectedReviewExecutionContract: execution });
+    assert.equal(result.valid, false, 'Source coverage alone cannot resolve actual selected-case results.');
+});
+
+test('frozen coverage requires every exact declared target without conventional source names', () => {
+    const contract = contractFor(obligation);
+    assert.deepEqual(contract.obligations.find(entry => entry.id === `VALIDATION-${obligation.id.toUpperCase()}`), {
+        id: `VALIDATION-${obligation.id.toUpperCase()}`, kind: 'validation',
+        target: 'opaque/literal target: declared case', source: 'RootSuite', validation_binding: obligation
+    });
+    assert.equal(contract.required, true);
+});
+
+test('coverage contract rejects stale source identity and replayed attempt bindings without semantic closure', () => {
+    const baseline = contractFor(obligation).contract_sha256;
+    assert.notEqual(contractFor({ ...obligation, source_identity: {
+        ...obligation.source_identity, sha256: 'e'.repeat(64)
+    } }).contract_sha256, baseline);
+    assert.notEqual(contractFor({ ...obligation, attempt_id: 'different attempt' }).contract_sha256, baseline);
+    assert.equal(getReviewCoverageContractViolations(contractFor(obligation), {
+        reviewType: 'test', changedFiles: ['src/domain/catalog.ts'],
+        validationObligations: [{ ...obligation, attempt_id: 'different attempt' }]
+    }).length, 1);
+    assert.equal(obligation.result_status, 'UNRESOLVED');
+});
+
+function outputFor(contract: ReturnType<typeof contractFor>, validationLocation = 'RootSuite:1') {
+    return { coverage_ledger: { entries: contract.obligations.map(entry => ({
+        obligation_id: entry.id, evidence: [{
+            location: entry.id.startsWith('VALIDATION-') ? validationLocation : 'src/domain/catalog.ts:1',
+            observation: 'The declared case retains the catalog source binding and opaque observed attempt without a semantic PASS.'
+        }], finding_ids: []
+    })) }, findings: { critical: [], high: [], medium: [], low: [] } };
+}
+
+test('native case limits preserve complete existing declared-target coverage', () => {
+    // Constructor compatibility only, not task execution or reviewer acceptance.
+    const bindings = Array.from({ length: MAX_BOUNDARY_SOURCE_REFERENCES + 1 }, (_, index) => ({ ...obligation,
+        id: sha256RedactedJsonPayload({ index }), target_id: `case-${index}` }));
+    const contract = buildReviewCoverageContract({ reviewType: 'test', changedFiles: ['src/domain/catalog.ts'],
+        validationObligations: bindings });
+    const result = validateReviewCoverageLedger(JSON.stringify(outputFor(contract)), contract);
+    assert.equal(result.status, 'PASS', JSON.stringify(result));
+    const mixed = getNativeCaseResolutionViolations({ obligations: [...bindings, nativeCaseBinding()], entries: [] });
+    assert.ok(mixed.some(item => item.includes('missing or malformed')));
+    assert.equal(mixed.some(item => item.includes('exceed their bound')), false);
+    assert.ok(getNativeCaseResolutionViolations({ obligations: bindings.map(item => ({ ...nativeCaseBinding(), id: item.id })),
+        entries: [] }).some(item => item.includes('exceed their bound')));
+});
+
+test('declared target closure rejects foreign source evidence without expanding other obligation domains', () => {
+    const contract = contractFor(obligation);
+    assert.equal(validateReviewCoverageLedger(JSON.stringify(outputFor(contract)), contract).status, 'PASS');
+    assert.equal(validateReviewCoverageLedger(JSON.stringify(outputFor(contract, 'src/domain/catalog.ts:1')), contract).status, 'FAIL');
+    const wrongFile = outputFor(contract);
+    wrongFile.coverage_ledger.entries[0].evidence[0].location = 'RootSuite:1';
+    assert.equal(validateReviewCoverageLedger(JSON.stringify(wrongFile), contract).status, 'FAIL');
+});
+
+test('declared target closure rejects an omitted or duplicated exact obligation', () => {
+    const contract = contractFor(obligation), missing = outputFor(contract);
+    missing.coverage_ledger.entries = missing.coverage_ledger.entries.filter(entry => !entry.obligation_id.startsWith('VALIDATION-'));
+    assert.equal(validateReviewCoverageLedger(JSON.stringify(missing), contract).status, 'FAIL');
+    const duplicate = outputFor(contract);
+    const entry = duplicate.coverage_ledger.entries.find(item => item.obligation_id.startsWith('VALIDATION-'));
+    assert.ok(entry);
+    duplicate.coverage_ledger.entries.push(entry);
+    assert.equal(validateReviewCoverageLedger(JSON.stringify(duplicate), contract).status, 'FAIL');
+});
+
+test('findings closure rejects foreign citations while permitting its unchanged declared target source', () => {
+    const contract = contractFor(obligation), taskId = 'T-UNIT-DECLARED-CLOSURE', hash = 'e'.repeat(64);
+    const execution = buildReviewRemediationReviewContract({ taskId, reviewType: 'test', preflightSha256: hash,
+        fullReviewScope: ['src/domain/catalog.ts'] });
+    const template = JSON.parse(buildReviewerFindingsOutputTemplateJson({ taskId, reviewType: 'test',
+        reviewContextSha256: hash, treeStateSha256: hash, coverageContract: contract, reviewExecutionContract: execution }));
+    const validationEntry = template.coverage_ledger.entries.find((entry: { obligation_id: string }) => entry.obligation_id.startsWith('VALIDATION-'));
+    assert.equal(validationEntry.evidence[0].location, 'RootSuite:<line>');
+    template.validation_notes[0] = { id: 'N-001', topic: 'complete-scope-sweep', note: 'Inspected exact declared target and assigned source.',
+        evidence: [{ location: 'src/domain/catalog.ts:1', observation: 'Assigned source remains bound.' }] };
+    template.coverage_ledger.entries = outputFor(contract).coverage_ledger.entries;
+    template.reviewer_notes = ['In-memory schema fixture; no delegated review or receipt.'];
+    const inspect = (report: typeof template) => validateReviewFindingsReport(report, { expectedTaskId: taskId,
+        expectedReviewType: 'test', expectedCoverageContract: contract,
+        expectedCoverageObligationIds: contract.obligations.map(entry => entry.id),
+        expectedChangedFilePaths: ['src/domain/catalog.ts'], expectedReviewContextSha256: hash,
+        expectedTreeStateSha256: hash, expectedReviewExecutionContract: execution });
+    assert.equal(inspect(template).valid, true);
+    const widened = structuredClone(template); widened.validation_notes[0].evidence[0].location = 'RootSuite:1';
+    assert.equal(inspect(widened).valid, false);
+    const wrongEntry = structuredClone(template); wrongEntry.coverage_ledger.entries[0].evidence[0].location = 'RootSuite:1';
+    assert.equal(inspect(wrongEntry).valid, false);
+    const omitted = structuredClone(template); omitted.coverage_ledger.entries = omitted.coverage_ledger.entries.filter(
+        (entry: { obligation_id: string }) => !entry.obligation_id.startsWith('VALIDATION-'));
+    assert.equal(validateReviewCoverageLedger(JSON.stringify(omitted), contract).status, 'FAIL');
+});
+
+// Synthetic in-memory constructor input only: no native launch, receipt or file is published.
+function remediationInput(originCoverageContract: ReturnType<typeof contractFor>) {
+    const taskId = 'T-UNIT-VALIDATION-ORIGIN', reviewType = 'test';
+    const unitHash = sha256RedactedJsonPayload('in-memory validation origin fixture');
+    const validationArtifact = buildReviewFindingsValidationArtifact({
+        taskId, reviewType, coverageContract: originCoverageContract,
+        reviewArtifactPath: 'unit/review.md', reviewArtifactSha256: unitHash,
+        reviewContextPath: 'unit/context.json', reviewContextSha256: unitHash,
+        reviewTreeStateSha256: unitHash, preflightPath: 'unit/preflight.json',
+        preflightSha256: unitHash, scopeSha256: unitHash, reviewScopeSha256: unitHash,
+        validation: { detected: true, valid: true, violations: [], coverage_validation: null,
+            report: { schema_version: 2, task_id: taskId, review_type: reviewType,
+                review_context_sha256: unitHash, tree_state_sha256: unitHash,
+                validation_notes: [], coverage_ledger: { coverage_contract_sha256: originCoverageContract.contract_sha256,
+                    entries: [] }, residual_risks: [], reviewer_notes: ['Unit constructor fixture only.'],
+                findings: { critical: [], medium: [], low: [], high: [{ id: 'F-001',
+                    title: 'Unit origin finding', description: 'Unit input requiring remediation.',
+                    evidence: [{ location: 'src/domain/catalog.ts:1', observation: 'Unit bound source finding.' }],
+                    coverage_obligation_ids: ['FILE-001'] }] }
+            }
+        }
+    });
+    const validationArtifactSha256 = sha256RedactedJsonPayload(validationArtifact);
+    const dispositionArtifact = buildReviewFindingsDispositionArtifact({
+        taskId, reviewType, validationArtifact, validationArtifactSha256,
+        policyResolution: resolveLockedReviewFindingPolicyFromPreflight(null)
+    });
+    const receipt = { task_id: taskId, review_type: reviewType,
+        review_artifact_sha256: unitHash, review_context_sha256: unitHash,
+        review_tree_state_sha256: unitHash, review_findings_report_sha256: unitHash };
+    return { taskId, reviewType, originCoverageContract, validationArtifact, validationArtifactSha256,
+        validationArtifactPath: 'unit/validation.json', dispositionArtifact,
+        dispositionArtifactSha256: sha256RedactedJsonPayload(dispositionArtifact),
+        dispositionArtifactPath: 'unit/disposition.json', receipt,
+        receiptSha256: sha256RedactedJsonPayload(receipt), receiptPath: 'unit/receipt.json',
+        reviewArtifactPath: 'unit/review.md', reviewArtifactSha256: unitHash,
+        profilePolicySnapshot: { snapshot_hash: unitHash }
+    };
+}
+
+test('remediation origin preserves validation binding and rejects a self-consistent stale attempt', () => {
+    const origin = contractFor(obligation), input = remediationInput(origin);
+    assert.deepEqual(buildReviewRemediationBaselineArtifact(input).origin_coverage_contract, origin);
+    const replaced = contractFor({ ...obligation, attempt_id: 'replayed attempt' });
+    assert.throws(() => buildReviewRemediationBaselineArtifact({ ...input,
+        originCoverageContract: replaced }), /authenticated findings-validation coverage hash/u);
+});
+
+test('remediation origin rejects a missing validation binding before reconstruction', () => {
+    const input = remediationInput(contractFor(obligation));
+    const malformed = structuredClone(input.originCoverageContract);
+    Object.assign(malformed.obligations.find(entry => entry.kind === 'validation')!, { validation_binding: null });
+    assert.throws(() => buildReviewRemediationBaselineArtifact({ ...input,
+        originCoverageContract: malformed }), /invalid validation binding/u);
+});

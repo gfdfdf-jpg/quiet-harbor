@@ -1,0 +1,122 @@
+[
+  {
+    "id": "r7-7-review-cypress-support",
+    "layer": "path",
+    "note": "R7-7 review: Cypress support files outside test paths became production after the F gate.",
+    "stack": "node-ts",
+    "role": "TEST_HELPER",
+    "file": "cypress/support/commands.ts",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-review-jest-setup",
+    "layer": "path",
+    "note": "R7-7 review: a Jest setup file became production after source extensions counted everywhere.",
+    "stack": "node-ts",
+    "role": "TEST_HELPER",
+    "file": "jest.setup.ts",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-review-cucumber-support",
+    "layer": "path",
+    "note": "R7-7 review: Cucumber features/support became production after the F gate.",
+    "stack": "ruby",
+    "role": "TEST_HELPER",
+    "file": "features/support/env.rb",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-review-rails-helper",
+    "layer": "path",
+    "note": "R7-7 review: rails_helper.rb was a leaf test after spec/**/*.rb became test paths.",
+    "stack": "ruby",
+    "role": "TEST_HELPER",
+    "file": "spec/rails_helper.rb",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-review-rspec-shared-examples",
+    "layer": "path",
+    "note": "R7-7 review: RSpec shared examples were leaf tests.",
+    "stack": "ruby",
+    "role": "TEST_HELPER",
+    "file": "spec/shared_examples/payable.rb",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-review-substring-test-word",
+    "layer": "path",
+    "note": "R7-7 review: \"spec\" inside \"special\" made a production helper a shared test helper.",
+    "stack": "ruby",
+    "role": "PROD",
+    "file": "app/helpers/special_offers_helper.rb",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-review-helper-named-config",
+    "layer": "path",
+    "note": "R7-7 review: helper-named configuration matched the shared helper names before the configuration rule.",
+    "stack": "ruby",
+    "role": "CONFIG",
+    "file": "config/setup.yml",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-review-helper-named-docs",
+    "layer": "path",
+    "note": "R7-7 review: helper-named documentation matched the shared helper names before the global rule.",
+    "stack": "go",
+    "role": "DOCS",
+    "file": "docs/setup.md",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-review-docs-under-src",
+    "layer": "path",
+    "note": "R7-7 review: documentation under src/ was production code.",
+    "stack": "node-ts",
+    "role": "DOCS",
+    "file": "src/README.md",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-review-karma-conf",
+    "layer": "path",
+    "note": "R7-7 review: karma.conf.js became production after source extensions counted everywhere.",
+    "stack": "node-ts",
+    "role": "CONFIG",
+    "file": "karma.conf.js",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  }
+]

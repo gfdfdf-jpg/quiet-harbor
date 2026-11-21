@@ -1,0 +1,90 @@
+{
+  "tab_intro": {
+    "description": "Politica di conservazione del runtime in `runtime-retention.json`: soglie della manutenzione pianificata, regole di compattazione e azioni protette di pulizia manuale."
+  },
+  "daily_maintenance_enabled": {
+    "label": "Manutenzione giornaliera",
+    "description": "Attiva o disattiva la manutenzione giornaliera pianificata. Quando è abilitata, l’orchestratore può elaborare in base alla pianificazione un lotto limitato di attività idonee senza intervento manuale."
+  },
+  "daily_maintenance_max_tasks_per_run": {
+    "label": "Numero massimo di attività per esecuzione",
+    "description": "Limite superiore di quante attività idonee la manutenzione giornaliera elabora in una singola esecuzione. Riduce l’ampiezza dell’impatto se le soglie sono configurate in modo errato."
+  },
+  "eligible_older_than_days": {
+    "label": "Elimina task più vecchi di (giorni)",
+    "description": "La pulizia manuale seleziona gli artefatti runtime dei task più vecchi di questo numero di giorni. I task attivi e più recenti restano protetti."
+  },
+  "keep_latest_tasks": {
+    "label": "Mantieni almeno i task più recenti (numero)",
+    "description": "Conserva sempre almeno questo numero di task più recenti anche se superano la soglia di età. Imposta 0 per affidarti solo all’età e alla protezione dei task attivi."
+  },
+  "include_problematic_tasks": {
+    "label": "Elimina anche le attività problematiche"
+  },
+  "daily_maintenance_dry_run": {
+    "label": "Dry-run della manutenzione giornaliera",
+    "description": "Quando è true, la manutenzione giornaliera pianificata elenca solo i candidati e scrive l’output di audit; non elimina né comprime artefatti. Usa true mentre regoli le soglie, poi passa a false per applicare."
+  },
+  "purge_require_confirm": {
+    "label": "Protezione di conferma per pulizia automatica",
+    "description": "Quando true, la pulizia distruttiva pianificata o via CLI resta vincolata a conferma e non viene eseguita in silenzio. La pulizia manuale UI e quella degli artefatti di una attivita richiedono sempre frasi di conferma proprie."
+  },
+  "healthy_done_compact_after_days": {
+    "label": "Comprimi DONE sane dopo (giorni)",
+    "description": "Dopo questi giorni, le attivita DONE concluse con successo possono essere compresse in cronologia solo ledger dopo la verifica delle prove ledger."
+  },
+  "problem_tasks_compress_after_days": {
+    "label": "Comprimi le attività problematiche dopo (giorni)",
+    "description": "Dopo questo numero di giorni, gli artefatti forensi pesanti delle attività fallite o bloccate possono essere compressi mantenendo comunque evidenze leggibili per il recupero."
+  },
+  "manual_runtime_cleanup": {
+    "label": "Pulizia runtime manuale",
+    "description": "Elimina gli artefatti runtime appartenenti a task non attivi selezionati dai controlli età e keep-latest in questa riga. L’anteprima è un report dry-run; Esegui pulizia elimina gli artefatti dei task selezionati, ripara una volta gli indici condivisi e richiede la conferma digitata."
+  },
+  "task_purge": {
+    "label": "Pulizia artefatti runtime attivita",
+    "description": "Rimuove gli artefatti runtime di un ID attivita e ripara gli indici condivisi. Non rimuove interi file condivisi; la protezione delle attivita attive resta sul server."
+  },
+  "task_id": {
+    "label": "ID attività"
+  },
+  "purge_task_button": {
+    "label": "Pulisci artefatti runtime"
+  },
+  "run_preview": {
+    "label": "Calcolo preliminare"
+  },
+  "value_true": {
+    "label": "true — abilitato"
+  },
+  "value_false": {
+    "label": "false — disabilitato"
+  },
+  "run_apply": {
+    "label": "Esegui pulizia"
+  },
+  "cleanup_report": {
+    "label": "Report pulizia"
+  },
+  "cleanup_result": {
+    "label": "Risultato pulizia"
+  },
+  "report_preview_tasks": {
+    "label": "Candidati anteprima"
+  },
+  "report_eligible_now": {
+    "label": "Idoneo ora"
+  },
+  "report_would_remove": {
+    "label": "Rimuoverebbe"
+  },
+  "report_would_free": {
+    "label": "Libererebbe"
+  },
+  "report_removed": {
+    "label": "Rimosso"
+  },
+  "report_freed": {
+    "label": "Liberato"
+  }
+}

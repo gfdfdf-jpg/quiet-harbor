@@ -1,0 +1,90 @@
+{
+  "tab_intro": {
+    "description": "Polityka retencji runtime w `runtime-retention.json`: progi zaplanowanej konserwacji, reguły kompaktowania i chronione ręczne akcje czyszczenia."
+  },
+  "daily_maintenance_enabled": {
+    "label": "Codzienna konserwacja",
+    "description": "Włącza lub wyłącza zaplanowaną codzienną konserwację. Gdy jest włączona, orkiestrator może według harmonogramu przetwarzać ograniczoną partię kwalifikujących się zadań bez ręcznej interwencji."
+  },
+  "daily_maintenance_max_tasks_per_run": {
+    "label": "Maksymalna liczba zadań na jedno uruchomienie",
+    "description": "Górny limit liczby kwalifikujących się zadań przetwarzanych przez codzienną konserwację w jednym przebiegu. Ogranicza skalę skutków, jeśli progi są źle skonfigurowane."
+  },
+  "eligible_older_than_days": {
+    "label": "Usuń zadania starsze niż (dni)",
+    "description": "Ręczne czyszczenie wybiera artefakty runtime zadań starszych niż ta liczba dni. Aktywne i nowsze zadania pozostają chronione."
+  },
+  "keep_latest_tasks": {
+    "label": "Zachowaj co najmniej najnowsze zadania (liczba)",
+    "description": "Zawsze zachowuje co najmniej tyle najnowszych zadań, nawet jeśli są starsze niż próg wieku. Ustaw 0, aby polegać tylko na wieku i ochronie aktywnych zadań."
+  },
+  "include_problematic_tasks": {
+    "label": "Usuń też problematyczne zadania"
+  },
+  "daily_maintenance_dry_run": {
+    "label": "Dry-run codziennej konserwacji",
+    "description": "Gdy wartość to true, zaplanowana codzienna konserwacja tylko wypisuje kandydatów i zapisuje dane audytowe; nie usuwa ani nie kompresuje artefaktów. Użyj true podczas strojenia progów, a potem przełącz na false, aby zastosować."
+  },
+  "purge_require_confirm": {
+    "label": "Zabezpieczenie potwierdzenia automatycznego cleanup",
+    "description": "Gdy true, destrukcyjny cleanup planowy lub CLI pozostaje wymagajacy potwierdzenia i nie uruchamia sie po cichu. Reczny cleanup w UI oraz cleanup artefaktow zadania zawsze wymagaja wlasnych wpisywanych fraz potwierdzenia."
+  },
+  "healthy_done_compact_after_days": {
+    "label": "Kompresuj zdrowe DONE po (dniach)",
+    "description": "Po tylu dniach poprawnie zakonczone zadania DONE moga byc skompresowane do historii tylko ledger po zweryfikowaniu dowodow ledger."
+  },
+  "problem_tasks_compress_after_days": {
+    "label": "Kompresuj problematyczne zadania po (dniach)",
+    "description": "Po tylu dniach ciężkie artefakty śledcze zadań nieudanych lub zablokowanych mogą zostać skompresowane przy zachowaniu czytelnych dowodów potrzebnych do odzyskiwania."
+  },
+  "manual_runtime_cleanup": {
+    "label": "Reczny cleanup runtime",
+    "description": "Usuwa artefakty runtime należące do nieaktywnych zadań wybranych przez kontrolki wieku i keep-latest w tym wierszu. Podgląd to raport dry-run; Uruchom czyszczenie usuwa wybrane artefakty zadań, jednorazowo naprawia współdzielone indeksy i wymaga wpisanego potwierdzenia."
+  },
+  "task_purge": {
+    "label": "Cleanup artefaktow runtime zadania",
+    "description": "Usuwa artefakty runtime jednego ID zadania i naprawia wspolne indeksy. Nie usuwa calych wspolnych plikow; ochrona aktywnych zadan pozostaje po stronie serwera."
+  },
+  "task_id": {
+    "label": "ID zadania"
+  },
+  "purge_task_button": {
+    "label": "Wyczysc artefakty runtime"
+  },
+  "run_preview": {
+    "label": "Obliczenie wstępne"
+  },
+  "value_true": {
+    "label": "true — włączone"
+  },
+  "value_false": {
+    "label": "false — wyłączone"
+  },
+  "run_apply": {
+    "label": "Uruchom czyszczenie"
+  },
+  "cleanup_report": {
+    "label": "Raport czyszczenia"
+  },
+  "cleanup_result": {
+    "label": "Wynik czyszczenia"
+  },
+  "report_preview_tasks": {
+    "label": "Kandydaci podglądu"
+  },
+  "report_eligible_now": {
+    "label": "Kwalifikuje się teraz"
+  },
+  "report_would_remove": {
+    "label": "Zostałoby usunięte"
+  },
+  "report_would_free": {
+    "label": "Zwolniłoby"
+  },
+  "report_removed": {
+    "label": "Usunięto"
+  },
+  "report_freed": {
+    "label": "Zwolniono"
+  }
+}

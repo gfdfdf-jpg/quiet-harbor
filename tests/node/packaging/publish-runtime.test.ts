@@ -1,0 +1,435 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import * as childProcess from 'node:child_process';
+import * as fs from 'node:fs';
+import { createRequire } from 'node:module';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
+import { getRepoRoot } from '../../../scripts/node-foundation/build';
+import { withPackageRootLock } from '../../../scripts/node-foundation/release-validation/package-root-lock';
+import {
+    extractManagedBlockFromContent,
+    getTaskQueueRowsFromManagedBlock,
+    MANAGED_END,
+    MANAGED_START,
+    setTaskQueueRowsInManagedBlock
+} from '../../../src/materialization/content-builders';
+
+const requireFromTest = createRequire(__filename);
+
+function findRepoRoot(startDir: string): string {
+    let current = path.resolve(startDir);
+    while (true) {
+        const buildScriptPath = path.join(current, 'scripts', 'node-foundation', 'build.ts');
+        const packageJsonPath = path.join(current, 'package.json');
+        if (fs.existsSync(buildScriptPath) && fs.existsSync(packageJsonPath)) {
+            return current;
+        }
+
+        const parent = path.dirname(current);
+        if (parent === current) {
+            throw new Error(`Could not resolve repository root from: ${startDir}`);
+        }
+        current = parent;
+    }
+}
+
+function loadPackageSurfaceItems(repoRoot: string): readonly string[] {
+    const pkgJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
+    const items = Array.from<string>((pkgJson.files || []) as string[]);
+    if (!items.includes('package.json')) {
+        items.push('package.json');
+    }
+    return Object.freeze(items.sort());
+}
+
+const PACKAGE_SURFACE_ITEMS = loadPackageSurfaceItems(findRepoRoot(__dirname));
+
+function loadBuildFixtureItems(repoRoot: string): readonly string[] {
+    const items = new Set<string>(loadPackageSurfaceItems(repoRoot));
+    items.delete('dist');
+    items.delete('bin');
+    items.add('src');
+    items.add('scripts/node-foundation');
+    items.add('tsconfig.build.json');
+    items.add('tsconfig.scripts.json');
+    return Object.freeze(Array.from(items).sort());
+}
+
+function copyPathSet(sourceRoot: string, targetRoot: string, relativePaths: readonly string[]): void {
+    fs.mkdirSync(targetRoot, { recursive: true });
+    for (const relativePath of relativePaths) {
+        fs.cpSync(path.join(sourceRoot, relativePath), path.join(targetRoot, relativePath), { recursive: true });
+    }
+}
+
+function copyPublishedPackageSurface(sourceRoot: string, packageRoot: string) {
+    copyPathSet(sourceRoot, packageRoot, PACKAGE_SURFACE_ITEMS);
+}
+
+function copyBuildFixture(repoRoot: string, fixtureRoot: string) {
+    // The package-surface measurement creates and removes template/CLAUDE.md in the shared repository root.
+    withPackageRootLock(repoRoot, () => {
+        copyPathSet(repoRoot, fixtureRoot, loadBuildFixtureItems(repoRoot));
+    });
+
+    const realNodeModules = path.join(repoRoot, 'node_modules');
+    const fixtureNodeModules = path.join(fixtureRoot, 'node_modules');
+    if (fs.existsSync(realNodeModules) && !fs.existsSync(fixtureNodeModules)) {
+        fs.symlinkSync(realNodeModules, fixtureNodeModules, 'junction');
+    }
+}
+
+function writeTextFile(filePath: string, content: string) {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, content, 'utf8');
+}
+
+function readJson(filePath: string): Record<string, unknown> {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+}
+
+function buildPackagingEnv(): NodeJS.ProcessEnv {
+    return { ...process.env };
+}
+
+function syncGeneratedCliEntrypoint(repoRoot: string): void {
+    const compiledCliPath = path.join(repoRoot, 'dist', 'src', 'bin', 'garda.js');
+    if (!fs.existsSync(compiledCliPath)) {
+        throw new Error(`compiled CLI launcher not found: ${compiledCliPath}`);
+    }
+
+    const repoCliPath = path.join(repoRoot, 'bin', 'garda.js');
+    fs.mkdirSync(path.dirname(repoCliPath), { recursive: true });
+    fs.copyFileSync(compiledCliPath, repoCliPath);
+}
+
+function buildPublishRuntimeInRepo(repoRoot: string): void {
+    const result = childProcess.spawnSync(process.execPath, [
+        path.join(repoRoot, 'scripts', 'node-foundation', 'build-scripts.cjs'),
+        'build.js',
+        'publish-runtime'
+    ], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        timeout: 120_000,
+        windowsHide: true
+    });
+
+    if (result.status !== 0) {
+        throw new Error(`publish runtime build failed:\n${result.stderr || result.stdout}`);
+    }
+
+    syncGeneratedCliEntrypoint(repoRoot);
+}
+
+test('published runtime works when the package is executed from node_modules', () => {
+    const repoRoot = getRepoRoot();
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gao-publish-runtime-'));
+    const fixtureRoot = path.join(tempRoot, 'package-fixture');
+    const packageRoot = path.join(tempRoot, 'node_modules', 'garda-agent-orchestrator');
+    const workspaceRoot = path.join(tempRoot, 'workspace');
+
+    try {
+        copyBuildFixture(repoRoot, fixtureRoot);
+        buildPublishRuntimeInRepo(fixtureRoot);
+        assert.ok(fs.existsSync(path.join(fixtureRoot, 'dist', 'src', 'index.js')));
+        assert.ok(fs.existsSync(path.join(fixtureRoot, 'dist', 'src', 'reports', 'ui', 'lang-packs', 'garda-ui-ru.json')));
+
+        copyPublishedPackageSurface(fixtureRoot, packageRoot);
+        assert.ok(!fs.existsSync(path.join(packageRoot, 'src')), 'published package surface must exclude src');
+        assert.ok(!fs.existsSync(path.join(packageRoot, 'tests')), 'published package surface must exclude tests');
+        fs.mkdirSync(workspaceRoot, { recursive: true });
+
+        const remediationModules = [
+            'review-remediation-baseline.js',
+            'review-remediation-delta-contract.js',
+            'review-remediation-delta.js',
+            'review-remediation-readable-diff.js',
+            'review-remediation-validation-evidence.js',
+            'review-remediation-recovery-routing.js'
+        ];
+        for (const moduleName of remediationModules) {
+            assert.ok(
+                fs.existsSync(path.join(packageRoot, 'dist', 'src', 'gates', 'review-remediation', moduleName)),
+                `published package must materialize ${moduleName}`
+            );
+        }
+        assert.ok(fs.existsSync(path.join(
+            packageRoot,
+            'template',
+            'schemas',
+            'review-findings-report.schema.json'
+        )));
+
+        type PromptModule = {
+            buildReviewerFindingsOutputTemplateJson(options: Record<string, unknown>): string;
+        };
+        type ValidationModule = {
+            buildReviewFindingsValidationArtifact(options: Record<string, unknown>): {
+                validation_result_sha256: string;
+            };
+        };
+        const sourcePromptModule = requireFromTest(path.join(
+            fixtureRoot,
+            'dist',
+            'src',
+            'gates',
+            'review',
+            'reviewer-findings-prompt-contract.js'
+        )) as PromptModule;
+        const installedPromptModule = requireFromTest(path.join(
+            packageRoot,
+            'dist',
+            'src',
+            'gates',
+            'review',
+            'reviewer-findings-prompt-contract.js'
+        )) as PromptModule;
+        const promptOptions = {
+            taskId: 'T-package-parity',
+            reviewType: 'code',
+            reviewContextSha256: 'a'.repeat(64),
+            treeStateSha256: 'b'.repeat(64),
+            coverageContract: {
+                schema_version: 1,
+                review_type: 'code',
+                contract_sha256: 'c'.repeat(64),
+                obligations: [{ id: 'FILE-001', kind: 'file', target: 'src/example.ts' }]
+            }
+        };
+        assert.equal(
+            installedPromptModule.buildReviewerFindingsOutputTemplateJson(promptOptions),
+            sourcePromptModule.buildReviewerFindingsOutputTemplateJson(promptOptions)
+        );
+
+        const sourceValidationModule = requireFromTest(path.join(
+            fixtureRoot,
+            'dist',
+            'src',
+            'gates',
+            'review',
+            'review-findings-validation-artifact.js'
+        )) as ValidationModule;
+        const installedValidationModule = requireFromTest(path.join(
+            packageRoot,
+            'dist',
+            'src',
+            'gates',
+            'review',
+            'review-findings-validation-artifact.js'
+        )) as ValidationModule;
+        const validationOptions = {
+            taskId: 'T-package-parity',
+            reviewType: 'code',
+            validation: {
+                detected: false,
+                valid: false,
+                report: null,
+                violations: ['fixture rejection'],
+                coverage_validation: null
+            }
+        };
+        assert.equal(
+            installedValidationModule.buildReviewFindingsValidationArtifact(validationOptions).validation_result_sha256,
+            sourceValidationModule.buildReviewFindingsValidationArtifact(validationOptions).validation_result_sha256
+        );
+
+        const result = childProcess.spawnSync(
+            process.execPath,
+            [path.join(packageRoot, 'bin', 'garda.js'), 'status', '--target-root', workspaceRoot],
+            {
+                cwd: workspaceRoot,
+                encoding: 'utf8',
+                env: buildPackagingEnv()
+            }
+        );
+
+        assert.equal(result.status, 0, result.stderr || result.stdout);
+        assert.match(result.stdout, /GARDA_STATUS/);
+        assert.doesNotMatch(
+            `${result.stdout}\n${result.stderr}`,
+            /Stripping types is currently unsupported for files under node_modules/i
+        );
+    } finally {
+        fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+});
+
+test('published runtime prevents stale init backup from replacing the operator task queue across ordinary uninstall and reinstall', () => {
+    const repoRoot = getRepoRoot();
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gao-publish-lifecycle-'));
+    const fixtureRoot = path.join(tempRoot, 'package-fixture');
+    const packageRoot = path.join(tempRoot, 'node_modules', 'garda-agent-orchestrator');
+    const workspaceRoot = path.join(tempRoot, 'workspace');
+
+    const legacyFiles = new Map([
+        ['AGENTS.md', '# Legacy AGENTS\n\nUser-owned instructions.\n'],
+        ['TASK.md', '# Legacy TASK\n\n- user backlog\n'],
+        ['.gitignore', 'node_modules/\n.custom-cache/\n'],
+        ['.qwen/settings.json', JSON.stringify({
+            context: { fileName: ['README.md'] },
+            userSetting: true
+        }, null, 2)]
+    ]);
+
+    const setupArguments = [
+        'setup',
+        '--target-root', workspaceRoot,
+        '--no-prompt',
+        '--assistant-language', 'English',
+        '--assistant-brevity', 'concise',
+        '--source-of-truth', 'Codex',
+        '--enforce-no-auto-commit', 'false',
+        '--claude-orchestrator-full-access', 'false',
+        '--token-economy-enabled', 'true'
+    ];
+    const operatorRows = [
+        '| T-401 | 🟨 IN_PROGRESS | P0 | reliability/queue | Preserve operator order | codex | 2026-08-06 | strict | First note stays byte-stable. |',
+        '| T-402-F1 | 🟦 TODO | P2 | review/follow-up | Keep follow-up status | codex | 2026-08-06 | balanced | Notes include commas, hashes, and `inline code`. |',
+        '| T-403 | 🟩 DONE | P3 | docs | Preserve completed row | codex | 2026-08-05 | docs-only | Final row remains last. |'
+    ];
+    const operatorSuffix = '\n\n### Operator-owned suffix\n\nKeep this text outside the managed block.\n';
+
+    try {
+        copyBuildFixture(repoRoot, fixtureRoot);
+        buildPublishRuntimeInRepo(fixtureRoot);
+        copyPublishedPackageSurface(fixtureRoot, packageRoot);
+        fs.mkdirSync(workspaceRoot, { recursive: true });
+        for (const [relativePath, content] of legacyFiles) {
+            writeTextFile(path.join(workspaceRoot, relativePath), content);
+        }
+
+        const setupResult = childProcess.spawnSync(
+            process.execPath,
+            [path.join(packageRoot, 'bin', 'garda.js'), ...setupArguments],
+            {
+                cwd: workspaceRoot,
+                encoding: 'utf8',
+                env: buildPackagingEnv()
+            }
+        );
+
+        assert.equal(setupResult.status, 0, setupResult.stderr || setupResult.stdout);
+        assert.match(setupResult.stdout, /Primary setup finished\. Next stage: agent initialization\./);
+        assert.doesNotMatch(setupResult.stdout, /Workspace is ready\./);
+        assert.match(setupResult.stdout, /Give your agent:/);
+
+        const initAnswersPath = path.join(workspaceRoot, 'garda-agent-orchestrator', 'runtime', 'init-answers.json');
+        const initAnswers = readJson(initAnswersPath);
+        assert.equal(initAnswers.SourceOfTruth, 'Codex');
+        assert.equal(initAnswers.CollectedVia, 'CLI_NONINTERACTIVE');
+        assert.equal(initAnswers.ActiveAgentFiles, 'AGENTS.md');
+
+        assert.ok(fs.existsSync(path.join(workspaceRoot, 'AGENTS.md')));
+        assert.ok(!fs.existsSync(path.join(workspaceRoot, 'CLAUDE.md')));
+
+        const taskPath = path.join(workspaceRoot, 'TASK.md');
+        const installedTaskContent = fs.readFileSync(taskPath, 'utf8');
+        const installedManagedBlock = extractManagedBlockFromContent(
+            installedTaskContent,
+            MANAGED_START,
+            MANAGED_END
+        );
+        assert.ok(installedManagedBlock, 'setup must materialize a managed TASK.md block');
+        const operatorManagedBlock = setTaskQueueRowsInManagedBlock(installedManagedBlock, operatorRows);
+        const originalOperatorRows = getTaskQueueRowsFromManagedBlock(operatorManagedBlock);
+        const operatorTaskContent = installedTaskContent.replace(installedManagedBlock, operatorManagedBlock)
+            .replace(/\s*$/, '') + operatorSuffix;
+        fs.writeFileSync(taskPath, operatorTaskContent, 'utf8');
+
+        const uninstallResult = childProcess.spawnSync(
+            process.execPath,
+            [path.join(packageRoot, 'bin', 'garda.js'), 'uninstall', '--target-root', workspaceRoot],
+            {
+                cwd: workspaceRoot,
+                encoding: 'utf8',
+                env: buildPackagingEnv()
+            }
+        );
+
+        assert.equal(uninstallResult.status, 0, uninstallResult.stderr || uninstallResult.stdout);
+        assert.ok(!fs.existsSync(path.join(workspaceRoot, 'garda-agent-orchestrator')));
+        assert.match(uninstallResult.stdout, /TaskFileDecision: PRESERVE_DEFAULT/);
+        assert.match(uninstallResult.stdout, /TaskFileRecoveryPath: <none>/);
+        assert.equal(
+            fs.readFileSync(taskPath, 'utf8'),
+            operatorTaskContent,
+            'ordinary uninstall must preserve the current queue byte-for-byte'
+        );
+
+        // .agents/ router directory must be removed when only orchestrator-managed content remained
+        assert.ok(!fs.existsSync(path.join(workspaceRoot, '.agents')),
+            'Expected .agents/ directory to be removed after uninstall');
+
+        for (const [relativePath, originalContent] of legacyFiles) {
+            const restoredPath = path.join(workspaceRoot, relativePath);
+            assert.ok(fs.existsSync(restoredPath), `Expected restored file: ${relativePath}`);
+
+            if (relativePath === '.gitignore') {
+                // Restored .gitignore must contain original user content
+                const restoredContent = fs.readFileSync(restoredPath, 'utf8');
+                assert.ok(restoredContent.includes('node_modules/'),
+                    'Restored .gitignore must contain original user entries');
+                assert.ok(restoredContent.includes('.custom-cache/'),
+                    'Restored .gitignore must contain original user entries');
+                // Must also include uninstall-backup ignore entries
+                assert.ok(restoredContent.includes('garda-agent-orchestrator-uninstall-backups/'),
+                    'Restored .gitignore must ignore uninstall backup directory');
+                assert.ok(!restoredContent.includes('garda-agent-orchestrator-uninstall-backups/**'),
+                    'Redundant wildcard entry must not be present');
+                assert.ok(restoredContent.includes('# Backup artifacts created by Garda Agent Orchestrator uninstall'),
+                    'Explanatory comment for uninstall backups must be present');
+            } else if (relativePath !== 'TASK.md') {
+                assert.equal(fs.readFileSync(restoredPath, 'utf8'), originalContent);
+            }
+        }
+
+        const reinstallResult = childProcess.spawnSync(
+            process.execPath,
+            [path.join(packageRoot, 'bin', 'garda.js'), ...setupArguments],
+            {
+                cwd: workspaceRoot,
+                encoding: 'utf8',
+                env: buildPackagingEnv()
+            }
+        );
+
+        assert.equal(reinstallResult.status, 0, reinstallResult.stderr || reinstallResult.stdout);
+        const reinstalledTaskContent = fs.readFileSync(taskPath, 'utf8');
+        const reinstalledManagedBlock = extractManagedBlockFromContent(
+            reinstalledTaskContent,
+            MANAGED_START,
+            MANAGED_END
+        );
+        assert.deepEqual(
+            getTaskQueueRowsFromManagedBlock(reinstalledManagedBlock),
+            originalOperatorRows,
+            'reinstall must retain queue rows byte-for-byte, including order, statuses, profiles, and notes'
+        );
+        assert.ok(reinstalledTaskContent.endsWith(operatorSuffix));
+
+        const installBackupsRoot = path.join(
+            workspaceRoot,
+            'garda-agent-orchestrator',
+            'runtime',
+            'backups'
+        );
+        const installBackupDirectories = fs.readdirSync(installBackupsRoot, { withFileTypes: true })
+            .filter((entry) => entry.isDirectory())
+            .map((entry) => path.join(installBackupsRoot, entry.name))
+            .sort();
+        const taskBackupPath = installBackupDirectories
+            .map((backupRoot) => path.join(backupRoot, 'TASK.md'))
+            .find((candidate) => fs.existsSync(candidate));
+        assert.ok(taskBackupPath, 'reinstall must create an install-time TASK.md backup');
+        assert.equal(
+            fs.readFileSync(taskBackupPath, 'utf8'),
+            operatorTaskContent,
+            'install backup must capture the preserved queue before reinstall materialization'
+        );
+    } finally {
+        fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+});
