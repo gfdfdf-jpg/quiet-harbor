@@ -1,0 +1,90 @@
+{
+  "tab_intro": {
+    "description": "Politique de rétention du runtime dans `runtime-retention.json` : seuils de maintenance planifiée, règles de compactage et actions de nettoyage manuel protégées."
+  },
+  "daily_maintenance_enabled": {
+    "label": "Maintenance quotidienne",
+    "description": "Active ou désactive la maintenance quotidienne planifiée. Lorsqu’elle est activée, l’orchestrateur peut traiter selon le planning un lot limité de tâches éligibles sans intervention manuelle."
+  },
+  "daily_maintenance_max_tasks_per_run": {
+    "label": "Nombre maximal de tâches par exécution",
+    "description": "Limite supérieure du nombre de tâches éligibles que la maintenance quotidienne traite en une seule exécution. Réduit l’ampleur de l’impact si les seuils sont mal configurés."
+  },
+  "eligible_older_than_days": {
+    "label": "Supprimer les tâches plus anciennes que (jours)",
+    "description": "Le nettoyage manuel sélectionne les artefacts runtime des tâches plus anciennes que ce nombre de jours. Les tâches actives et plus récentes restent protégées."
+  },
+  "keep_latest_tasks": {
+    "label": "Conserver au moins les tâches les plus récentes (nombre)",
+    "description": "Préserve toujours au moins ce nombre de tâches les plus récentes, même si elles dépassent le seuil d’âge. Utilisez 0 pour ne dépendre que de l’âge et de la protection des tâches actives."
+  },
+  "include_problematic_tasks": {
+    "label": "Supprimer aussi les tâches problématiques"
+  },
+  "daily_maintenance_dry_run": {
+    "label": "Maintenance quotidienne en dry-run",
+    "description": "Quand la valeur est true, la maintenance quotidienne planifiée se contente de lister les candidats et d’écrire une sortie d’audit ; elle ne supprime ni ne compresse aucun artefact. Utilisez true pendant le réglage des seuils, puis passez à false pour appliquer."
+  },
+  "purge_require_confirm": {
+    "label": "Protection de confirmation pour le nettoyage automatique",
+    "description": "Quand la valeur est true, le nettoyage destructif planifie ou via CLI reste soumis a confirmation et ne s execute pas en silence. Le nettoyage manuel dans l UI et le nettoyage des artefacts d une tache exigent toujours leurs propres phrases de confirmation."
+  },
+  "healthy_done_compact_after_days": {
+    "label": "Compresser les DONE saines apres (jours)",
+    "description": "Apres ce nombre de jours, les taches DONE terminees correctement peuvent etre compressees en historique ledger seul une fois la preuve ledger verifiee."
+  },
+  "problem_tasks_compress_after_days": {
+    "label": "Compresser les tâches problématiques après (jours)",
+    "description": "Après ce nombre de jours, les tâches en échec ou bloquées peuvent voir leurs artefacts forensiques volumineux compressés tout en conservant des preuves lisibles pour la reprise."
+  },
+  "manual_runtime_cleanup": {
+    "label": "Nettoyage runtime manuel",
+    "description": "Supprime les artefacts runtime appartenant aux tâches non actives sélectionnées par les contrôles age et keep-latest de cette ligne. La prévisualisation est un rapport dry-run ; Lancer le nettoyage supprime les artefacts de tâches sélectionnés, répare les index partagés une fois et exige la confirmation saisie."
+  },
+  "task_purge": {
+    "label": "Nettoyage des artefacts runtime d une tache",
+    "description": "Supprime les artefacts runtime appartenant a un ID de tache et repare les index partages. Ne supprime pas les fichiers partages entiers; la protection des taches actives reste appliquee cote serveur."
+  },
+  "task_id": {
+    "label": "ID de tâche"
+  },
+  "purge_task_button": {
+    "label": "Nettoyer les artefacts runtime"
+  },
+  "run_preview": {
+    "label": "Calcul préalable"
+  },
+  "value_true": {
+    "label": "true — activé"
+  },
+  "value_false": {
+    "label": "false — désactivé"
+  },
+  "run_apply": {
+    "label": "Lancer le nettoyage"
+  },
+  "cleanup_report": {
+    "label": "Rapport de nettoyage"
+  },
+  "cleanup_result": {
+    "label": "Résultat du nettoyage"
+  },
+  "report_preview_tasks": {
+    "label": "Candidats de prévisualisation"
+  },
+  "report_eligible_now": {
+    "label": "Éligible maintenant"
+  },
+  "report_would_remove": {
+    "label": "Supprimerait"
+  },
+  "report_would_free": {
+    "label": "Libérerait"
+  },
+  "report_removed": {
+    "label": "Supprimé"
+  },
+  "report_freed": {
+    "label": "Libéré"
+  }
+}

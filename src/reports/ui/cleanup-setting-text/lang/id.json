@@ -1,0 +1,90 @@
+{
+  "tab_intro": {
+    "description": "Kebijakan retensi runtime di `runtime-retention.json`: ambang pemeliharaan terjadwal, aturan pemadatan, dan tindakan pembersihan manual yang terlindungi."
+  },
+  "daily_maintenance_enabled": {
+    "label": "Pemeliharaan harian",
+    "description": "Mengaktifkan atau menonaktifkan pemeliharaan harian terjadwal. Saat aktif, orkestrator dapat memproses sejumlah terbatas tugas yang memenuhi syarat sesuai jadwal tanpa intervensi manual."
+  },
+  "daily_maintenance_max_tasks_per_run": {
+    "label": "Maksimum tugas per proses pemeliharaan",
+    "description": "Batas atas jumlah tugas yang memenuhi syarat yang diproses pemeliharaan harian dalam satu kali jalan. Membatasi dampak jika ambang dikonfigurasi secara keliru."
+  },
+  "eligible_older_than_days": {
+    "label": "Hapus task lebih lama dari (hari)",
+    "description": "Cleanup manual memilih runtime artifacts task yang lebih lama dari jumlah hari ini. Task aktif dan task yang lebih baru tetap dilindungi."
+  },
+  "keep_latest_tasks": {
+    "label": "Pertahankan minimal task terbaru (jumlah)",
+    "description": "Selalu mempertahankan setidaknya sejumlah task paling baru ini meskipun lebih lama dari ambang umur. Set 0 untuk hanya memakai umur dan perlindungan task aktif."
+  },
+  "include_problematic_tasks": {
+    "label": "Hapus juga tugas bermasalah"
+  },
+  "daily_maintenance_dry_run": {
+    "label": "Dry-run pemeliharaan harian",
+    "description": "Saat bernilai true, pemeliharaan harian terjadwal hanya menampilkan kandidat dan menulis keluaran audit; tidak menghapus atau mengompresi artefak. Gunakan true saat menyetel ambang, lalu ubah ke false untuk menerapkan."
+  },
+  "purge_require_confirm": {
+    "label": "Pengaman konfirmasi cleanup otomatis",
+    "description": "Jika true, cleanup destruktif terjadwal atau CLI tetap membutuhkan konfirmasi dan tidak berjalan diam-diam. Cleanup manual UI dan cleanup artefak tugas selalu membutuhkan frasa konfirmasi masing-masing."
+  },
+  "healthy_done_compact_after_days": {
+    "label": "Kompresi DONE sehat setelah (hari)",
+    "description": "Setelah jumlah hari ini, tugas DONE yang sukses dapat dikompresi menjadi riwayat ledger saja setelah bukti ledger diverifikasi."
+  },
+  "problem_tasks_compress_after_days": {
+    "label": "Kompres tugas bermasalah setelah (hari)",
+    "description": "Setelah selama ini, artefak forensik besar dari tugas yang gagal atau macet dapat dikompresi sambil tetap menyimpan bukti yang dapat dibaca untuk pemulihan."
+  },
+  "manual_runtime_cleanup": {
+    "label": "Cleanup runtime manual",
+    "description": "Menghapus runtime artifacts milik task nonaktif yang dipilih oleh kontrol age dan keep-latest di baris ini. Pratinjau adalah laporan dry-run; Jalankan pembersihan menghapus task artifacts yang dipilih, memperbaiki shared indexes sekali, dan meminta konfirmasi yang diketik."
+  },
+  "task_purge": {
+    "label": "Cleanup artefak runtime tugas",
+    "description": "Menghapus artefak runtime milik satu ID tugas dan memperbaiki indeks bersama. Tidak menghapus seluruh file bersama; proteksi tugas aktif tetap berlaku di server."
+  },
+  "task_id": {
+    "label": "ID tugas"
+  },
+  "purge_task_button": {
+    "label": "Bersihkan artefak runtime"
+  },
+  "run_preview": {
+    "label": "Perhitungan pratinjau"
+  },
+  "value_true": {
+    "label": "true — aktif"
+  },
+  "value_false": {
+    "label": "false — nonaktif"
+  },
+  "run_apply": {
+    "label": "Jalankan pembersihan"
+  },
+  "cleanup_report": {
+    "label": "Laporan pembersihan"
+  },
+  "cleanup_result": {
+    "label": "Hasil pembersihan"
+  },
+  "report_preview_tasks": {
+    "label": "Kandidat pratinjau"
+  },
+  "report_eligible_now": {
+    "label": "Memenuhi syarat sekarang"
+  },
+  "report_would_remove": {
+    "label": "Akan menghapus"
+  },
+  "report_would_free": {
+    "label": "Akan membebaskan"
+  },
+  "report_removed": {
+    "label": "Dihapus"
+  },
+  "report_freed": {
+    "label": "Dibebaskan"
+  }
+}

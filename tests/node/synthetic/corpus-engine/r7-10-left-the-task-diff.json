@@ -1,0 +1,35 @@
+[
+  {
+    "note": "R7-10: a reviewed path that left the task diff needs a FULL review even when the fix itself would allow DELTA.",
+    "scenario": {
+      "id": "r7-10-path-left-the-task-diff",
+      "stack": "java-maven",
+      "failedLane": "test",
+      "requiredLanes": [
+        "code",
+        "test"
+      ],
+      "scope": [
+        {
+          "role": "PROD",
+          "path": "src/main/java/orders/Invoice.java",
+          "lines": 30
+        },
+        {
+          "role": "UNIT_TEST",
+          "path": "src/test/java/orders/InvoiceTest.java",
+          "lines": 20
+        }
+      ],
+      "fix": [
+        {
+          "role": "UNIT_TEST",
+          "path": "src/test/java/orders/InvoiceTest.java",
+          "operation": "modified",
+          "changedLines": 2
+        }
+      ],
+      "leftScope": "src/main/java/orders/Invoice.java"
+    }
+  }
+]

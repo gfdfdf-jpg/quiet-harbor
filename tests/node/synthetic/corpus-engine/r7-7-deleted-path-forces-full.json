@@ -1,0 +1,29 @@
+[
+  {
+    "note": "R7-7: a deleted path needs a FULL review even when the category and size would allow DELTA.",
+    "scenario": {
+      "id": "r7-7-deleted-fixture-forces-full",
+      "stack": "java-maven",
+      "failedLane": "code",
+      "requiredLanes": [
+        "code",
+        "test"
+      ],
+      "scope": [
+        {
+          "role": "TEST_FIXTURE",
+          "path": "src/test/resources/fixtures/invoice.json",
+          "lines": 38
+        }
+      ],
+      "fix": [
+        {
+          "role": "TEST_FIXTURE",
+          "path": "src/test/resources/fixtures/invoice.json",
+          "operation": "deleted",
+          "changedLines": 38
+        }
+      ]
+    }
+  }
+]

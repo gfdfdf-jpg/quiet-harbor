@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "id": "kotlin-gradle",
+  "title": "Kotlin / Gradle",
+  "adapter": null,
+  "technologies": [
+    {
+      "id": "gradle",
+      "executable": "gradlew",
+      "compileArgv": [
+        ":app:classes",
+        ":domain:classes"
+      ],
+      "firstArgv": [
+        ":app:test",
+        "--tests",
+        "example.OrdersTest"
+      ],
+      "allArgv": [
+        ":app:test",
+        ":domain:test",
+        "--tests",
+        "example.OrdersTest",
+        "--tests",
+        "example.PartnersTest"
+      ],
+      "broadArgv": [
+        "test"
+      ],
+      "report": "junit",
+      "secondArgv": [
+        ":domain:test",
+        "--tests",
+        "example.PartnersTest"
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "orders",
+      "technology": "gradle",
+      "source": "app/src/main/kotlin/example/Orders.kt",
+      "target": "app/src/test/kotlin/example/OrdersTest.kt",
+      "case": "task-contract",
+      "comment": "//"
+    },
+    {
+      "id": "partners",
+      "technology": "gradle",
+      "source": "domain/src/main/kotlin/example/Partners.kt",
+      "target": "domain/src/test/kotlin/example/PartnersTest.kt",
+      "case": "task-contract",
+      "comment": "//"
+    }
+  ],
+  "helpers": []
+}

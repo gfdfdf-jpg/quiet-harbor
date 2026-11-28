@@ -1,0 +1,68 @@
+{
+  "schema": 1,
+  "id": "rust",
+  "title": "Rust workspace",
+  "adapter": null,
+  "technologies": [
+    {
+      "id": "rust",
+      "executable": "tools/cargo",
+      "compileArgv": [
+        "build",
+        "--workspace"
+      ],
+      "firstArgv": [
+        "test",
+        "-p",
+        "orders",
+        "--test",
+        "order_contract",
+        "task_contract"
+      ],
+      "allArgv": [
+        "test",
+        "-p",
+        "orders",
+        "--test",
+        "order_contract",
+        "-p",
+        "partners",
+        "--test",
+        "partner_contract",
+        "task_contract"
+      ],
+      "broadArgv": [
+        "test",
+        "--workspace"
+      ],
+      "report": "text",
+      "secondArgv": [
+        "test",
+        "-p",
+        "partners",
+        "--test",
+        "partner_contract",
+        "task_contract"
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "orders",
+      "technology": "rust",
+      "source": "orders/src/lib.rs",
+      "target": "orders/tests/order_contract.rs",
+      "case": "task-contract",
+      "comment": "//"
+    },
+    {
+      "id": "partners",
+      "technology": "rust",
+      "source": "partners/src/lib.rs",
+      "target": "partners/tests/partner_contract.rs",
+      "case": "task-contract",
+      "comment": "//"
+    }
+  ],
+  "helpers": []
+}

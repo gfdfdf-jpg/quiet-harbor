@@ -1,0 +1,592 @@
+{
+  "local-commit-enabled": {
+    "label": "Uprawnienie do lokalnego commitu",
+    "description": "Jawne i audytowane włączenie daje temu obszarowi roboczemu trwałe uprawnienie do commitów zakończonych i sprawdzonych zadań. Wyłączenie je cofa. Testy, przeglądy i audyt po commicie pozostają wymagane; bez uprawnień do push ani CI.",
+    "options": {
+      "true": {
+        "label": "Włączone",
+        "description": "Zezwól na natywne commity zakończonych i sprawdzonych zadań."
+      },
+      "false": {
+        "label": "Wyłączone",
+        "description": "Zablokuj lokalne commity i cofnij wcześniejsze uprawnienia."
+      }
+    }
+  },
+  "compact-enabled": {
+    "label": "Zwięzłe wyjście",
+    "description": "Ustawienie compact. Zmiany wymagają potwierdzenia; sekrety nie są maskowane.",
+    "options": {
+      "true": {
+        "label": "Włączone",
+        "description": "Ustawienie compact. Zmiany wymagają potwierdzenia; sekrety nie są maskowane. Włączone"
+      },
+      "false": {
+        "label": "Wyłączone",
+        "description": "Ustawienie compact. Zmiany wymagają potwierdzenia; sekrety nie są maskowane. Wyłączone"
+      }
+    }
+  },
+  "compact-git": {
+    "label": "Git przez compact",
+    "description": "Ustawienie compact. Zmiany wymagają potwierdzenia; sekrety nie są maskowane.",
+    "options": {
+      "true": {
+        "label": "Włączone",
+        "description": "Ustawienie compact. Zmiany wymagają potwierdzenia; sekrety nie są maskowane. Włączone"
+      },
+      "false": {
+        "label": "Wyłączone",
+        "description": "Ustawienie compact. Zmiany wymagają potwierdzenia; sekrety nie są maskowane. Wyłączone"
+      }
+    }
+  },
+  "compact-file": {
+    "label": "Pliki przez compact",
+    "description": "Ustawienie compact. Zmiany wymagają potwierdzenia; sekrety nie są maskowane.",
+    "options": {
+      "true": {
+        "label": "Włączone",
+        "description": "Ustawienie compact. Zmiany wymagają potwierdzenia; sekrety nie są maskowane. Włączone"
+      },
+      "false": {
+        "label": "Wyłączone",
+        "description": "Ustawienie compact. Zmiany wymagają potwierdzenia; sekrety nie są maskowane. Wyłączone"
+      }
+    }
+  },
+  "compact-rg": {
+    "label": "Wyszukiwanie przez compact",
+    "description": "Ustawienie compact. Zmiany wymagają potwierdzenia; sekrety nie są maskowane.",
+    "options": {
+      "true": {
+        "label": "Włączone",
+        "description": "Ustawienie compact. Zmiany wymagają potwierdzenia; sekrety nie są maskowane. Włączone"
+      },
+      "false": {
+        "label": "Wyłączone",
+        "description": "Ustawienie compact. Zmiany wymagają potwierdzenia; sekrety nie są maskowane. Wyłączone"
+      }
+    }
+  },
+  "compact-preview-lines": {
+    "label": "Wiersze podglądu",
+    "description": "Ustawienie compact. Zmiany wymagają potwierdzenia; sekrety nie są maskowane."
+  },
+  "compact-preview-chars": {
+    "label": "Znaki podglądu",
+    "description": "Ustawienie compact. Zmiany wymagają potwierdzenia; sekrety nie są maskowane."
+  },
+  "compact-exact-bytes": {
+    "label": "Bajty wybranego zakresu",
+    "description": "Bajty wybranego zakresu. Ustawienie compact. Zmiany wymagają potwierdzenia; sekrety nie są maskowane."
+  },
+  "compact-read-bytes": {
+    "label": "Bajty strony odczytu",
+    "description": "Bajty strony odczytu. Ustawienie compact. Zmiany wymagają potwierdzenia; sekrety nie są maskowane."
+  },
+  "compact-search-context": {
+    "label": "Wiersze kontekstu wyszukiwania",
+    "description": "Wiersze kontekstu wyszukiwania. Ustawienie compact. Zmiany wymagają potwierdzenia; sekrety nie są maskowane."
+  },
+  "compact-run-bytes": {
+    "label": "Limit bajtów przechwycenia",
+    "description": "Ustawienie compact. Zmiany wymagają potwierdzenia; sekrety nie są maskowane."
+  },
+  "compact-task-bytes": {
+    "label": "Limit bajtów pamięci zadania",
+    "description": "Ustawienie compact. Zmiany wymagają potwierdzenia; sekrety nie są maskowane."
+  },
+  "compact-workspace-bytes": {
+    "label": "Limit bajtów pamięci projektu",
+    "description": "Ustawienie compact. Zmiany wymagają potwierdzenia; sekrety nie są maskowane."
+  },
+  "compact-max-runs": {
+    "label": "Limit liczby przechwyceń",
+    "description": "Ustawienie compact. Zmiany wymagają potwierdzenia; sekrety nie są maskowane."
+  },
+  "compile-gate-command": {
+    "label": "Polecenie compile-gate",
+    "description": "Polecenie uruchamiane przez compile-gate do walidacji kompilacji, buildu i type-check. Gdy nie jest skonfigurowane, compile-gate kończy się fail-closed, dopóki nie zostanie ustawione polecenie specyficzne dla projektu."
+  },
+  "compile-gate-command-fallback": {
+    "description": "Nie ustawiono w workflow-config; compile-gate kończy się fail-closed, dopóki nie zostanie skonfigurowane polecenie specyficzne dla projektu."
+  },
+  "full-suite-enabled": {
+    "label": "Obowiązkowa pełna walidacja",
+    "description": "Określa, czy skonfigurowane polecenie pełnego zestawu testów jest częścią cyklu życia zadania.",
+    "options": {
+      "true": {
+        "label": "Włączone",
+        "description": "Skonfigurowane polecenie pełnej walidacji jest wymagane w cyklu życia zadania."
+      },
+      "false": {
+        "label": "Wyłączone",
+        "description": "Brama pełnej walidacji jest pomijana, chyba że inna ścieżka workflow tego wymaga."
+      }
+    }
+  },
+  "task-test-selection-require-operator-confirmation": {
+    "label": "Potwierdzaj wybór testów zadania",
+    "description": "Wymaga potwierdzenia wyboru testów aktywnego zadania. Domyślnie wyłączone. Zmiana tego ustawienia nadal wymaga potwierdzenia; obowiązkowe testy i przeglądy pozostają bez zmian.",
+    "options": {
+      "true": {
+        "label": "Włączone",
+        "description": "Pytaj o potwierdzenie przed każdym wyborem testów zadania."
+      },
+      "false": {
+        "label": "Wyłączone",
+        "description": "Pozwól na uzasadniony i zapisany wybór testów aktywnego zadania bez dodatkowego pytania."
+      }
+    }
+  },
+  "full-suite-command": {
+    "label": "Polecenie pełnej walidacji",
+    "description": "Polecenie uruchamiane przez bramę pełnej walidacji, gdy obowiązkowa pełna walidacja jest włączona."
+  },
+  "full-suite-timeout-ms": {
+    "label": "Limit czasu pełnej walidacji",
+    "description": "Maksymalny czas wykonania polecenia pełnej walidacji, w milisekundach."
+  },
+  "full-suite-green-summary-max-lines": {
+    "label": "Długość podsumowania udanego przebiegu",
+    "description": "Ile linii udanego wyjścia pełnej walidacji pozostaje widocznych w kompaktowych dowodach zadania."
+  },
+  "full-suite-red-failure-chunk-lines": {
+    "label": "Długość bloku błędu",
+    "description": "Ile linii nieudanego wyjścia pełnej walidacji jest zachowywanych w jednym kompaktowym bloku błędu."
+  },
+  "full-suite-out-of-scope-failure-policy": {
+    "label": "Obsługa błędów poza zakresem",
+    "description": "Co robi workflow, gdy pełna walidacja wykryje błąd poza bieżącym zakresem zadania.",
+    "options": {
+      "AUDIT_AND_BLOCK": {
+        "label": "Zapisz i zablokuj",
+        "description": "Rejestruje błąd poza zakresem i zatrzymuje workflow do momentu rozwiązania."
+      },
+      "AUDIT_AND_WARN": {
+        "label": "Zapisz i ostrzeż",
+        "description": "Rejestruje błąd poza zakresem, ale pozwala kontynuować workflow z ostrzeżeniem."
+      }
+    }
+  },
+  "full-suite-placement": {
+    "label": "Miejsce pełnej walidacji w cyklu",
+    "description": "Gdzie w cyklu życia zadania uruchamiana jest obowiązkowa brama pełnej walidacji.",
+    "options": {
+      "after_compile_before_reviews": {
+        "label": "Po kompilacji, przed review",
+        "description": "Uruchamia pełną walidację po udanej kompilacji i przed rozpoczęciem review."
+      },
+      "before_test_review": {
+        "label": "Przed test review",
+        "description": "Uruchamia pełną walidację tuż przed tym, gdy test review potrzebuje dowodów."
+      },
+      "before_completion": {
+        "label": "Przed zakończeniem",
+        "description": "Opóźnia pełną walidację do finalnej ścieżki zakończenia."
+      }
+    }
+  },
+  "review-execution-policy": {
+    "label": "Tryb uruchamiania review",
+    "description": "Określa, czy wymagane review lanes działają równolegle, czekają na code review, czy są uruchamiane sekwencyjnie.",
+    "options": {
+      "parallel_all": {
+        "label": "Wszystko równolegle",
+        "description": "Wszystkie typy review można przygotowywać niezależnie; brak zależności upstream."
+      },
+      "test_after_code": {
+        "label": "Test po code",
+        "description": "Tylko test czeka na bieżący code PASS; pozostałe typy review pozostają niezależne."
+      },
+      "code_first_optional": {
+        "label": "Code najpierw dla opcjonalnych",
+        "description": "API, performance, infra i dependency czekają na code PASS; test pozostaje downstream."
+      },
+      "strict_sequential": {
+        "label": "Ściśle sekwencyjnie",
+        "description": "Wszystkie wymagane review lanes przechodzą kanoniczną kolejność jeden po drugim w bieżącej cyklu."
+      }
+    }
+  },
+  "scope-budget-enabled": {
+    "label": "Kontrola budżetu zakresu",
+    "description": "Ostrzega lub blokuje, gdy zadanie jest zbyt duże dla skonfigurowanego budżetu profilu.",
+    "options": {
+      "true": {
+        "label": "Włączone",
+        "description": "Kontrole budżetu zakresu ostrzegają lub blokują, gdy zadanie przekracza budżet profilu."
+      },
+      "false": {
+        "label": "Wyłączone",
+        "description": "Limity budżetu zakresu nie są egzekwowane przy ocenie rozmiaru zadania."
+      }
+    }
+  },
+  "scope-budget-action": {
+    "label": "Legacy max_* compatibility mode",
+    "description": "Old max_* compatibility only; explicit block_* thresholds still produce BLOCK and route to split-required.",
+    "options": {
+      "BLOCK_FOR_SPLIT": {
+        "label": "max_* maps to block_*",
+        "description": "Old max_* values are treated as blocking thresholds; explicit block_* thresholds still block in every mode."
+      },
+      "WARN_ONLY": {
+        "label": "max_* maps to warn_*",
+        "description": "Old max_* values are treated as warning thresholds; explicit block_* thresholds still block in every mode."
+      }
+    }
+  },
+  "scope-budget-profiles": {
+    "label": "Profile budżetu zakresu",
+    "description": "Profile zadań, dla których obowiązuje kontrola budżetu zakresu. Nieznane legacy wartości są pokazywane wprost zamiast być cicho usuwane."
+  },
+  "scope-budget-max-files": {
+    "label": "Limit plików",
+    "description": "Maksymalna liczba zmienionych plików przed reakcją kontroli budżetu zakresu."
+  },
+  "scope-budget-max-changed-lines": {
+    "label": "Limit zmienionych linii",
+    "description": "Maksymalna liczba zmienionych linii przed reakcją kontroli budżetu zakresu."
+  },
+  "scope-budget-max-required-reviews": {
+    "label": "Limit obowiązkowych typów review",
+    "description": "Maksymalna liczba różnych typów review wymaganych przez bieżący preflight, zanim zareaguje kontrola budżetu zakresu. Wyłączona capability review nie staje się obowiązkowa tylko dlatego, że zmieniły się pasujące pliki; to liczba typów review, a nie reviewerów, prób ani cykli review."
+  },
+  "scope-budget-max-review-tokens": {
+    "label": "Limit tokenów review",
+    "description": "Maksymalny szacowany budżet tokenów review przed reakcją kontroli budżetu zakresu."
+  },
+  "review-cycle-enabled": {
+    "label": "Kontrola cykli review",
+    "description": "Wykrywa powtarzające się pętle review inne niż test, zanim zużyją zbyt dużo pracy.",
+    "options": {
+      "true": {
+        "label": "Włączone",
+        "description": "Powtarzające się pętle review inne niż test są wykrywane przed kontynuacją closeout."
+      },
+      "false": {
+        "label": "Wyłączone",
+        "description": "Presja review-cycle nie jest sprawdzana przez tę kontrolę."
+      }
+    }
+  },
+  "review-cycle-action": {
+    "label": "Reakcja na cykl review",
+    "description": "Co się dzieje, gdy powtarzające się próby review przekroczą skonfigurowane limity.",
+    "options": {
+      "BLOCK_FOR_OPERATOR_DECISION": {
+        "label": "Czekaj na decyzję operatora",
+        "description": "Zatrzymuje powtarzające się pętle review do momentu wyboru ścieżki odzyskiwania przez operatora."
+      },
+      "WARN_ONLY": {
+        "label": "Tylko ostrzeżenie",
+        "description": "Raportuje presję review-cycle, ale pozwala kontynuować workflow."
+      }
+    }
+  },
+  "review-cycle-max-failed-non-test-reviews": {
+    "label": "Limit nieudanych review innych niż test",
+    "description": "Maksymalna liczba nieudanych prób review innych niż test przed reakcją kontroli cykli review."
+  },
+  "review-cycle-max-total-non-test-reviews": {
+    "label": "Łączny limit review innych niż test",
+    "description": "Maksymalna łączna liczba prób review innych niż test przed reakcją kontroli cykli review."
+  },
+  "review-cycle-excluded-review-types": {
+    "label": "Wykluczone typy review",
+    "description": "Wielokrotny wybór: zaznaczone typy review są wykluczane z liczenia przez kontrolę review-cycle guard.",
+    "options": {
+      "code": {
+        "label": "Przegląd kodu"
+      },
+      "db": {
+        "label": "Przegląd bazy danych"
+      },
+      "security": {
+        "label": "Przegląd bezpieczeństwa"
+      },
+      "refactor": {
+        "label": "Przegląd refaktoryzacji"
+      },
+      "api": {
+        "label": "Przegląd API"
+      },
+      "test": {
+        "label": "Przegląd testów"
+      },
+      "performance": {
+        "label": "Przegląd wydajności"
+      },
+      "infra": {
+        "label": "Przegląd infrastruktury"
+      },
+      "dependency": {
+        "label": "Przegląd zależności"
+      }
+    }
+  },
+  "review-cycle-auto-split-enabled": {
+    "label": "Automatyczna podpowiedź podziału",
+    "description": "Pozwala, aby presja review-cycle wygenerowała podpowiedź auto-split, gdy akcja to BLOCK_FOR_OPERATOR_DECISION. Nie ma efektu blokującego, gdy akcja to WARN_ONLY.",
+    "options": {
+      "true": {
+        "label": "Włączone",
+        "description": "Presja review-cycle może wygenerować podpowiedź auto-split, gdy akcja to BLOCK_FOR_OPERATOR_DECISION."
+      },
+      "false": {
+        "label": "Wyłączone",
+        "description": "Presja review-cycle nigdy nie generuje podpowiedzi auto-split."
+      }
+    }
+  },
+  "project-memory-enabled": {
+    "label": "Obsługa pamięci projektu",
+    "description": "Określa, czy closeout sprawdza wpływ na pamięć projektu.",
+    "options": {
+      "true": {
+        "label": "Włączone",
+        "description": "Przy closeout sprawdzane jest, czy potrzebne są dowody wpływu na pamięć projektu."
+      },
+      "false": {
+        "label": "Wyłączone",
+        "description": "Przy closeout nie są wykonywane kontrole obsługi pamięci projektu."
+      }
+    }
+  },
+  "project-memory-mode": {
+    "label": "Tryb pamięci projektu",
+    "description": "Jak ściśle workflow wymusza pracę z pamięcią projektu.",
+    "options": {
+      "off": {
+        "label": "Wyłączone",
+        "description": "Nie uruchamiaj obsługi pamięci projektu podczas closeout."
+      },
+      "check": {
+        "label": "Sprawdź",
+        "description": "Sprawdź, czy potrzebne są aktualizacje pamięci, bez zapisywania plików."
+      },
+      "update": {
+        "label": "Aktualizuj",
+        "description": "Pozwól workflow aktualizować wybrane pliki pamięci projektu w razie potrzeby."
+      },
+      "strict": {
+        "label": "Ścisły",
+        "description": "Wymagaj dowodów pamięci przed udanym closeout."
+      }
+    }
+  },
+  "project-memory-run-before-final-closeout": {
+    "label": "Sprawdzenie pamięci przed finalnym closeout",
+    "description": "Uruchamia obsługę pamięci projektu przed ostatnim krokiem zakończenia.",
+    "options": {
+      "true": {
+        "label": "Włączone",
+        "description": "Obsługa pamięci projektu jest uruchamiana przed ostatnim krokiem zakończenia."
+      },
+      "false": {
+        "label": "Wyłączone",
+        "description": "Obsługa pamięci projektu nie jest wstawiana przed finalnym closeout."
+      }
+    }
+  },
+  "project-memory-require-user-approval-for-writes": {
+    "label": "Zgoda użytkownika na zapis pamięci",
+    "description": "Wymaga wyraźnej zgody użytkownika przed zapisem plików pamięci projektu przez workflow.",
+    "options": {
+      "true": {
+        "label": "Włączone",
+        "description": "Zapis do pamięci projektu wymaga wyraźnej zgody użytkownika przed modyfikacją plików."
+      },
+      "false": {
+        "label": "Wyłączone",
+        "description": "Zapis do pamięci projektu może przebiegać zgodnie ze skonfigurowanym trybem obsługi bez dodatkowego kroku zatwierdzenia."
+      }
+    }
+  },
+  "project-memory-max-compact-summary-chars": {
+    "label": "Rozmiar kompaktowego podsumowania pamięci",
+    "description": "Maksymalny rozmiar wygenerowanego kompaktowego podsumowania pamięci projektu, w znakach."
+  },
+  "project-memory-read-strategy": {
+    "label": "Strategia czytania pamięci",
+    "description": "Jak agenci powinni czytać trwałą pamięć na początku zadania.",
+    "options": {
+      "index_first": {
+        "label": "Najpierw indeks",
+        "description": "Najpierw czytaj indeks pamięci i otwieraj szczegółowe pliki tylko wtedy, gdy wskazuje na nie indeks."
+      }
+    }
+  },
+  "project-memory-impact-retention-days": {
+    "label": "Przechowywanie artefaktów wpływu pamięci",
+    "description": "Ile dni przechowywane są artefakty wpływu pamięci projektu."
+  },
+  "task-reset-enabled": {
+    "label": "Polecenia resetu/anulowania zadań",
+    "description": "Pozwala na potwierdzone mutacje reset lub discard dla zadań.",
+    "options": {
+      "true": {
+        "label": "Włączone",
+        "description": "Potwierdzone polecenia resetu i anulowania zadań są dostępne przez chronione ścieżki."
+      },
+      "false": {
+        "label": "Wyłączone",
+        "description": "Mutacje resetu i anulowania zadań są niedostępne."
+      }
+    }
+  },
+  "auto-backup-enabled": {
+    "label": "Zaplanowane automatyczne kopie zapasowe",
+    "description": "Pozwala codziennemu maintenance uruchamiać zaplanowane kopie rollback, gdy nadejdzie termin interwału.",
+    "options": {
+      "true": {
+        "label": "Włączone",
+        "description": "Codzienny maintenance może tworzyć zaplanowane kopie rollback, gdy nadejdzie interwał."
+      },
+      "false": {
+        "label": "Wyłączone",
+        "description": "Codzienny maintenance nie tworzy zaplanowanych kopii rollback."
+      }
+    }
+  },
+  "auto-backup-interval-days": {
+    "label": "Interwał kopii zapasowej",
+    "description": "Minimalna liczba dni między udanymi zaplanowanymi kopiami zapasowymi."
+  },
+  "auto-backup-keep-latest": {
+    "label": "Retencja kopii zapasowych",
+    "description": "Ile ostatnich kopii zapasowych zachować po utworzeniu zaplanowanej kopii."
+  },
+  "garda-self-guard": {
+    "label": "Samoochrona Garda",
+    "description": "Określa, czy agenci mogą bezpośrednio wchodzić w chronioną pracę control-plane Garda.",
+    "options": {
+      "deny_agent_entry": {
+        "label": "Włączone",
+        "description": "Agenci nie mogą wejść w chronioną pracę control-plane bez ścieżki należącej do operatora."
+      },
+      "require_operator_confirmation": {
+        "label": "Potwierdzenie operatora",
+        "description": "Wejście w chroniony control-plane wymaga wyraźnego potwierdzenia operatora."
+      }
+    }
+  },
+  "full-suite-timeout-blocker": {
+    "label": "Blokada limitu czasu full-suite",
+    "description": "Kontroluje, czy powtarzające się limity czasu full-suite blokują zadanie i proponują naprawę, czy przechodzą jako końcowe ostrzeżenie.",
+    "options": {
+      "true": {
+        "label": "true",
+        "description": "Powtarzające się limity czasu full-suite blokują ukończenie i proponują zadanie naprawcze."
+      },
+      "false": {
+        "label": "false",
+        "description": "Powtarzające się limity czasu full-suite są zgłaszane jako ostrzeżenie i nie blokują ukończenia."
+      }
+    }
+  },
+  "full-suite-timeout-retry-count": {
+    "label": "Ponowienia po limicie czasu full-suite",
+    "description": "Ile razy ponowić komendę full-suite po limicie czasu przed zastosowaniem polityki."
+  },
+  "optional-checks-enabled": {
+    "label": "Opcjonalne kontrole jakości",
+    "description": "Steruje uruchamianiem doradczych reguł autokontroli przed kompilacją, review i pełną walidacją. Edycje reguł poniżej używają tej samej audytowanej ścieżki workflow set.",
+    "options": {
+      "true": {
+        "label": "Włączone",
+        "description": "Agenci uruchamiają skonfigurowane doradcze reguły autokontroli przed kosztownymi bramkami."
+      },
+      "false": {
+        "label": "Wyłączone",
+        "description": "Opcjonalna bramka quality-checklist jest pomijana bez zastępowania obowiązkowych bramek kompilacji, review lub full-suite."
+      }
+    }
+  },
+  "optional-checks-review-failure-cadence-interval": {
+    "label": "Nieudane przeglądy między kontrolami jakości",
+    "description": "Liczba zapisanych nieudanych prób review między wymaganymi seriami odpowiedzi quality-checklist. Licznik rośnie tylko po zapisanych wynikach review FAIL; powtarzane next-step lub odświeżenia preflight go nie zwiększają."
+  },
+  "optional-skill-selection-mode": {
+    "label": "Tryb wyboru umiejetnosci specjalistycznych",
+    "description": "Steruje tym, czy dopasowanie umiejetnosci specjalistycznych przy starcie zadania jest wylaczone, optional czy mandatory. Starsze wartosci advisory/required/strict pozostaja zgodne w odczycie i sa zapisywane jako tryby kanoniczne.",
+    "options": {
+      "off": {
+        "label": "Wylaczone",
+        "description": "Nie sugeruje ani nie wymaga umiejetnosci specjalistycznych przy starcie zadania."
+      },
+      "optional": {
+        "label": "Opcjonalne",
+        "description": "Pokazuje sugestie umiejetnosci specjalistycznych i rekomendowane pakiety bez blokowania zwyklej pracy."
+      },
+      "mandatory": {
+        "label": "Obowiazkowe",
+        "description": "Wymaga wybranej zainstalowanej umiejetnosci specjalistycznej przed rozpoczeciem implementacji, gdy polityka ja wybierze."
+      },
+      "advisory": {
+        "label": "Starsze: advisory -> optional",
+        "description": "Alias zgodnosci dla optional; zapis utrwala optional."
+      },
+      "required": {
+        "label": "Starsze: required -> mandatory",
+        "description": "Alias zgodnosci dla mandatory; zapis utrwala mandatory."
+      },
+      "strict": {
+        "label": "Starsze: strict -> mandatory",
+        "description": "Alias zgodnosci dla mandatory; zapis utrwala mandatory."
+      }
+    }
+  },
+  "optional-check-rule-management": {
+    "label": "Opcjonalna reguła kontroli jakości",
+    "description": "Dodaje, aktualizuje lub usuwa jedną doradczą opcjonalną regułę kontroli jakości przez audytowaną ścieżkę ustawień workflow."
+  },
+  "scope-budget-warn-files": {
+    "label": "budżet zakresu: zmienione pliki - ostrzeżenie WARN",
+    "description": "ostrzeżenie WARN: zmienione pliki above threshold; kontynuacja jest dozwolona; keep it below blokada BLOCK."
+  },
+  "scope-budget-block-files": {
+    "label": "budżet zakresu: zmienione pliki - blokada BLOCK",
+    "description": "blokada BLOCK: zmienione pliki above threshold; next-step przechodzi do split-required."
+  },
+  "scope-budget-warn-changed-lines": {
+    "label": "budżet zakresu: zmienione linie - ostrzeżenie WARN",
+    "description": "ostrzeżenie WARN: zmienione linie above threshold; kontynuacja jest dozwolona; keep it below blokada BLOCK."
+  },
+  "scope-budget-block-changed-lines": {
+    "label": "budżet zakresu: zmienione linie - blokada BLOCK",
+    "description": "blokada BLOCK: zmienione linie above threshold; next-step przechodzi do split-required."
+  },
+  "scope-budget-warn-required-reviews": {
+    "label": "budżet zakresu: wymagane typy review - ostrzeżenie WARN",
+    "description": "ostrzeżenie WARN: wymagane typy review above threshold; kontynuacja jest dozwolona; keep it below blokada BLOCK."
+  },
+  "scope-budget-block-required-reviews": {
+    "label": "budżet zakresu: wymagane typy review - blokada BLOCK",
+    "description": "blokada BLOCK: wymagane typy review above threshold; next-step przechodzi do split-required."
+  },
+  "scope-budget-warn-review-tokens": {
+    "label": "budżet zakresu: tokeny review - ostrzeżenie WARN",
+    "description": "ostrzeżenie WARN: tokeny review above threshold; kontynuacja jest dozwolona; keep it below blokada BLOCK."
+  },
+  "scope-budget-block-review-tokens": {
+    "label": "budżet zakresu: tokeny review - blokada BLOCK",
+    "description": "blokada BLOCK: tokeny review above threshold; next-step przechodzi do split-required."
+  },
+  "parent-audit-enabled": {
+    "label": "Pełny audyt i przegląd zadania nadrzędnego",
+    "description": "Dla zadań podzielonych w trakcie pracy: jeden wspólny przegląd po przyjęciu wszystkich podzadań. Uwagi trafiają do jednego zadania F; jego przyjęcie zamyka rodzica. Grupy ręcznie utworzone na początku zamykają się automatycznie. Dotyczy przyszłych podziałów.",
+    "options": {
+      "true": {
+        "label": "Włączone",
+        "description": "Jednorazowy niezależny przegląd całości."
+      },
+      "false": {
+        "label": "Wyłączone",
+        "description": "Automatyczne zamknięcie po przyjęciu wszystkich podzadań."
+      }
+    }
+  }
+}

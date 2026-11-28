@@ -1,0 +1,249 @@
+# Node Runtime Contract
+
+Version source: VERSION
+Frozen: 2026-05-20
+
+This document captures the current Node-only runtime surface.
+
+## Public Surface
+
+- CLI aliases: `garda`, `gao`, `garda-agent-orchestrator`
+- Entrypoint: generated `bin/garda.js` (compiled from `src/bin/garda.ts`)
+- Runtime baseline: `Node.js ^22.13.0 || >=24.0.0`
+
+## Compatibility Matrix
+
+Garda 1.4.x uses Node 24 LTS as the primary runtime line and supports Node 22.13+ as a compatibility runtime line. Node 22 support is official only at 22.13.0 and newer because repository dependencies and CI coverage are pinned to that lower bound. Other Node versions are outside the tested support matrix: doctor should warn about them, not block solely because of the version number.
+
+| Node.js line | Garda 1.4.x status | Contract |
+|---|---|---|
+| Node 24 LTS | Supported primary runtime | Public CLI, lifecycle commands, gate commands, release validation, and cross-platform smoke are covered by CI and `package.json` engines. |
+| Node 22.13+ LTS | Supported compatibility runtime | Public CLI, lifecycle commands, gate commands, typecheck, test, release validation, and cross-platform smoke are covered by CI and runtime diagnostics. The SQLite projection remains capability-gated; runtimes without embedded FTS5 use canonical-file fallback. |
+| Node 23, Node 22 before 22.13, and Node 20 or older | Untested / not officially supported | Outside the tested `^22.13.0 || >=24.0.0` support matrix. Doctor reports a warning, but runtime version mismatch alone is not a hard block. |
+
+## Execution Modes
+
+- Source-repository mode: run `npm run build`, which compiles `src/bin/garda.ts` into `bin/garda.js`; that launcher then resolves compiled `dist/src/**/*.js`.
+- Source-checkout install mode: `npm install` installs dependencies only; run `npm run build` explicitly before first CLI use. The package intentionally does not rely on consumer install lifecycle scripts such as `prepare`.
+- Test-staged mode: Node foundation tests may stage `.node-build/src/**/*.js`, and `bin/garda.js` can resolve that compiled output when `dist/` is intentionally absent in the fixture.
+- Packaged-install mode: under `node_modules`, `bin/garda.js` first delegates to a local workspace/source `bin/garda.js` when the current project already contains an orchestrator checkout or deployed bundle; otherwise it falls back to its packaged compiled runtime in `dist/src/**/*.js`.
+- Delegation trust binds the active `bin/garda.js` realpath back to its claimed package root and accepts local source/deployed runtimes only when their repo-owned provenance markers are present. Minimal package-shape lookalikes must fail closed as `runtime_kind=unknown`.
+- Raw `src/**/*.ts` files are compile-time inputs only; direct `.ts` execution is not part of the supported runtime contract.
+- Public CLI commands, gate names, and verification markers are the same in both modes.
+
+## Command Inventory
+
+Lifecycle commands:
+
+```text
+setup, agent-init, status, doctor, bootstrap, install, init, reinit, verify, check-update, update, rollback, uninstall, skills
+```
+
+Additional public routes:
+
+```text
+update git
+gate <name>
+```
+
+Zero-argument invocation prints the safe overview. Unknown top-level commands fail as usage errors and must not invoke `bootstrap` or create a bundle directory named after the unknown token.
+
+`Workspace ready` is blocked by `runtime/agent-init-state.json` until the hard `agent-init` gate passes.
+
+## Source-of-Truth Values
+
+| SourceOfTruth | Canonical Entrypoint |
+|---|---|
+| Claude | `CLAUDE.md` |
+| Codex | `AGENTS.md` |
+| Cursor | `AGENTS.md` |
+| DeepSeek | `AGENTS.md` |
+| Gemini | `GEMINI.md` |
+| Qwen | `QWEN.md` |
+| GitHubCopilot | `.github/copilot-instructions.md` |
+| Windsurf | `.windsurf/rules/rules.md` |
+| Junie | `.junie/guidelines.md` |
+| Antigravity | `.antigravity/rules.md` |
+
+`Codex`, `Cursor`, and `DeepSeek` intentionally share `AGENTS.md`; runtime identity must come from explicit provider metadata, not path-only inference.
+
+## Init Answers Contract
+
+`runtime/init-answers.json` keeps:
+
+- `AssistantLanguage`
+- `AssistantBrevity`
+- `SourceOfTruth`
+- `EnforceNoAutoCommit`
+- `ClaudeOrchestratorFullAccess`
+- `TokenEconomyEnabled`
+- `CollectedVia`
+- optional `ActiveAgentFiles`
+
+Allowed brevity values:
+
+```text
+concise, detailed
+```
+
+Allowed `CollectedVia` values:
+
+```text
+AGENT_INIT_PROMPT.md, CLI_INTERACTIVE, CLI_NONINTERACTIVE
+```
+
+## Deployed Bundle Surface
+
+The npm package ships the compiled runtime in `dist/` together with `bin/`,
+templates, metadata, and public documentation. It omits the repository
+`src/`, `tests/`, `.node-build/`, and `.scripts-build/` trees, so consumer
+installs do not need TypeScript, devDependencies, or a build step. Source
+checkouts and source-controlled embedded bundles may retain `src/` for
+development, auditability, and parity validation; deployed execution still
+uses `dist/` only.
+
+The deployed bundle keeps:
+
+```text
+.gitattributes
+bin/
+dist/
+template/
+AGENT_INIT_PROMPT.md
+CHANGELOG.md
+HOW_TO.md
+LICENSE
+MANIFEST.md
+NOTICE
+README.md
+SECURITY.md
+TRADEMARKS.md
+VERSION
+docs/assets/garda-github-social-preview.png
+docs/architecture.md
+docs/branch-protection.md
+docs/cli-reference.md
+docs/compatibility-matrix.md
+docs/configuration.md
+docs/control-plane-isolation.md
+docs/node-platform-foundation.md
+docs/node-runtime-contract.md
+docs/operator-consistency-runbook.md
+docs/orchestrator-work-and-isolation.md
+docs/providers.md
+docs/release-readiness.md
+docs/sbom.md
+docs/secret-scanning.md
+docs/threat-model.md
+docs/work-example.md
+package.json
+tsconfig.json
+tsconfig.node-foundation.json
+```
+
+The runtime materializes:
+
+- `live/config/**`
+- `live/docs/**`
+- `live/skills/**`
+- `live/project-discovery.md`
+- `live/source-inventory.md`
+- `live/init-report.md`
+- `live/USAGE.md`
+- `live/version.json`
+- `runtime/reviews/**`
+- `runtime/task-events/**`
+
+Ordinary `update` and `check-update --apply` additionally:
+
+- sync the new bundle into place
+- re-run install and live materialization
+- apply built-in migrations for mandatory live rule contracts in existing workspaces
+- run verify plus manifest validation before the update is considered successful
+- invalidate cached bundle runtime modules after a successful apply so long-lived host processes reload the synced bundle on later commands
+- resolve trusted npm registry specs to exact package versions with integrity metadata before install, and record requested/exact/resolved provenance in CLI output and update reports
+- keep update-source trust in enforced mode unless the operator explicitly passes `--trust-override --no-prompt`
+- record trust-policy audit data (`TrustPolicy`, `TrustOverrideUsed`, `TrustOverrideSource`) in update CLI output and update reports
+- record release-update provenance status, summary, and recommendation in CLI output, sync metadata, update sentinels, and update reports
+
+Update trust model:
+
+- Trusted mode accepts only the allowlisted npm package name and allowlisted git repository URLs.
+- The preferred release path is the npm package-manager update path because it records exact package and registry integrity metadata.
+- Trusted git updates remain supported for operator-controlled source updates, but they are reported as allowlisted git sources without release-signature verification; use `--check-only` or `--dry-run` first for release-sensitive git updates.
+- Local `--source-path` update sources are test/dev-only flows and require explicit `--trust-override --no-prompt`.
+- The legacy `GARDA_UPDATE_TRUST_OVERRIDE` environment variable is ignored by ordinary CLI/runtime flows and is reserved for test-only harness paths.
+
+## Gate Inventory
+
+Canonical gate surface:
+
+```text
+node garda-agent-orchestrator/bin/garda.js gate <name>
+```
+
+Shipped gates:
+
+- `enter-task-mode`
+- `load-rule-pack`
+- `classify-change`
+- `compile-gate`
+- `required-reviews-check`
+- `record-no-op`
+- `record-review-cycle-continuation`
+- `doc-impact-gate`
+- `completion-gate`
+- `build-scoped-diff`
+- `build-review-context`
+- `log-task-event`
+- `task-events-summary`
+- `validate-manifest`
+- `human-commit`
+
+Lifecycle auto-emission:
+
+- `enter-task-mode` auto-emits `TASK_MODE_ENTERED`, `PLAN_CREATED`, and best-effort `STATUS_CHANGED` / `PROVIDER_ROUTING_DECISION`
+- `classify-change` auto-emits `PREFLIGHT_STARTED` and then `PREFLIGHT_CLASSIFIED` or `PREFLIGHT_FAILED`
+- `compile-gate` auto-emits `IMPLEMENTATION_STARTED` and then `COMPILE_GATE_PASSED` or `COMPILE_GATE_FAILED`
+- `build-review-context` auto-emits `REVIEW_PHASE_STARTED`, `SKILL_SELECTED`, and `SKILL_REFERENCE_LOADED` for the selected review skill
+- `record-no-op` writes `runtime/reviews/<task-id>-no-op.json` for audited `already done` / `no changes required` / `audit only` outcomes
+- `record-review-cycle-continuation` writes `runtime/reviews/<task-id>-review-cycle-continuation.json` for a task-scoped one-shot `allow_one_more_cycle` approval and does not mutate `workflow-config.json`
+- `required-reviews-check`, `doc-impact-gate`, and `completion-gate` append their pass/fail markers to the task timeline
+- `status` and `doctor` report task-timeline completeness, not just timeline presence
+
+Zero-diff guard:
+
+- A clean-tree `classify-change` result is `BASELINE_ONLY`, not successful completion evidence.
+- For implementation tasks, zero-diff preflight must lead to one of three states:
+  - a later produced diff, then normal compile/review/completion flow;
+  - an audited no-op artifact recorded through `gate record-no-op`;
+  - an explicit blocked state.
+- `required-reviews-check` and `completion-gate` reject zero-diff tasks without audited no-op evidence.
+
+## Verification Markers
+
+- Overview marker: `GARDA_OVERVIEW`
+- Bootstrap success: `GARDA_BOOTSTRAP_OK`
+- Setup success: `GARDA_SETUP`
+- Status marker: `GARDA_STATUS`
+- Verify success: `Verification: PASS`
+- Verify failure tail: `Verification failed. Resolve listed issues and rerun.`
+
+Compact validation success markers:
+
+- `garda status --compact` (ready): `GARDA_STATUS: ready | source=<provider>`
+- `garda doctor --compact` (pass): `Doctor: PASSED | verify=PASSED | manifest=PASSED`
+- `garda verify --compact` (pass): `Verification: PASS | paths=<count> | violations=0`
+- `garda gate validate-manifest --compact` (pass): `MANIFEST_VALIDATION_PASSED | entries=<count>`
+
+## Validation
+
+Contract coverage lives in:
+
+- strict runtime build config: `tsconfig.build.json`
+- strict test/build-harness config: `tsconfig.tests.json`
+- `tests/node/**`
+- `npm test`
+- `npm run validate:release`
+
+`TypeScript` in this repository means compiler-enforced strict typing across the runtime (`src/**`), Node test suite (`tests/node/**`), and supporting build/test scripts (`scripts/node-foundation/**`). `npm run validate:release` proves the public release path as `clean worktree -> build -> embedded bundle parity when the generated bundle is present -> regular tests/coverage -> explicit package smoke -> pack/install/invoke -> clean worktree`.

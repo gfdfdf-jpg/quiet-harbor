@@ -1,0 +1,271 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import * as crypto from 'node:crypto';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
+import {
+    buildReviewContextHandoffArtifactPaths,
+    buildReviewContextHandoffArtifacts,
+    buildReviewEvidenceManifest,
+    resolveReviewHandoffArtifactPath,
+    type ReviewSkillBinding
+} from '../../../../src/gates/review-context/review-context-artifacts';
+import type { GitDiffSummary } from '../../../../src/gates/review-context/review-context-diff';
+import { buildReviewCoverageContract } from '../../../../src/gates/review/review-coverage-ledger';
+import type { ReviewContextLaneBinding } from '../../../../src/gates/review-context/review-context-lane';
+
+function sha256Text(text: string): string {
+    return crypto.createHash('sha256').update(text).digest('hex');
+}
+
+function sampleSelectedSkill(): ReviewSkillBinding {
+    return {
+        skill_id: 'code-review',
+        skill_path: 'garda-agent-orchestrator/live/skills/code-review/SKILL.md',
+        skill_sha256: 'skill-sha',
+        skill_directory_path: 'garda-agent-orchestrator/live/skills/code-review',
+        skill_entrypoint_exists: true,
+        candidate_skill_ids: ['code-review']
+    };
+}
+
+function sampleGitDiff(): GitDiffSummary {
+    return {
+        stat: ' src/example.ts | 2 ++',
+        diff: 'diff --git a/src/example.ts b/src/example.ts\n+const value = 1;\n',
+        diff_truncated: false,
+        diff_char_count: 64,
+        command_status: 0,
+        source: 'git',
+        error: null,
+        cache_path: 'garda-agent-orchestrator/runtime/reviews/T-001-code-scoped.diff',
+        cached: false
+    };
+}
+
+describe('gates/review-context-artifacts', () => {
+    it('adds only normalized custom-lane role bindings while retaining the shared findings output contract', () => {
+        const outputPath = path.join('runtime', 'reviews', 'T-001-architecture-boundary-review-context.json');
+        const paths = buildReviewContextHandoffArtifactPaths(outputPath);
+        const coverageContract = buildReviewCoverageContract({
+            reviewType: 'architecture-boundary',
+            changedFiles: ['src/example.ts'],
+            categoryIds: ['maintainability']
+        });
+        const binding: ReviewContextLaneBinding = {
+            schema_version: 1,
+            review_type: 'architecture-boundary',
+            selection: 'required',
+            built_in: false,
+            catalog_sha256: 'a'.repeat(64),
+            profile_policy_sha256: 'b'.repeat(64),
+            profile_snapshot_sha256: 'c'.repeat(64),
+            effective_review_snapshot_sha256: 'd'.repeat(64),
+            lane_definition_sha256: 'e'.repeat(64),
+            skill_ids: ['architecture-review'],
+            coverage_category_ids: ['maintainability'],
+            reviewer_role: {
+                role_id: 'architecture-reviewer',
+                focus_tags: ['maintainability']
+            },
+            verdict_tokens: {
+                pass: 'ARCHITECTURE BOUNDARY REVIEW PASSED',
+                fail: 'ARCHITECTURE BOUNDARY REVIEW FAILED'
+            },
+            binding_sha256: 'f'.repeat(64)
+        };
+
+        const artifacts = buildReviewContextHandoffArtifacts({
+            reviewType: 'architecture-boundary',
+            selectedSkill: {
+                ...sampleSelectedSkill(),
+                skill_id: 'architecture-review',
+                candidate_skill_ids: ['architecture-review']
+            },
+            paths,
+            ruleContextSections: { source_file_count: 0, summary: {}, source_files: [] },
+            promptArtifactText: '# Reviewer context\n',
+            stripExamplesApplied: false,
+            stripCodeBlocksApplied: false,
+            coverageContract,
+            reviewLaneBinding: binding
+        });
+
+        assert.match(artifacts.rolePromptArtifactText, /Catalog reviewer role id: architecture-reviewer/u);
+        assert.match(artifacts.rolePromptArtifactText, /Catalog reviewer focus tags: maintainability/u);
+        assert.match(artifacts.promptTemplateArtifactText, /Immutable lane binding sha256: f{64}/u);
+        assert.match(artifacts.outputTemplateArtifactText, /"coverage_ledger"/u);
+        assert.doesNotMatch(artifacts.outputTemplateArtifactText, /ARCHITECTURE BOUNDARY REVIEW (?:PASSED|FAILED)/u);
+    });
+
+    it('derives role, template, and manifest paths from canonical review-context output paths', () => {
+        const outputPath = path.join(
+            'garda-agent-orchestrator',
+            'runtime',
+            'reviews',
+            'T-001-code-review-context.json'
+        );
+
+        assert.equal(
+            resolveReviewHandoffArtifactPath(outputPath, '-role-prompt.md'),
+            path.join('garda-agent-orchestrator', 'runtime', 'reviews', 'T-001-code-role-prompt.md')
+        );
+
+        const paths = buildReviewContextHandoffArtifactPaths(outputPath);
+        assert.deepEqual(paths, {
+            ruleContextArtifactPath: path.join('garda-agent-orchestrator', 'runtime', 'reviews', 'T-001-code-review-context.md'),
+            rolePromptArtifactPath: path.join('garda-agent-orchestrator', 'runtime', 'reviews', 'T-001-code-role-prompt.md'),
+            promptTemplateArtifactPath: path.join('garda-agent-orchestrator', 'runtime', 'reviews', 'T-001-code-prompt-template.md'),
+            outputTemplateArtifactPath: path.join('garda-agent-orchestrator', 'runtime', 'reviews', 'T-001-code-output-template.md'),
+            evidenceManifestArtifactPath: path.join('garda-agent-orchestrator', 'runtime', 'reviews', 'T-001-code-evidence-manifest.json')
+        });
+    });
+
+    it('derives handoff paths from non-canonical json output paths without changing the basename prefix', () => {
+        const outputPath = path.join('tmp', 'custom-review-context-output.json');
+
+        assert.equal(
+            resolveReviewHandoffArtifactPath(outputPath, '-evidence-manifest.json'),
+            path.join('tmp', 'custom-review-context-output-evidence-manifest.json')
+        );
+        assert.equal(
+            buildReviewContextHandoffArtifactPaths(outputPath).ruleContextArtifactPath,
+            path.join('tmp', 'custom-review-context-output.md')
+        );
+    });
+
+    it('builds evidence manifest shape with normalized artifact paths and stable sha wiring', () => {
+        const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'garda-review-manifest-'));
+        const outputPath = path.join('garda-agent-orchestrator', 'runtime', 'reviews', 'T-001-code-review-context.json');
+        const paths = buildReviewContextHandoffArtifactPaths(outputPath);
+        const selectedSkill = sampleSelectedSkill();
+        const gitDiff = sampleGitDiff();
+        const diffCachePath = path.join(tempRoot, 'T-001-scoped-diff-summary.json');
+        fs.writeFileSync(diffCachePath, JSON.stringify({ summary: { diff: gitDiff.diff } }, null, 2) + '\n', 'utf8');
+        gitDiff.cache_path = diffCachePath;
+        const taskEvidence = {
+            task_intent: { summary: 'Add focused helper tests' },
+            task_row: { id: 'T-001' },
+            plan: null
+        };
+
+        const result = buildReviewEvidenceManifest({
+            taskId: 'T-001',
+            reviewType: 'code',
+            outputPath,
+            paths,
+            promptArtifactSha256: 'prompt-sha',
+            rolePromptArtifactSha256: 'role-sha',
+            promptTemplateArtifactSha256: 'prompt-template-sha',
+            outputTemplateArtifactSha256: 'output-template-sha',
+            selectedSkill,
+            taskModePath: path.join('garda-agent-orchestrator', 'runtime', 'task-mode', 'T-001-task-mode.json'),
+            taskModeSha256: 'task-mode-sha',
+            taskModeEvidence: {
+                dirty_workspace_baseline: {
+                    changed_files: ['src/example.ts'],
+                    file_hashes: { 'src/example.ts': 'entry-sha' }
+                }
+            },
+            preflightPath: path.join('garda-agent-orchestrator', 'runtime', 'reviews', 'T-001-preflight.json'),
+            preflightSha256: 'preflight-sha',
+            scopedDiffExpected: true,
+            scopedDiffMetadataPath: path.join('garda-agent-orchestrator', 'runtime', 'reviews', 'T-001-code-scoped.json'),
+            scopedDiffMetadataSha256: 'scoped-sha',
+            gitDiff,
+            compileGateEvidence: { status: 'PASSED' },
+            fullSuiteValidationEvidence: { status: 'PASSED' },
+            focusedIntermediateValidationEvidence: { status: 'AVAILABLE' },
+            manualValidationEvidence: { selected_log_count: 1 },
+            trustBoundaryAnalysis: {
+                required: false,
+                status: 'not_required',
+                applicability_reasons: [],
+                rule_id: 'trust_boundary_adversarial_analysis',
+                artifact_path: null,
+                artifact_sha256: null,
+                recorded_artifact_sha256: null,
+                binding_event_sha256: null,
+                matrix_sha256: null,
+                matrix: [],
+                violations: []
+            },
+            taskEvidence,
+            coverageContract: buildReviewCoverageContract({
+                reviewType: 'code',
+                changedFiles: ['src/example.ts']
+            })
+        });
+
+        assert.equal(result.evidenceManifest.schema_version, 1);
+        assert.equal(result.evidenceManifest.task_id, 'T-001');
+        assert.equal(result.evidenceManifest.review_type, 'code');
+        assert.equal(result.evidenceManifest.selected_skill, selectedSkill);
+        assert.equal(result.evidenceManifest.task_evidence, taskEvidence);
+        assert.deepEqual(result.evidenceManifest.evidence_roles, {
+            historical_authorization: [
+                'task_mode',
+                'task_mode.dirty_workspace_baseline'
+            ],
+            current_verification: [
+                'preflight',
+                'scoped_diff',
+                'compile_gate',
+                'full_suite_validation',
+                'focused_intermediate_validation',
+                'manual_validation',
+                'trust_boundary_analysis',
+                'tree_state'
+            ],
+            instruction: 'Historical task-mode authorization snapshots describe what was authorized at task entry. Use current verification artifacts for current file hashes, scoped diffs, compile/full-suite status, authenticated focused validation evidence, authenticated trust-boundary analysis, and review tree state.'
+        });
+
+        const artifacts = result.evidenceManifest.artifacts as Record<string, Record<string, unknown>>;
+        assert.equal(artifacts.review_context.artifact_path, outputPath.replace(/\\/g, '/'));
+        assert.equal(artifacts.reviewer_prompt.artifact_path, paths.ruleContextArtifactPath.replace(/\\/g, '/'));
+        assert.equal(artifacts.reviewer_prompt.artifact_sha256, 'prompt-sha');
+        assert.equal(artifacts.role_prompt.artifact_path, paths.rolePromptArtifactPath.replace(/\\/g, '/'));
+        assert.equal(artifacts.role_prompt.artifact_sha256, 'role-sha');
+        assert.equal(artifacts.role_prompt.selected_skill, selectedSkill);
+        assert.equal(artifacts.prompt_template.artifact_path, paths.promptTemplateArtifactPath.replace(/\\/g, '/'));
+        assert.equal(artifacts.prompt_template.artifact_sha256, 'prompt-template-sha');
+        assert.equal(artifacts.output_template.artifact_path, paths.outputTemplateArtifactPath.replace(/\\/g, '/'));
+        assert.equal(artifacts.output_template.artifact_sha256, 'output-template-sha');
+        assert.equal(artifacts.task_mode.artifact_path, 'garda-agent-orchestrator/runtime/task-mode/T-001-task-mode.json');
+        assert.equal(artifacts.task_mode.artifact_sha256, 'task-mode-sha');
+        assert.equal(artifacts.task_mode.evidence_role, 'historical_authorization');
+        assert.equal(artifacts.task_mode.current_verification_source, false);
+        assert.deepEqual(artifacts.task_mode.current_verification_artifacts, [
+            'preflight',
+            'scoped_diff',
+            'compile_gate',
+            'full_suite_validation',
+            'focused_intermediate_validation',
+            'manual_validation',
+            'trust_boundary_analysis',
+            'tree_state'
+        ]);
+        const taskModeDirtyBaseline = artifacts.task_mode.dirty_workspace_baseline as Record<string, unknown>;
+        assert.equal(taskModeDirtyBaseline.present, true);
+        assert.equal(taskModeDirtyBaseline.evidence_role, 'historical_authorization_snapshot');
+        assert.equal(taskModeDirtyBaseline.file_hashes_are_current, false);
+        assert.equal(taskModeDirtyBaseline.changed_file_count, 1);
+        assert.equal(taskModeDirtyBaseline.file_hash_count, 1);
+        assert.equal(artifacts.preflight.artifact_sha256, 'preflight-sha');
+        assert.equal(artifacts.scoped_diff.expected, true);
+        assert.equal(artifacts.scoped_diff.diff_cache_path, gitDiff.cache_path);
+        assert.equal(artifacts.scoped_diff.diff_cache_artifact_sha256, sha256Text(fs.readFileSync(diffCachePath, 'utf8')));
+        assert.equal(artifacts.scoped_diff.diff_content_sha256, sha256Text(gitDiff.diff || ''));
+        assert.equal(artifacts.scoped_diff.diff_sha256, sha256Text(gitDiff.diff || ''));
+        assert.deepEqual(artifacts.compile_gate, { status: 'PASSED' });
+        assert.deepEqual(artifacts.full_suite_validation, { status: 'PASSED' });
+        assert.deepEqual(artifacts.focused_intermediate_validation, { status: 'AVAILABLE' });
+        assert.deepEqual(artifacts.manual_validation, { selected_log_count: 1 });
+
+        assert.ok(result.evidenceManifestText.endsWith('\n'));
+        assert.equal(result.evidenceManifestSha256, sha256Text(result.evidenceManifestText));
+        assert.deepEqual(JSON.parse(result.evidenceManifestText), result.evidenceManifest);
+    });
+});

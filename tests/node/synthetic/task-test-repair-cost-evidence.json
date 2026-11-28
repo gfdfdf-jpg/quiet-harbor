@@ -1,0 +1,567 @@
+{
+  "schema": 1,
+  "source": "C:\\Users\\dshub\\AppData\\Local\\Temp\\garda-sol-merge-2\\green-bc-dependencies-1\\results.json",
+  "sha256": "ec4ec54b29d1a394532de3aa43ce50b3fa0d03e6f9fb4e6752cb167fc7f2b5cf",
+  "source_commit": "893cea6c7a286eac17fccea1824c805cb32b8306",
+  "measurements": [
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 16,
+      "route": "BLOCKED/load-rule-pack",
+      "metric": "timeline_bytes",
+      "observed": 135793,
+      "before": {
+        "expected": 54921,
+        "tolerance": 33854,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 16,
+      "route": "BLOCKED/load-rule-pack",
+      "metric": "timeline_events",
+      "observed": 18,
+      "before": {
+        "expected": 8,
+        "tolerance": 4,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 16,
+      "route": "BLOCKED/load-rule-pack",
+      "metric": "json_parse_verified_timeline_event",
+      "observed": 18,
+      "before": {
+        "expected": 8,
+        "tolerance": 4,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 16,
+      "route": "BLOCKED/load-rule-pack",
+      "metric": "visit:verified_timeline_index_event",
+      "observed": 18,
+      "before": {
+        "expected": 8,
+        "tolerance": 4,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 17,
+      "route": "BLOCKED/handshake-diagnostics",
+      "metric": "timeline_bytes",
+      "observed": 137866,
+      "before": {
+        "expected": 30369,
+        "tolerance": 4824,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 17,
+      "route": "BLOCKED/handshake-diagnostics",
+      "metric": "file_hash:file",
+      "observed": 48,
+      "before": {
+        "expected": 37,
+        "tolerance": 0,
+        "constantWithEvents": true,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 17,
+      "route": "BLOCKED/handshake-diagnostics",
+      "metric": "timeline_events",
+      "observed": 19,
+      "before": {
+        "expected": 4,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 17,
+      "route": "BLOCKED/handshake-diagnostics",
+      "metric": "json_parse_verified_timeline_event",
+      "observed": 19,
+      "before": {
+        "expected": 4,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 17,
+      "route": "BLOCKED/handshake-diagnostics",
+      "metric": "visit:verified_timeline_index_event",
+      "observed": 19,
+      "before": {
+        "expected": 4,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 17,
+      "route": "BLOCKED/handshake-diagnostics",
+      "metric": "file_probes:lstatSync",
+      "observed": 648,
+      "before": {
+        "expected": 465,
+        "tolerance": 8,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 17,
+      "route": "BLOCKED/handshake-diagnostics",
+      "metric": "file_probes:realpathSync",
+      "observed": 50,
+      "before": {
+        "expected": 42,
+        "tolerance": 2,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 17,
+      "route": "BLOCKED/handshake-diagnostics",
+      "metric": "file_probes:statSync",
+      "observed": 637,
+      "before": {
+        "expected": 518,
+        "tolerance": 8,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 17,
+      "route": "BLOCKED/handshake-diagnostics",
+      "metric": "file_probes:realpathSync.native",
+      "observed": 543,
+      "before": {
+        "expected": 311,
+        "tolerance": 4,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 17,
+      "route": "BLOCKED/handshake-diagnostics",
+      "metric": "file_probes:fstatSync",
+      "observed": 103,
+      "before": {
+        "expected": 80,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 18,
+      "route": "BLOCKED/shell-smoke-preflight",
+      "metric": "timeline_bytes",
+      "observed": 138712,
+      "before": {
+        "expected": 31214,
+        "tolerance": 4824,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 18,
+      "route": "BLOCKED/shell-smoke-preflight",
+      "metric": "file_hash:file",
+      "observed": 48,
+      "before": {
+        "expected": 38,
+        "tolerance": 0,
+        "constantWithEvents": true,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 18,
+      "route": "BLOCKED/shell-smoke-preflight",
+      "metric": "timeline_events",
+      "observed": 20,
+      "before": {
+        "expected": 5,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 18,
+      "route": "BLOCKED/shell-smoke-preflight",
+      "metric": "json_parse_verified_timeline_event",
+      "observed": 20,
+      "before": {
+        "expected": 5,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 18,
+      "route": "BLOCKED/shell-smoke-preflight",
+      "metric": "visit:verified_timeline_index_event",
+      "observed": 20,
+      "before": {
+        "expected": 5,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 18,
+      "route": "BLOCKED/shell-smoke-preflight",
+      "metric": "file_probes:lstatSync",
+      "observed": 648,
+      "before": {
+        "expected": 474,
+        "tolerance": 8,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 18,
+      "route": "BLOCKED/shell-smoke-preflight",
+      "metric": "file_probes:realpathSync",
+      "observed": 50,
+      "before": {
+        "expected": 42,
+        "tolerance": 2,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 18,
+      "route": "BLOCKED/shell-smoke-preflight",
+      "metric": "file_probes:statSync",
+      "observed": 637,
+      "before": {
+        "expected": 527,
+        "tolerance": 8,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 18,
+      "route": "BLOCKED/shell-smoke-preflight",
+      "metric": "file_probes:realpathSync.native",
+      "observed": 543,
+      "before": {
+        "expected": 324,
+        "tolerance": 4,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 18,
+      "route": "BLOCKED/shell-smoke-preflight",
+      "metric": "file_probes:fstatSync",
+      "observed": 103,
+      "before": {
+        "expected": 82,
+        "tolerance": 0,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 19,
+      "route": "BLOCKED/classify-change",
+      "metric": "timeline_bytes",
+      "observed": 139502,
+      "before": {
+        "expected": 34059,
+        "tolerance": 55116,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 19,
+      "route": "BLOCKED/classify-change",
+      "metric": "file_hash:file",
+      "observed": 55,
+      "before": {
+        "expected": 45,
+        "tolerance": 7,
+        "constantWithEvents": true,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 19,
+      "route": "BLOCKED/classify-change",
+      "metric": "timeline_events",
+      "observed": 21,
+      "before": {
+        "expected": 6,
+        "tolerance": 8,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 19,
+      "route": "BLOCKED/classify-change",
+      "metric": "json_parse_verified_timeline_event",
+      "observed": 21,
+      "before": {
+        "expected": 6,
+        "tolerance": 8,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 19,
+      "route": "BLOCKED/classify-change",
+      "metric": "visit:verified_timeline_index_event",
+      "observed": 21,
+      "before": {
+        "expected": 6,
+        "tolerance": 8,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 19,
+      "route": "BLOCKED/classify-change",
+      "metric": "file_probes:lstatSync",
+      "observed": 740,
+      "before": {
+        "expected": 513,
+        "tolerance": 187,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 19,
+      "route": "BLOCKED/classify-change",
+      "metric": "file_probes:statSync",
+      "observed": 796,
+      "before": {
+        "expected": 600,
+        "tolerance": 178,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 19,
+      "route": "BLOCKED/classify-change",
+      "metric": "file_probes:realpathSync.native",
+      "observed": 581,
+      "before": {
+        "expected": 313,
+        "tolerance": 210,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 19,
+      "route": "BLOCKED/classify-change",
+      "metric": "file_probes:fstatSync",
+      "observed": 117,
+      "before": {
+        "expected": 92,
+        "tolerance": 19,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 21,
+      "route": "BLOCKED/load-rule-pack",
+      "metric": "timeline_bytes",
+      "observed": 165443,
+      "before": {
+        "expected": 54921,
+        "tolerance": 33854,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 21,
+      "route": "BLOCKED/load-rule-pack",
+      "metric": "file_hash:file",
+      "observed": 56,
+      "before": {
+        "expected": 45,
+        "tolerance": 9,
+        "constantWithEvents": true,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 21,
+      "route": "BLOCKED/load-rule-pack",
+      "metric": "timeline_events",
+      "observed": 24,
+      "before": {
+        "expected": 8,
+        "tolerance": 4,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 21,
+      "route": "BLOCKED/load-rule-pack",
+      "metric": "json_parse_verified_timeline_event",
+      "observed": 24,
+      "before": {
+        "expected": 8,
+        "tolerance": 4,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 21,
+      "route": "BLOCKED/load-rule-pack",
+      "metric": "visit:verified_timeline_index_event",
+      "observed": 24,
+      "before": {
+        "expected": 8,
+        "tolerance": 4,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 21,
+      "route": "BLOCKED/load-rule-pack",
+      "metric": "file_probes:fstatSync",
+      "observed": 119,
+      "before": {
+        "expected": 97,
+        "tolerance": 18,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 23,
+      "route": "BLOCKED/compile-gate",
+      "metric": "timeline_bytes",
+      "observed": 169717,
+      "before": {
+        "expected": 83645,
+        "tolerance": 36724,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 23,
+      "route": "BLOCKED/compile-gate",
+      "metric": "timeline_events",
+      "observed": 26,
+      "before": {
+        "expected": 14,
+        "tolerance": 5,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 23,
+      "route": "BLOCKED/compile-gate",
+      "metric": "json_parse_verified_timeline_event",
+      "observed": 26,
+      "before": {
+        "expected": 14,
+        "tolerance": 5,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    },
+    {
+      "scenario": "stack-go-a5-generic",
+      "step": 23,
+      "route": "BLOCKED/compile-gate",
+      "metric": "visit:verified_timeline_index_event",
+      "observed": 26,
+      "before": {
+        "expected": 14,
+        "tolerance": 5,
+        "constantWithEvents": false,
+        "growthTolerance": 0
+      }
+    }
+  ]
+}
