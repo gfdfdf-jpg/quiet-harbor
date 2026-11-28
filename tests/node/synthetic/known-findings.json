@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "description": "Open findings of the synthetic review stand. A finding must stay listed while it reproduces; a listed finding that no longer reproduces fails the stand until removed.",
+  "findings": []
+}

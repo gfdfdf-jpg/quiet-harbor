@@ -1,0 +1,592 @@
+{
+  "local-commit-enabled": {
+    "label": "로컬 커밋 권한",
+    "description": "감사된 명시적 활성화는 이 작업 공간에서 완료되고 감사된 작업을 커밋할 지속적인 권한을 부여합니다. 비활성화하면 취소됩니다. 테스트, 검토 및 커밋 후 감사는 필수이며 push나 CI 권한은 부여하지 않습니다.",
+    "options": {
+      "true": {
+        "label": "켜짐",
+        "description": "완료되고 감사된 작업 범위의 기본 커밋을 허용합니다."
+      },
+      "false": {
+        "label": "꺼짐",
+        "description": "로컬 커밋을 차단하고 기존 권한을 취소합니다."
+      }
+    }
+  },
+  "compact-enabled": {
+    "label": "간결한 출력",
+    "description": "compact 설정입니다. 변경 시 확인이 필요하며 비밀 정보는 가려지지 않습니다.",
+    "options": {
+      "true": {
+        "label": "활성화",
+        "description": "compact 설정입니다. 변경 시 확인이 필요하며 비밀 정보는 가려지지 않습니다. 활성화"
+      },
+      "false": {
+        "label": "비활성화",
+        "description": "compact 설정입니다. 변경 시 확인이 필요하며 비밀 정보는 가려지지 않습니다. 비활성화"
+      }
+    }
+  },
+  "compact-git": {
+    "label": "compact를 통한 Git",
+    "description": "compact 설정입니다. 변경 시 확인이 필요하며 비밀 정보는 가려지지 않습니다.",
+    "options": {
+      "true": {
+        "label": "활성화",
+        "description": "compact 설정입니다. 변경 시 확인이 필요하며 비밀 정보는 가려지지 않습니다. 활성화"
+      },
+      "false": {
+        "label": "비활성화",
+        "description": "compact 설정입니다. 변경 시 확인이 필요하며 비밀 정보는 가려지지 않습니다. 비활성화"
+      }
+    }
+  },
+  "compact-file": {
+    "label": "compact를 통한 파일",
+    "description": "compact 설정입니다. 변경 시 확인이 필요하며 비밀 정보는 가려지지 않습니다.",
+    "options": {
+      "true": {
+        "label": "활성화",
+        "description": "compact 설정입니다. 변경 시 확인이 필요하며 비밀 정보는 가려지지 않습니다. 활성화"
+      },
+      "false": {
+        "label": "비활성화",
+        "description": "compact 설정입니다. 변경 시 확인이 필요하며 비밀 정보는 가려지지 않습니다. 비활성화"
+      }
+    }
+  },
+  "compact-rg": {
+    "label": "compact를 통한 검색",
+    "description": "compact 설정입니다. 변경 시 확인이 필요하며 비밀 정보는 가려지지 않습니다.",
+    "options": {
+      "true": {
+        "label": "활성화",
+        "description": "compact 설정입니다. 변경 시 확인이 필요하며 비밀 정보는 가려지지 않습니다. 활성화"
+      },
+      "false": {
+        "label": "비활성화",
+        "description": "compact 설정입니다. 변경 시 확인이 필요하며 비밀 정보는 가려지지 않습니다. 비활성화"
+      }
+    }
+  },
+  "compact-preview-lines": {
+    "label": "미리보기 줄 수",
+    "description": "compact 설정입니다. 변경 시 확인이 필요하며 비밀 정보는 가려지지 않습니다."
+  },
+  "compact-preview-chars": {
+    "label": "미리보기 문자 수",
+    "description": "compact 설정입니다. 변경 시 확인이 필요하며 비밀 정보는 가려지지 않습니다."
+  },
+  "compact-exact-bytes": {
+    "label": "선택 범위 바이트",
+    "description": "선택 범위 바이트. compact 설정입니다. 변경 시 확인이 필요하며 비밀 정보는 가려지지 않습니다."
+  },
+  "compact-read-bytes": {
+    "label": "읽기 페이지 바이트",
+    "description": "읽기 페이지 바이트. compact 설정입니다. 변경 시 확인이 필요하며 비밀 정보는 가려지지 않습니다."
+  },
+  "compact-search-context": {
+    "label": "검색 문맥 줄 수",
+    "description": "검색 문맥 줄 수. compact 설정입니다. 변경 시 확인이 필요하며 비밀 정보는 가려지지 않습니다."
+  },
+  "compact-run-bytes": {
+    "label": "캡처별 바이트 한도",
+    "description": "compact 설정입니다. 변경 시 확인이 필요하며 비밀 정보는 가려지지 않습니다."
+  },
+  "compact-task-bytes": {
+    "label": "작업 캐시 바이트 한도",
+    "description": "compact 설정입니다. 변경 시 확인이 필요하며 비밀 정보는 가려지지 않습니다."
+  },
+  "compact-workspace-bytes": {
+    "label": "프로젝트 캐시 바이트 한도",
+    "description": "compact 설정입니다. 변경 시 확인이 필요하며 비밀 정보는 가려지지 않습니다."
+  },
+  "compact-max-runs": {
+    "label": "캡처 개수 한도",
+    "description": "compact 설정입니다. 변경 시 확인이 필요하며 비밀 정보는 가려지지 않습니다."
+  },
+  "compile-gate-command": {
+    "label": "compile-gate 명령",
+    "description": "컴파일/빌드/타입 검사 검증을 위해 compile-gate가 실행하는 명령입니다. workflow-config에 설정되지 않은 경우, 프로젝트별 명령이 구성될 때까지 compile-gate는 fail-closed로 종료됩니다."
+  },
+  "compile-gate-command-fallback": {
+    "description": "workflow-config에 설정되지 않음; 프로젝트별 명령이 구성될 때까지 compile-gate는 fail-closed로 종료됩니다."
+  },
+  "full-suite-enabled": {
+    "label": "필수 전체 스위트 검증",
+    "description": "구성된 전체 스위트 테스트 명령을 작업 수명 주기에 포함할지 여부를 제어합니다.",
+    "options": {
+      "true": {
+        "label": "사용",
+        "description": "구성된 전체 스위트 명령은 작업 수명 주기에서 필수입니다."
+      },
+      "false": {
+        "label": "사용 안 함",
+        "description": "다른 워크플로 경로에서 요구하지 않는 한 전체 스위트 게이트는 건너뜁니다."
+      }
+    }
+  },
+  "task-test-selection-require-operator-confirmation": {
+    "label": "작업 테스트 선택 확인",
+    "description": "활성 작업의 테스트 선택에 운영자 확인을 요구합니다. 기본값은 꺼짐입니다. 이 설정 변경에는 확인이 필요하며 필수 테스트와 리뷰는 유지됩니다.",
+    "options": {
+      "true": {
+        "label": "켜짐",
+        "description": "작업 테스트를 선택할 때마다 확인을 요청합니다."
+      },
+      "false": {
+        "label": "꺼짐",
+        "description": "추가 질문 없이 활성 작업의 근거가 기록된 테스트 선택을 허용합니다."
+      }
+    }
+  },
+  "full-suite-command": {
+    "label": "전체 스위트 명령",
+    "description": "필수 전체 스위트 검증이 활성화된 경우 전체 스위트 게이트가 실행하는 명령입니다."
+  },
+  "full-suite-timeout-ms": {
+    "label": "전체 스위트 제한 시간",
+    "description": "전체 스위트 명령의 최대 실행 시간(밀리초)입니다."
+  },
+  "full-suite-green-summary-max-lines": {
+    "label": "성공 전체 스위트 요약 길이",
+    "description": "간결한 작업 증거에 남길 성공한 전체 스위트 출력 줄 수입니다."
+  },
+  "full-suite-red-failure-chunk-lines": {
+    "label": "실패 출력 청크 길이",
+    "description": "간결한 실패 청크당 유지할 실패한 전체 스위트 출력 줄 수입니다."
+  },
+  "full-suite-out-of-scope-failure-policy": {
+    "label": "범위 밖 실패 처리",
+    "description": "전체 스위트 출력에 현재 작업 범위 밖의 실패가 표시될 때 워크플로가 수행하는 동작입니다.",
+    "options": {
+      "AUDIT_AND_BLOCK": {
+        "label": "기록 후 차단",
+        "description": "범위 밖 실패를 기록하고 해결될 때까지 워크플로를 중지합니다."
+      },
+      "AUDIT_AND_WARN": {
+        "label": "기록 후 경고",
+        "description": "범위 밖 실패를 기록하지만 경고와 함께 워크플로 진행을 허용합니다."
+      }
+    }
+  },
+  "full-suite-placement": {
+    "label": "전체 스위트 실행 위치",
+    "description": "작업 수명 주기에서 필수 전체 스위트 게이트가 실행되는 시점입니다.",
+    "options": {
+      "after_compile_before_reviews": {
+        "label": "컴파일 후, 리뷰 전",
+        "description": "컴파일 통과 후 리뷰 작업 시작 전에 전체 스위트를 실행합니다."
+      },
+      "before_test_review": {
+        "label": "테스트 리뷰 전",
+        "description": "테스트 리뷰 레인이 증거를 필요로 하기 직전에 전체 스위트를 실행합니다."
+      },
+      "before_completion": {
+        "label": "완료 전",
+        "description": "최종 완료 경로까지 전체 스위트 실행을 연기합니다."
+      }
+    }
+  },
+  "review-execution-policy": {
+    "label": "리뷰 실행 모드",
+    "description": "필수 리뷰 레인을 병렬로 실행할지, 코드 리뷰를 기다릴지, 순차적으로 실행할지 제어합니다.",
+    "options": {
+      "parallel_all": {
+        "label": "모두 병렬",
+        "description": "모든 리뷰 유형을 독립적으로 준비할 수 있습니다. 상위 실행 종속성이 없습니다."
+      },
+      "test_after_code": {
+        "label": "코드 후 테스트",
+        "description": "테스트만 현재 사이클의 코드 PASS를 기다립니다. 다른 리뷰 유형은 독립적입니다."
+      },
+      "code_first_optional": {
+        "label": "선택 항목은 코드 우선",
+        "description": "API, 성능, 인프라, 의존성은 코드 PASS를 기다립니다. 테스트는 모든 필수 상위 리뷰의 하위에 남습니다."
+      },
+      "strict_sequential": {
+        "label": "엄격한 순차 실행",
+        "description": "모든 필수 리뷰는 현재 사이클에서 정규 리뷰 순서대로 하나씩 실행됩니다."
+      }
+    }
+  },
+  "scope-budget-enabled": {
+    "label": "범위 예산 가드",
+    "description": "작업이 구성된 프로필 예산에 비해 너무 클 때 경고하거나 차단합니다.",
+    "options": {
+      "true": {
+        "label": "사용",
+        "description": "작업이 구성된 프로필 예산을 초과하면 범위 예산 검사가 경고하거나 차단합니다."
+      },
+      "false": {
+        "label": "사용 안 함",
+        "description": "작업 크기 결정에 범위 예산 한도가 적용되지 않습니다."
+      }
+    }
+  },
+  "scope-budget-action": {
+    "label": "Legacy max_* compatibility mode",
+    "description": "Old max_* compatibility only; explicit block_* thresholds still produce BLOCK and route to split-required.",
+    "options": {
+      "BLOCK_FOR_SPLIT": {
+        "label": "max_* maps to block_*",
+        "description": "Old max_* values are treated as blocking thresholds; explicit block_* thresholds still block in every mode."
+      },
+      "WARN_ONLY": {
+        "label": "max_* maps to warn_*",
+        "description": "Old max_* values are treated as warning thresholds; explicit block_* thresholds still block in every mode."
+      }
+    }
+  },
+  "scope-budget-profiles": {
+    "label": "범위 예산 프로필",
+    "description": "범위 예산 가드가 적용되는 작업 프로필입니다. 알 수 없는 레거시 값은 조용히 제거되지 않고 명시적으로 표시됩니다."
+  },
+  "scope-budget-max-files": {
+    "label": "범위 예산 파일 한도",
+    "description": "범위 예산 가드가 반응하기 전 최대 변경 파일 수입니다."
+  },
+  "scope-budget-max-changed-lines": {
+    "label": "범위 예산 변경 줄 한도",
+    "description": "범위 예산 가드가 반응하기 전 최대 변경 줄 수입니다."
+  },
+  "scope-budget-max-required-reviews": {
+    "label": "필수 리뷰 유형 한도",
+    "description": "현재 preflight가 필수로 지정한 서로 다른 리뷰 유형의 최대 수이며, 이 값을 넘으면 범위 예산 가드가 반응합니다. 비활성화된 리뷰 capability는 일치하는 파일이 변경되었다는 이유만으로 필수가 되지 않습니다. 이 값은 리뷰어, 시도 횟수, 리뷰 사이클 수가 아니라 리뷰 유형 수입니다."
+  },
+  "scope-budget-max-review-tokens": {
+    "label": "범위 예산 리뷰 토큰 예측",
+    "description": "범위 예산 가드가 반응하기 전 최대 예상 리뷰 토큰 예산입니다."
+  },
+  "review-cycle-enabled": {
+    "label": "리뷰 사이클 가드",
+    "description": "과도한 작업을 소비하기 전에 반복되는 비테스트 리뷰 루프를 감지합니다.",
+    "options": {
+      "true": {
+        "label": "사용",
+        "description": "마무리 계속 전에 반복되는 비테스트 리뷰 루프가 감지됩니다."
+      },
+      "false": {
+        "label": "사용 안 함",
+        "description": "이 가드에서 리뷰 사이클 압력을 확인하지 않습니다."
+      }
+    }
+  },
+  "review-cycle-action": {
+    "label": "리뷰 사이클 초과 동작",
+    "description": "반복되는 리뷰 시도가 구성된 한도를 초과했을 때 수행하는 동작입니다.",
+    "options": {
+      "BLOCK_FOR_OPERATOR_DECISION": {
+        "label": "운영자 결정까지 차단",
+        "description": "운영자가 복구 경로를 선택할 때까지 반복되는 리뷰 루프를 중지합니다."
+      },
+      "WARN_ONLY": {
+        "label": "경고만",
+        "description": "리뷰 사이클 압력을 보고하지만 워크플로 진행을 허용합니다."
+      }
+    }
+  },
+  "review-cycle-max-failed-non-test-reviews": {
+    "label": "실패 비테스트 리뷰 한도",
+    "description": "리뷰 사이클 가드가 반응하기 전 최대 실패한 비테스트 리뷰 시도 수입니다."
+  },
+  "review-cycle-max-total-non-test-reviews": {
+    "label": "비테스트 리뷰 총 한도",
+    "description": "리뷰 사이클 가드가 반응하기 전 최대 비테스트 리뷰 시도 총 수입니다."
+  },
+  "review-cycle-excluded-review-types": {
+    "label": "제외 리뷰 유형",
+    "description": "다중 선택: 선택한 리뷰 유형은 review-cycle guard 집계에서 제외됩니다.",
+    "options": {
+      "code": {
+        "label": "코드 리뷰"
+      },
+      "db": {
+        "label": "데이터베이스 리뷰"
+      },
+      "security": {
+        "label": "보안 리뷰"
+      },
+      "refactor": {
+        "label": "리팩터링 리뷰"
+      },
+      "api": {
+        "label": "API 리뷰"
+      },
+      "test": {
+        "label": "테스트 리뷰"
+      },
+      "performance": {
+        "label": "성능 리뷰"
+      },
+      "infra": {
+        "label": "인프라 리뷰"
+      },
+      "dependency": {
+        "label": "의존성 리뷰"
+      }
+    }
+  },
+  "review-cycle-auto-split-enabled": {
+    "label": "자동 분할 프롬프트",
+    "description": "리뷰 사이클 동작이 BLOCK_FOR_OPERATOR_DECISION일 때 리뷰 사이클 압력이 자동 분할 프롬프트를 발행하도록 허용합니다. 동작이 WARN_ONLY인 동안에는 차단 효과가 없습니다.",
+    "options": {
+      "true": {
+        "label": "사용",
+        "description": "동작이 BLOCK_FOR_OPERATOR_DECISION일 때 리뷰 사이클 압력이 자동 분할 프롬프트를 발행할 수 있습니다."
+      },
+      "false": {
+        "label": "사용 안 함",
+        "description": "리뷰 사이클 압력이 자동 분할 프롬프트를 발행하지 않습니다."
+      }
+    }
+  },
+  "project-memory-enabled": {
+    "label": "프로젝트 메모리 유지보수",
+    "description": "마무리 시 프로젝트 메모리 영향을 확인할지 여부를 제어합니다.",
+    "options": {
+      "true": {
+        "label": "사용",
+        "description": "마무리 시 프로젝트 메모리 영향 증거가 필요한지 확인합니다."
+      },
+      "false": {
+        "label": "사용 안 함",
+        "description": "마무리 시 프로젝트 메모리 유지보수 검사를 실행하지 않습니다."
+      }
+    }
+  },
+  "project-memory-mode": {
+    "label": "프로젝트 메모리 모드",
+    "description": "워크플로가 프로젝트 메모리 영향 작업을 얼마나 엄격하게 요구하는지입니다.",
+    "options": {
+      "off": {
+        "label": "끔",
+        "description": "마무리 중 프로젝트 메모리 유지보수를 실행하지 않습니다."
+      },
+      "check": {
+        "label": "확인",
+        "description": "메모리 업데이트가 필요한지 확인하지만 쓰지는 않습니다."
+      },
+      "update": {
+        "label": "업데이트",
+        "description": "필요할 때 워크플로가 대상 프로젝트 메모리 파일을 업데이트하도록 허용합니다."
+      },
+      "strict": {
+        "label": "엄격",
+        "description": "마무리가 통과하기 전에 메모리 증거를 요구합니다."
+      }
+    }
+  },
+  "project-memory-run-before-final-closeout": {
+    "label": "최종 마무리 전 메모리 확인",
+    "description": "최종 완료 단계 전에 프로젝트 메모리 유지보수를 실행합니다.",
+    "options": {
+      "true": {
+        "label": "사용",
+        "description": "최종 완료 단계 전에 프로젝트 메모리 유지보수를 실행합니다."
+      },
+      "false": {
+        "label": "사용 안 함",
+        "description": "최종 마무리 전에 프로젝트 메모리 유지보수를 삽입하지 않습니다."
+      }
+    }
+  },
+  "project-memory-require-user-approval-for-writes": {
+    "label": "메모리 쓰기 사용자 승인",
+    "description": "워크플로가 프로젝트 메모리 파일을 쓰기 전에 명시적 사용자 승인을 요구합니다.",
+    "options": {
+      "true": {
+        "label": "사용",
+        "description": "프로젝트 메모리 쓰기에는 파일 변경 전 명시적 사용자 승인이 필요합니다."
+      },
+      "false": {
+        "label": "사용 안 함",
+        "description": "프로젝트 메모리 쓰기는 추가 승인 단계 없이 구성된 유지보수 모드에서 진행할 수 있습니다."
+      }
+    }
+  },
+  "project-memory-max-compact-summary-chars": {
+    "label": "프로젝트 메모리 요약 크기",
+    "description": "생성되는 간결한 프로젝트 메모리 요약의 최대 크기(문자 수)입니다."
+  },
+  "project-memory-read-strategy": {
+    "label": "프로젝트 메모리 읽기 전략",
+    "description": "작업 시작 시 에이전트가 영구 메모리를 읽는 방법입니다.",
+    "options": {
+      "index_first": {
+        "label": "인덱스 우선",
+        "description": "먼저 메모리 인덱스를 읽고, 인덱스가 가리킬 때만 상세 파일을 엽니다."
+      }
+    }
+  },
+  "project-memory-impact-retention-days": {
+    "label": "프로젝트 메모리 영향 보존",
+    "description": "프로젝트 메모리 영향 아티팩트를 보존하는 일수입니다."
+  },
+  "task-reset-enabled": {
+    "label": "작업 재설정 명령",
+    "description": "확인된 작업 재설정/폐기 변경을 허용합니다.",
+    "options": {
+      "true": {
+        "label": "사용",
+        "description": "확인된 작업 재설정 및 폐기 명령을 보호된 경로로 사용할 수 있습니다."
+      },
+      "false": {
+        "label": "사용 안 함",
+        "description": "작업 재설정 및 폐기 변경을 사용할 수 없습니다."
+      }
+    }
+  },
+  "auto-backup-enabled": {
+    "label": "예약 자동 백업",
+    "description": "기한이 되면 일일 유지보수 트리거가 예약 롤백 백업을 생성하도록 허용합니다.",
+    "options": {
+      "true": {
+        "label": "사용",
+        "description": "일일 유지보수가 간격이 되면 예약 롤백 백업을 생성할 수 있습니다."
+      },
+      "false": {
+        "label": "사용 안 함",
+        "description": "일일 유지보수가 예약 롤백 백업을 생성하지 않습니다."
+      }
+    }
+  },
+  "auto-backup-interval-days": {
+    "label": "자동 백업 간격",
+    "description": "성공한 예약 백업 사이의 최소 일수입니다."
+  },
+  "auto-backup-keep-latest": {
+    "label": "자동 백업 보존",
+    "description": "예약 백업 생성 후 유지할 최신 백업 수입니다."
+  },
+  "garda-self-guard": {
+    "label": "Garda 셀프 가드",
+    "description": "에이전트가 보호된 Garda 컨트롤 플레인 작업에 직접 진입할 수 있는지 제어합니다.",
+    "options": {
+      "deny_agent_entry": {
+        "label": "사용",
+        "description": "운영자 소유 경로 없이는 에이전트가 보호된 컨트롤 플레인 작업에 진입할 수 없습니다."
+      },
+      "require_operator_confirmation": {
+        "label": "운영자 확인",
+        "description": "보호된 컨트롤 플레인 진입에는 명시적 운영자 확인이 필요합니다."
+      }
+    }
+  },
+  "full-suite-timeout-blocker": {
+    "label": "full-suite 시간 초과 차단기",
+    "description": "반복되는 full-suite 시간 초과가 작업을 차단하고 복구 작업을 제안할지, 최종 경고로 계속할지 제어합니다.",
+    "options": {
+      "true": {
+        "label": "true",
+        "description": "반복되는 full-suite 시간 초과는 작업 완료를 차단하고 복구 작업을 제안합니다."
+      },
+      "false": {
+        "label": "false",
+        "description": "반복되는 full-suite 시간 초과는 경고로 보고되며 완료를 차단하지 않습니다."
+      }
+    }
+  },
+  "full-suite-timeout-retry-count": {
+    "label": "full-suite 시간 초과 재시도",
+    "description": "시간 초과 후 정책 적용 전 full-suite 명령을 재시도하는 횟수입니다."
+  },
+  "optional-checks-enabled": {
+    "label": "선택적 품질 검사",
+    "description": "권고용 자체 점검 규칙을 컴파일, 리뷰, 전체 검증 전에 실행할지 제어합니다. 아래 규칙 편집도 동일한 감사된 workflow set 경로를 사용합니다.",
+    "options": {
+      "true": {
+        "label": "켜기",
+        "description": "에이전트가 비용 큰 게이트 전에 설정된 권고용 자체 점검 규칙을 실행합니다."
+      },
+      "false": {
+        "label": "끄기",
+        "description": "선택적 quality-checklist 게이트를 건너뛰지만 필수 컴파일, 리뷰, 전체 검증 게이트를 대체하지 않습니다."
+      }
+    }
+  },
+  "optional-checks-review-failure-cadence-interval": {
+    "label": "품질 점검 사이의 리뷰 실패 횟수",
+    "description": "필수 quality-checklist 답변 실행 사이에 허용되는 기록된 review 실패 시도 수입니다. 카운터는 기록된 review FAIL 결과에서만 증가하며 반복 next-step 또는 preflight refresh 로는 증가하지 않습니다."
+  },
+  "optional-skill-selection-mode": {
+    "label": "전문 스킬 선택 모드",
+    "description": "작업 시작 시 전문 스킬 매칭을 끄거나 optional 또는 mandatory로 둘지 제어합니다. 기존 advisory/required/strict 값은 읽기 호환으로 유지되며 저장 시 표준 모드로 기록됩니다.",
+    "options": {
+      "off": {
+        "label": "꺼짐",
+        "description": "작업 시작 시 전문 스킬을 제안하거나 요구하지 않습니다."
+      },
+      "optional": {
+        "label": "선택",
+        "description": "일반 작업을 막지 않고 전문 스킬 제안과 추천 팩을 표시합니다."
+      },
+      "mandatory": {
+        "label": "필수",
+        "description": "정책 매칭이 설치된 전문 스킬을 선택하면 구현 시작 전에 해당 스킬을 요구합니다."
+      },
+      "advisory": {
+        "label": "레거시: advisory -> optional",
+        "description": "optional 호환 별칭입니다. 저장하면 optional로 기록됩니다."
+      },
+      "required": {
+        "label": "레거시: required -> mandatory",
+        "description": "mandatory 호환 별칭입니다. 저장하면 mandatory로 기록됩니다."
+      },
+      "strict": {
+        "label": "레거시: strict -> mandatory",
+        "description": "mandatory 호환 별칭입니다. 저장하면 mandatory로 기록됩니다."
+      }
+    }
+  },
+  "optional-check-rule-management": {
+    "label": "선택적 품질 점검 규칙",
+    "description": "감사되는 워크플로 설정 경로를 통해 권고용 선택적 품질 점검 규칙 하나를 추가, 업데이트 또는 제거합니다."
+  },
+  "scope-budget-warn-files": {
+    "label": "스코프 예산: 변경 파일 - WARN 경고",
+    "description": "WARN 경고: 변경 파일 above threshold; 계속 진행할 수 있습니다; keep it below BLOCK 차단."
+  },
+  "scope-budget-block-files": {
+    "label": "스코프 예산: 변경 파일 - BLOCK 차단",
+    "description": "BLOCK 차단: 변경 파일 above threshold; next-step split-required로 이동합니다."
+  },
+  "scope-budget-warn-changed-lines": {
+    "label": "스코프 예산: 변경 라인 - WARN 경고",
+    "description": "WARN 경고: 변경 라인 above threshold; 계속 진행할 수 있습니다; keep it below BLOCK 차단."
+  },
+  "scope-budget-block-changed-lines": {
+    "label": "스코프 예산: 변경 라인 - BLOCK 차단",
+    "description": "BLOCK 차단: 변경 라인 above threshold; next-step split-required로 이동합니다."
+  },
+  "scope-budget-warn-required-reviews": {
+    "label": "스코프 예산: 필수 리뷰 유형 - WARN 경고",
+    "description": "WARN 경고: 필수 리뷰 유형 above threshold; 계속 진행할 수 있습니다; keep it below BLOCK 차단."
+  },
+  "scope-budget-block-required-reviews": {
+    "label": "스코프 예산: 필수 리뷰 유형 - BLOCK 차단",
+    "description": "BLOCK 차단: 필수 리뷰 유형 above threshold; next-step split-required로 이동합니다."
+  },
+  "scope-budget-warn-review-tokens": {
+    "label": "스코프 예산: 리뷰 토큰 - WARN 경고",
+    "description": "WARN 경고: 리뷰 토큰 above threshold; 계속 진행할 수 있습니다; keep it below BLOCK 차단."
+  },
+  "scope-budget-block-review-tokens": {
+    "label": "스코프 예산: 리뷰 토큰 - BLOCK 차단",
+    "description": "BLOCK 차단: 리뷰 토큰 above threshold; next-step split-required로 이동합니다."
+  },
+  "parent-audit-enabled": {
+    "label": "상위 작업 전체 감사 및 검토",
+    "description": "작업 중 분할한 작업은 모든 하위 작업 승인 후 한 번 전체 검토합니다. 지적 사항은 하나의 F 작업에 모이며, 승인되면 상위 작업이 완료됩니다. 생성 시 수동으로 분할한 그룹은 항상 자동 완료됩니다. 이후 분할부터 적용됩니다.",
+    "options": {
+      "true": {
+        "label": "켜기",
+        "description": "전체 결과를 한 번 독립적으로 검토합니다."
+      },
+      "false": {
+        "label": "끄기",
+        "description": "모든 하위 작업 승인 후 자동 완료합니다."
+      }
+    }
+  }
+}

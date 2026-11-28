@@ -1,0 +1,90 @@
+{
+  "tab_intro": {
+    "description": "Chính sách lưu giữ runtime trong `runtime-retention.json`: ngưỡng bảo trì theo lịch, quy tắc nén gọn và các thao tác dọn dẹp thủ công có bảo vệ."
+  },
+  "daily_maintenance_enabled": {
+    "label": "Bảo trì hằng ngày",
+    "description": "Bật hoặc tắt chế độ bảo trì hằng ngày theo lịch. Khi được bật, bộ điều phối có thể xử lý theo lịch một lô giới hạn các tác vụ đủ điều kiện mà không cần can thiệp thủ công."
+  },
+  "daily_maintenance_max_tasks_per_run": {
+    "label": "Số tác vụ tối đa mỗi lần bảo trì",
+    "description": "Giới hạn trên về số tác vụ đủ điều kiện mà bảo trì hằng ngày xử lý trong một lần chạy. Giảm phạm vi ảnh hưởng nếu các ngưỡng bị cấu hình sai."
+  },
+  "eligible_older_than_days": {
+    "label": "Xóa task cũ hơn (ngày)",
+    "description": "Cleanup thủ công chọn runtime artifacts của task cũ hơn số ngày này. Task đang hoạt động và task mới hơn vẫn được bảo vệ."
+  },
+  "keep_latest_tasks": {
+    "label": "Giữ lại ít nhất các task mới nhất (số lượng)",
+    "description": "Luôn giữ lại ít nhất số task mới nhất này ngay cả khi chúng cũ hơn ngưỡng tuổi. Đặt 0 để chỉ dựa vào tuổi và bảo vệ task đang hoạt động."
+  },
+  "include_problematic_tasks": {
+    "label": "Cũng xóa tác vụ có vấn đề"
+  },
+  "daily_maintenance_dry_run": {
+    "label": "Dry-run bảo trì hằng ngày",
+    "description": "Khi giá trị là true, bảo trì hằng ngày theo lịch chỉ liệt kê các ứng viên và ghi đầu ra kiểm toán; không xóa hoặc nén artefact nào. Dùng true khi tinh chỉnh ngưỡng, rồi chuyển sang false để áp dụng."
+  },
+  "purge_require_confirm": {
+    "label": "Bao ve xac nhan cleanup tu dong",
+    "description": "Khi true, cleanup pha huy theo lich hoac qua CLI van bi chan boi xac nhan va khong chay am tham. Cleanup thu cong trong UI va cleanup artifact cua mot task luon yeu cau cum xac nhan rieng."
+  },
+  "healthy_done_compact_after_days": {
+    "label": "Nen DONE khoe sau (ngay)",
+    "description": "Sau so ngay nay, cac task DONE thanh cong co the duoc nen thanh lich su chi ledger sau khi bang chung ledger duoc xac minh."
+  },
+  "problem_tasks_compress_after_days": {
+    "label": "Nén các tác vụ có vấn đề sau (ngày)",
+    "description": "Sau chừng này ngày, các artefact điều tra lớn của các tác vụ thất bại hoặc bị kẹt có thể được nén lại, trong khi vẫn giữ bằng chứng có thể đọc được để phục hồi."
+  },
+  "manual_runtime_cleanup": {
+    "label": "Cleanup runtime thu cong",
+    "description": "Xóa runtime artifacts thuộc về task không hoạt động được chọn bằng các điều khiển tuổi và keep-latest trong hàng này. Xem trước là báo cáo dry-run; Chạy dọn dẹp xóa các task artifacts đã chọn, sửa shared indexes một lần và yêu cầu cụm xác nhận đã nhập."
+  },
+  "task_purge": {
+    "label": "Cleanup artifact runtime cua task",
+    "description": "Xoa artifact runtime cua mot task ID va sua cac chi muc dung chung. Khong xoa toan bo tep dung chung; bao ve task dang hoat dong van nam tren may chu."
+  },
+  "task_id": {
+    "label": "ID tác vụ"
+  },
+  "purge_task_button": {
+    "label": "Don artifact runtime"
+  },
+  "run_preview": {
+    "label": "Tính toán trước"
+  },
+  "value_true": {
+    "label": "true — bật"
+  },
+  "value_false": {
+    "label": "false — tắt"
+  },
+  "run_apply": {
+    "label": "Chạy dọn dẹp"
+  },
+  "cleanup_report": {
+    "label": "Báo cáo dọn dẹp"
+  },
+  "cleanup_result": {
+    "label": "Kết quả dọn dẹp"
+  },
+  "report_preview_tasks": {
+    "label": "Ứng viên xem trước"
+  },
+  "report_eligible_now": {
+    "label": "Đủ điều kiện ngay"
+  },
+  "report_would_remove": {
+    "label": "Sẽ xóa"
+  },
+  "report_would_free": {
+    "label": "Sẽ giải phóng"
+  },
+  "report_removed": {
+    "label": "Đã xóa"
+  },
+  "report_freed": {
+    "label": "Đã giải phóng"
+  }
+}

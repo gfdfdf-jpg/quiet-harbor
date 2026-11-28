@@ -1,0 +1,97 @@
+{
+  "schema": 1,
+  "id": "vite-playwright",
+  "title": "Vite / Vitest / Playwright",
+  "adapter": null,
+  "technologies": [
+    {
+      "id": "vitest",
+      "executable": "tools/pnpm",
+      "compileArgv": [
+        "exec",
+        "vite",
+        "build"
+      ],
+      "firstArgv": [
+        "exec",
+        "vitest",
+        "run",
+        "src/components/Order.test.tsx"
+      ],
+      "allArgv": [
+        "exec",
+        "vitest",
+        "run",
+        "src/components/Order.test.tsx"
+      ],
+      "broadArgv": [
+        "exec",
+        "vitest",
+        "run"
+      ],
+      "report": "junit",
+      "secondArgv": [
+        "exec",
+        "vitest",
+        "run",
+        "src/components/Order.test.tsx"
+      ]
+    },
+    {
+      "id": "playwright",
+      "executable": "tools/pnpm",
+      "compileArgv": [
+        "exec",
+        "tsc",
+        "--noEmit"
+      ],
+      "firstArgv": [
+        "exec",
+        "playwright",
+        "test",
+        "--project=chromium",
+        "e2e/partner.spec.ts"
+      ],
+      "allArgv": [
+        "exec",
+        "playwright",
+        "test",
+        "--project=chromium",
+        "e2e/partner.spec.ts"
+      ],
+      "broadArgv": [
+        "exec",
+        "playwright",
+        "test",
+        "--project=chromium"
+      ],
+      "report": "junit",
+      "secondArgv": [
+        "exec",
+        "playwright",
+        "test",
+        "--project=chromium",
+        "e2e/partner.spec.ts"
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "orders",
+      "technology": "vitest",
+      "source": "src/components/Order.tsx",
+      "target": "src/components/Order.test.tsx",
+      "case": "task-contract",
+      "comment": "//"
+    },
+    {
+      "id": "partners",
+      "technology": "playwright",
+      "source": "src/state/partner.ts",
+      "target": "e2e/partner.spec.ts",
+      "case": "task-contract",
+      "comment": "//"
+    }
+  ],
+  "helpers": []
+}

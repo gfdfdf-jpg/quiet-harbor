@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "id": "python",
+  "title": "Python / pytest",
+  "adapter": null,
+  "technologies": [
+    {
+      "id": "python",
+      "executable": "tools/pytest",
+      "compileArgv": [
+        "-m",
+        "compileall",
+        "orders",
+        "partners"
+      ],
+      "firstArgv": [
+        "-q",
+        "tests/orders/test_service.py::test_task_contract"
+      ],
+      "allArgv": [
+        "-q",
+        "tests/orders/test_service.py::test_task_contract",
+        "tests/partners/test_service.py::test_task_contract"
+      ],
+      "broadArgv": [],
+      "report": "junit",
+      "secondArgv": [
+        "-q",
+        "tests/partners/test_service.py::test_task_contract"
+      ],
+      "compileExecutable": "tools/python"
+    }
+  ],
+  "suites": [
+    {
+      "id": "orders",
+      "technology": "python",
+      "source": "orders/service.py",
+      "target": "tests/orders/test_service.py",
+      "case": "task-contract",
+      "comment": "#"
+    },
+    {
+      "id": "partners",
+      "technology": "python",
+      "source": "partners/service.py",
+      "target": "tests/partners/test_service.py",
+      "case": "task-contract",
+      "comment": "#"
+    }
+  ],
+  "helpers": [
+    "tests/conftest.py",
+    "tests/data/partners.json"
+  ]
+}

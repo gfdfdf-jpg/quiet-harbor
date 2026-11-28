@@ -1,0 +1,50 @@
+[
+  {
+    "id": "r7-7-b-pytest-conftest",
+    "layer": "path",
+    "note": "R7-7 B: conftest.py was a leaf test, so a change re-opened only the current review.",
+    "stack": "python",
+    "role": "TEST_HELPER",
+    "file": "conftest.py",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-b-go-testdata",
+    "layer": "path",
+    "note": "R7-7 B: Go testdata/ files were leaf tests, so a change re-opened only the current review.",
+    "stack": "go",
+    "role": "TEST_FIXTURE",
+    "file": "internal/invoice/testdata/rounding.json",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-b-rust-tests-common",
+    "layer": "path",
+    "note": "R7-7 B: the shared module of Rust integration tests was a leaf test.",
+    "stack": "rust",
+    "role": "TEST_HELPER",
+    "file": "tests/common/mod.rs",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  },
+  {
+    "id": "r7-7-d-rspec-fixture-data",
+    "layer": "path",
+    "note": "R7-7 D: RSpec fixture data under spec/fixtures/ was not a test path.",
+    "stack": "ruby",
+    "role": "TEST_FIXTURE",
+    "file": "spec/fixtures/invoices.yml",
+    "variant": {
+      "operation": "modified",
+      "changedLines": 10
+    }
+  }
+]
